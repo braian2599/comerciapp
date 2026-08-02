@@ -1,0 +1,160 @@
+// Prisma schema - Gestor de Ventas para Comercios
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== TIENDA / COMERCIO =====
+model Store {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  rubro         String   // TIENDA_BARRIO, MINIMARKET, VERDULERIA, CARNICERIA, PANADERIA, KIOSCO, FERRETERIA, OTRO
+  currency      String   @default("ARS")
+  currencySymbol String  @default("$")
+  taxEnabled    Boolean  @default(false)
+  taxRate       Float    @default(0) // porcentaje 0-100
+  address       String?
+  phone         String?
+  logoUrl       String?
+  lowStockThreshold Int  @default(5)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users         User[]
+  categories    Category[]
+  products      Product[]
+  customers     Customer[]
+  sales         Sale[]
+  stockMovements StockMovement[]
+}
+
+// ===== USUARIO =====
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("CAJERO") // ADMIN, VENDEDOR, CAJERO
+  active       Boolean  @default(true)
+  storeId      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales        Sale[]
+  stockMovements StockMovement[]
+}
+
+// ===== CATEGORÍA =====
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products  Product[]
+}
+
+// ===== PRODUCTO =====
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  barcode     String?
+  sku         String?
+  categoryId  String?
+  storeId     String
+  costPrice   Float    @default(0)
+  salePrice   Float    @default(0)
+  stock       Float    @default(0)
+  minStock    Float    @default(5)
+  unit        String   @default("UNIDAD") // UNIDAD, KG, LITRO, METRO, PACK
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  saleItems   SaleItem[]
+  stockMovements StockMovement[]
+}
+
+// ===== CLIENTE =====
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales     Sale[]
+}
+
+// ===== VENTA =====
+model Sale {
+  id           String   @id @default(cuid())
+  storeId      String
+  userId       String
+  customerId   String?
+  subtotal     Float
+  discount     Float    @default(0)
+  tax          Float    @default(0)
+  total        Float
+  paymentMethod String  @default("EFECTIVO") // EFECTIVO, TARJETA, TRANSFERENCIA, CUENTA
+  status       String   @default("COMPLETADA") // COMPLETADA, ANULADA
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id])
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items        SaleItem[]
+
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+}
+
+// ===== ITEM DE VENTA =====
+model SaleItem {
+  id         String @id @default(cuid())
+  saleId     String
+  productId  String
+  quantity   Float
+  unitPrice  Float
+  costPrice  Float // snapshot del costo al momento de la venta
+  subtotal   Float
+
+  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product    Product @relation(fields: [productId], references: [id])
+}
+
+// ===== MOVIMIENTOS DE STOCK =====
+model StockMovement {
+  id        String   @id @default(cuid())
+  productId String
+  storeId   String
+  userId    String
+  type      String   // ENTRADA, SALIDA, AJUSTE, VENTA
+  quantity  Float    // positivo entrada, negativo salida
+  reason    String?
+  createdAt DateTime @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+}
