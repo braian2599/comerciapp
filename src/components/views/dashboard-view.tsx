@@ -30,7 +30,7 @@ import {
   Legend,
 } from "recharts";
 import { useAppStore } from "@/store/app-store";
-import { formatCurrency, PAYMENT_METHODS } from "@/lib/constants";
+import { formatCurrency } from "@/lib/constants";
 
 interface DashboardData {
   totalVentas: number;
@@ -135,7 +135,7 @@ export function DashboardView() {
   }));
 
   const methodData = Object.entries(data.ventasPorMetodo).map(([k, v]) => ({
-    name: PAYMENT_METHODS.find((m) => m.value === k)?.label || k,
+    name: k,
     value: v,
   }));
 

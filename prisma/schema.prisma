@@ -33,6 +33,7 @@ model Store {
   customers     Customer[]
   sales         Sale[]
   stockMovements StockMovement[]
+  paymentMethods PaymentMethod[]
 }
 
 // ===== USUARIO =====
@@ -106,24 +107,27 @@ model Customer {
 
 // ===== VENTA =====
 model Sale {
-  id           String   @id @default(cuid())
-  storeId      String
-  userId       String
-  customerId   String?
-  subtotal     Float
-  discount     Float    @default(0)
-  tax          Float    @default(0)
-  total        Float
-  paymentMethod String  @default("EFECTIVO") // EFECTIVO, TARJETA, TRANSFERENCIA, CUENTA
-  status       String   @default("COMPLETADA") // COMPLETADA, ANULADA
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  storeId         String
+  userId          String
+  customerId      String?
+  subtotal        Float
+  discount        Float    @default(0)
+  tax             Float    @default(0)
+  surcharge       Float    @default(0) // recargo por método de pago
+  total           Float
+  paymentMethod   String   @default("EFECTIVO") // nombre del método (snapshot)
+  paymentMethodId String?
+  status          String   @default("COMPLETADA") // COMPLETADA, ANULADA
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user         User      @relation(fields: [userId], references: [id])
-  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  items        SaleItem[]
+  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id])
+  customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  paymentMethodRef PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  items           SaleItem[]
 
   @@index([storeId, createdAt])
   @@index([storeId, status])
@@ -141,6 +145,24 @@ model SaleItem {
 
   sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product    Product @relation(fields: [productId], references: [id])
+}
+
+// ===== MÉTODO DE PAGO =====
+model PaymentMethod {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String   // Efectivo, Tarjeta Crédito, etc.
+  type        String   // EFECTIVO, TARJETA_CREDITO, TARJETA_DEBITO, TRANSFERENCIA, CUENTA, OTRO
+  surcharge   Float    @default(0) // porcentaje de recargo (ej: 10 = +10%)
+  active      Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+
+  @@index([storeId, active])
 }
 
 // ===== MOVIMIENTOS DE STOCK =====

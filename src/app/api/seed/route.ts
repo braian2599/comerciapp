@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { DEFAULT_PAYMENT_METHODS } from "@/lib/constants";
 
 // Crea una tienda de demostración con datos precargados
 export async function POST() {
@@ -8,6 +9,24 @@ export async function POST() {
     const email = "admin@demo.com";
     const existing = await db.user.findUnique({ where: { email } });
     if (existing) {
+      // Si la tienda existe pero no tiene métodos de pago, agregarlos
+      const store = await db.store.findFirst({
+        where: { users: { some: { email } } },
+        include: { paymentMethods: true },
+      });
+      if (store && store.paymentMethods.length === 0) {
+        await db.paymentMethod.createMany({
+          data: DEFAULT_PAYMENT_METHODS.map((m) => ({
+            ...m,
+            storeId: store.id,
+          })),
+        });
+        return NextResponse.json({
+          ok: true,
+          message: "Métodos de pago por defecto agregados a la tienda demo existente",
+          credentials: { email, password: "demo123" },
+        });
+      }
       return NextResponse.json({
         ok: true,
         message: "La tienda demo ya existe",
@@ -64,8 +83,11 @@ export async function POST() {
             { name: "Verduras" },
           ],
         },
+        paymentMethods: {
+          create: DEFAULT_PAYMENT_METHODS,
+        },
       },
-      include: { users: true, categories: true },
+      include: { users: true, categories: true, paymentMethods: true },
     });
 
     const categoryMap: Record<string, string> = {};
@@ -185,7 +207,9 @@ export async function POST() {
           subtotal += lineSub;
         }
         const discount = Math.random() > 0.7 ? subtotal * 0.05 : 0;
-        const total = subtotal - discount;
+        const method = store.paymentMethods[Math.floor(Math.random() * store.paymentMethods.length)];
+        const surcharge = (subtotal - discount) * (method.surcharge / 100);
+        const total = subtotal - discount + surcharge;
         const cust = Math.random() > 0.5 ? customers[Math.floor(Math.random() * customers.length)] : null;
         const usr = Math.random() > 0.5 ? cajero : vendedor;
         const saleDate = new Date(now);
@@ -200,8 +224,10 @@ export async function POST() {
             subtotal,
             discount,
             tax: 0,
+            surcharge,
             total,
-            paymentMethod: ["EFECTIVO", "TARJETA", "TRANSFERENCIA"][Math.floor(Math.random() * 3)],
+            paymentMethod: method.name,
+            paymentMethodId: method.id,
             status: "COMPLETADA",
             createdAt: saleDate,
             items: { create: items },

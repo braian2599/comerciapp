@@ -35,7 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
-import { formatCurrency, PAYMENT_METHODS, unitLabel } from "@/lib/constants";
+import { formatCurrency, unitLabel } from "@/lib/constants";
 
 interface Product {
   id: string;
@@ -59,18 +59,28 @@ interface Customer {
   phone?: string;
 }
 
+interface PaymentMethod {
+  id: string;
+  name: string;
+  type: string;
+  surcharge: number;
+  active: boolean;
+  isDefault: boolean;
+}
+
 export function PosView() {
   const { store, user } = useAppStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
   const [discount, setDiscount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
+  const [paymentMethodId, setPaymentMethodId] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -87,10 +97,15 @@ export function PosView() {
       fetch("/api/products").then((r) => r.json()),
       fetch("/api/categories").then((r) => r.json()),
       fetch("/api/customers").then((r) => r.json()),
-    ]).then(([p, c, cust]) => {
+      fetch("/api/payment-methods").then((r) => r.json()),
+    ]).then(([p, c, cust, pm]) => {
       setProducts(p.filter((x: Product) => x.active));
       setCategories(c);
       setCustomers(cust);
+      const activePM = (pm as PaymentMethod[]).filter((m) => m.active);
+      setPaymentMethods(activePM);
+      const def = activePM.find((m) => m.isDefault) || activePM[0];
+      if (def) setPaymentMethodId(def.id);
       setLoading(false);
     });
   }, []);
@@ -177,11 +192,18 @@ export function PosView() {
   const discountAmount = Math.min(discount, subtotal);
   const taxable = subtotal - discountAmount;
   const taxAmount = taxEnabled ? taxable * (taxRate / 100) : 0;
-  const total = taxable + taxAmount;
+  const selectedMethod = paymentMethods.find((m) => m.id === paymentMethodId);
+  const surchargeRate = selectedMethod?.surcharge || 0;
+  const surchargeAmount = (taxable + taxAmount) * (surchargeRate / 100);
+  const total = taxable + taxAmount + surchargeAmount;
 
   async function processSale() {
     if (cart.length === 0) {
       toast.error("El carrito está vacío");
+      return;
+    }
+    if (!paymentMethodId) {
+      toast.error("Seleccioná un método de pago");
       return;
     }
     setProcessing(true);
@@ -196,7 +218,7 @@ export function PosView() {
           })),
           customerId: customerId || null,
           discount: discountAmount,
-          paymentMethod,
+          paymentMethodId,
           notes,
           taxRate: taxEnabled ? taxRate : 0,
         }),
@@ -208,9 +230,10 @@ export function PosView() {
         ...data,
         items: cart,
         customer: customers.find((c) => c.id === customerId),
-        paymentMethod,
+        paymentMethod: selectedMethod,
         discount: discountAmount,
         tax: taxAmount,
+        surcharge: surchargeAmount,
         total,
         subtotal,
       });
@@ -426,6 +449,14 @@ export function PosView() {
                       <span>{formatCurrency(taxAmount, symbol)}</span>
                     </div>
                   )}
+                  {surchargeAmount > 0 && (
+                    <div className="flex justify-between text-sm text-amber-700">
+                      <span>
+                        Recargo {selectedMethod?.name} ({surchargeRate}%)
+                      </span>
+                      <span>+{formatCurrency(surchargeAmount, symbol)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-lg font-bold pt-2 border-t">
                     <span>Total</span>
                     <span className="text-emerald-700">
@@ -481,18 +512,29 @@ export function PosView() {
 
             <div className="space-y-2">
               <Label>Método de pago</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <Select
+                value={paymentMethodId}
+                onValueChange={setPaymentMethodId}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Seleccionar método..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {PAYMENT_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
+                  {paymentMethods.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                      {m.surcharge > 0 && ` (+${m.surcharge}%)`}
+                      {m.isDefault && " · predeterminado"}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {paymentMethods.length === 0 && (
+                <p className="text-xs text-amber-600">
+                  No hay métodos de pago configurados. Pedile al admin que los
+                  cargue en Configuración.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -517,8 +559,18 @@ export function PosView() {
               )}
               {taxAmount > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Impuesto</span>
+                  <span className="text-muted-foreground">
+                    Impuesto ({taxRate}%)
+                  </span>
                   <span>{formatCurrency(taxAmount, symbol)}</span>
+                </div>
+              )}
+              {surchargeAmount > 0 && (
+                <div className="flex justify-between text-amber-700">
+                  <span>
+                    Recargo {selectedMethod?.name} ({surchargeRate}%)
+                  </span>
+                  <span>+{formatCurrency(surchargeAmount, symbol)}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-bold pt-1 border-t">
@@ -619,13 +671,23 @@ export function PosView() {
                     <span>{formatCurrency(lastSale.tax, symbol)}</span>
                   </div>
                 )}
+                {lastSale.surcharge > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span>
+                      Recargo {lastSale.paymentMethod?.name}
+                      {lastSale.paymentMethod?.surcharge
+                        ? ` (${lastSale.paymentMethod.surcharge}%)`
+                        : ""}
+                    </span>
+                    <span>+{formatCurrency(lastSale.surcharge, symbol)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-base pt-1 border-t">
                   <span>TOTAL</span>
                   <span>{formatCurrency(lastSale.total, symbol)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground pt-1">
-                  Pagado con:{" "}
-                  {PAYMENT_METHODS.find((m) => m.value === lastSale.paymentMethod)?.label}
+                  Pagado con: {lastSale.paymentMethod?.name || "—"}
                 </p>
               </div>
             </div>

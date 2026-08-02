@@ -53,7 +53,6 @@ import { useAppStore } from "@/store/app-store";
 import {
   formatCurrency,
   formatDateTime,
-  PAYMENT_METHODS,
 } from "@/lib/constants";
 
 interface Sale {
@@ -61,8 +60,10 @@ interface Sale {
   subtotal: number;
   discount: number;
   tax: number;
+  surcharge?: number;
   total: number;
   paymentMethod: string;
+  paymentMethodRef?: { name: string; type: string; surcharge: number } | null;
   status: string;
   notes?: string;
   createdAt: string;
@@ -74,6 +75,7 @@ interface Sale {
 export function SalesView() {
   const { store, user } = useAppStore();
   const [sales, setSales] = useState<Sale[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -87,9 +89,12 @@ export function SalesView() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/sales?limit=200");
-    const data = await res.json();
-    setSales(data);
+    const [salesRes, pmRes] = await Promise.all([
+      fetch("/api/sales?limit=200").then((r) => r.json()),
+      fetch("/api/payment-methods").then((r) => r.json()),
+    ]);
+    setSales(salesRes);
+    setPaymentMethods(pmRes);
     setLoading(false);
   }
 
@@ -219,9 +224,9 @@ export function SalesView() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los métodos</SelectItem>
-                {PAYMENT_METHODS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
+                {paymentMethods.map((m) => (
+                  <SelectItem key={m.id} value={m.name}>
+                    {m.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -279,7 +284,7 @@ export function SalesView() {
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <Badge variant="outline" className="text-xs">
-                          {PAYMENT_METHODS.find((m) => m.value === s.paymentMethod)?.label}
+                          {s.paymentMethodRef?.name || s.paymentMethod}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
@@ -349,7 +354,10 @@ export function SalesView() {
                 <div>
                   <p className="text-xs text-muted-foreground">Método de pago</p>
                   <p className="font-medium">
-                    {PAYMENT_METHODS.find((m) => m.value === selected.paymentMethod)?.label}
+                    {selected.paymentMethodRef?.name || selected.paymentMethod}
+                    {selected.paymentMethodRef?.surcharge
+                      ? ` (+${selected.paymentMethodRef.surcharge}%)`
+                      : ""}
                   </p>
                 </div>
                 <div>
@@ -400,6 +408,17 @@ export function SalesView() {
                   <div className="flex justify-between">
                     <span>Impuesto</span>
                     <span>{formatCurrency(selected.tax, symbol)}</span>
+                  </div>
+                )}
+                {(selected.surcharge || 0) > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span>
+                      Recargo{selected.paymentMethodRef ? ` ${selected.paymentMethodRef.name}` : ""}
+                      {selected.paymentMethodRef?.surcharge
+                        ? ` (${selected.paymentMethodRef.surcharge}%)`
+                        : ""}
+                    </span>
+                    <span>+{formatCurrency(selected.surcharge!, symbol)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base pt-1 border-t">

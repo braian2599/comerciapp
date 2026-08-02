@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { DEFAULT_PAYMENT_METHODS } from "@/lib/constants";
 
 // Plantillas por rubro: categorías sugeridas
 const RUBRO_CATEGORIES: Record<string, string[]> = {
@@ -96,6 +97,9 @@ export async function POST(req: NextRequest) {
           create: (RUBRO_CATEGORIES[data.rubro] || RUBRO_CATEGORIES.OTRO).map(
             (name) => ({ name })
           ),
+        },
+        paymentMethods: {
+          create: DEFAULT_PAYMENT_METHODS,
         },
       },
       include: { users: true, categories: true },

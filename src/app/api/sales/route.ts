@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
       items: { include: { product: true } },
       user: { select: { name: true } },
       customer: { select: { name: true } },
+      paymentMethodRef: true,
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -44,13 +45,19 @@ export async function POST(req: NextRequest) {
   const storeId = u.storeId;
 
   const body = await req.json();
-  // body: { items: [{productId, quantity}], customerId?, discount?, paymentMethod, notes?, taxRate? }
+  // body: { items: [{productId, quantity}], customerId?, discount?, paymentMethodId, notes?, taxRate? }
 
   // Validar stock y obtener precios actuales
   const productIds = body.items.map((i: any) => i.productId);
   const products = await db.product.findMany({
     where: { id: { in: productIds }, storeId, active: true },
   });
+
+  // Obtener método de pago seleccionado
+  const paymentMethodId = body.paymentMethodId;
+  const method = paymentMethodId
+    ? await db.paymentMethod.findFirst({ where: { id: paymentMethodId, storeId } })
+    : null;
 
   const items: any[] = [];
   let subtotal = 0;
@@ -78,7 +85,11 @@ export async function POST(req: NextRequest) {
   const taxable = subtotal - discount;
   const taxRate = Number(body.taxRate) || 0;
   const tax = taxable * (taxRate / 100);
-  const total = taxable + tax;
+  // Recargo del método de pago (se aplica sobre (subtotal - descuento + impuesto))
+  const surchargeRate = method?.surcharge || 0;
+  const baseForSurcharge = taxable + tax;
+  const surcharge = baseForSurcharge * (surchargeRate / 100);
+  const total = baseForSurcharge + surcharge;
 
   // Crear venta en transacción
   const sale = await db.$transaction(async (tx) => {
@@ -90,8 +101,10 @@ export async function POST(req: NextRequest) {
         subtotal,
         discount,
         tax,
+        surcharge,
         total,
-        paymentMethod: body.paymentMethod || "EFECTIVO",
+        paymentMethod: method?.name || "EFECTIVO",
+        paymentMethodId: method?.id || null,
         status: "COMPLETADA",
         notes: body.notes || null,
         items: { create: items },
