@@ -37,6 +37,10 @@ interface DashboardData {
   numVentas: number;
   ticketPromedio: number;
   ganancia: number;
+  gananciaNeta: number;
+  totalGastos: number;
+  gastosPorCategoria: Record<string, number>;
+  saldoCuentas: number;
   variacion: number;
   variacionTicket: number;
   ventasPorDia: { date: string; total: number; count: number }[];
@@ -103,24 +107,24 @@ export function DashboardView() {
       color: "emerald",
     },
     {
-      label: "Transacciones",
-      value: String(data.numVentas),
-      icon: <ShoppingBag className="w-4 h-4" />,
-      color: "blue",
-    },
-    {
-      label: "Ticket promedio",
-      value: formatCurrency(data.ticketPromedio, symbol),
-      icon: <TicketPercent className="w-4 h-4" />,
-      delta: data.variacionTicket,
-      deltaLabel: "vs período anterior",
-      color: "amber",
-    },
-    {
-      label: "Ganancia estimada",
+      label: "Ganancia bruta",
       value: formatCurrency(data.ganancia, symbol),
       icon: <TrendingUp className="w-4 h-4" />,
       color: "purple",
+    },
+    {
+      label: "Gastos del período",
+      value: formatCurrency(data.totalGastos, symbol),
+      icon: <TrendingDown className="w-4 h-4" />,
+      color: "amber",
+      invert: true,
+    },
+    {
+      label: "Ganancia neta",
+      value: formatCurrency(data.gananciaNeta, symbol),
+      icon: <DollarSign className="w-4 h-4" />,
+      color: data.gananciaNeta >= 0 ? "emerald" : "amber",
+      highlight: true,
     },
   ];
 
@@ -130,8 +134,8 @@ export function DashboardView() {
   }));
 
   const topData = data.topProductos.map((p) => ({
-    name: p.name.length > 15 ? p.name.slice(0, 12) + "..." : p.name,
     ...p,
+    name: p.name.length > 15 ? p.name.slice(0, 12) + "..." : p.name,
   }));
 
   const methodData = Object.entries(data.ventasPorMetodo).map(([k, v]) => ({

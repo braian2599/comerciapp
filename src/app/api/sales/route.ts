@@ -91,6 +91,16 @@ export async function POST(req: NextRequest) {
   const surcharge = baseForSurcharge * (surchargeRate / 100);
   const total = baseForSurcharge + surcharge;
 
+  // Detectar si es venta en cuenta corriente
+  const isCredit = method?.type === "CUENTA";
+  const amountPaid = isCredit ? 0 : total;
+  const onCredit = isCredit;
+
+  // Buscar caja abierta para asociar venta y movimientos de efectivo
+  const openRegister = await db.cashRegister.findFirst({
+    where: { storeId, status: "ABIERTA" },
+  });
+
   // Crear venta en transacción
   const sale = await db.$transaction(async (tx) => {
     const newSale = await tx.sale.create({
@@ -98,6 +108,7 @@ export async function POST(req: NextRequest) {
         storeId,
         userId: u.id,
         customerId: body.customerId || null,
+        cashRegisterId: openRegister?.id || null,
         subtotal,
         discount,
         tax,
@@ -105,6 +116,8 @@ export async function POST(req: NextRequest) {
         total,
         paymentMethod: method?.name || "EFECTIVO",
         paymentMethodId: method?.id || null,
+        onCredit,
+        amountPaid,
         status: "COMPLETADA",
         notes: body.notes || null,
         items: { create: items },
@@ -129,6 +142,25 @@ export async function POST(req: NextRequest) {
           type: "VENTA",
           quantity: -item.quantity,
           reason: `Venta ${newSale.id.slice(-6)}`,
+          refType: "Sale",
+          refId: newSale.id,
+        },
+      });
+    }
+
+    // Si es venta en efectivo y hay caja abierta, registrar movimiento de caja
+    if (openRegister && !isCredit && method?.type === "EFECTIVO") {
+      await tx.cashMovement.create({
+        data: {
+          cashRegisterId: openRegister.id,
+          storeId,
+          userId: u.id,
+          type: "VENTA",
+          amount: total,
+          concept: `Venta ${newSale.id.slice(-6)}`,
+          paymentMethod: "EFECTIVO",
+          refType: "Sale",
+          refId: newSale.id,
         },
       });
     }

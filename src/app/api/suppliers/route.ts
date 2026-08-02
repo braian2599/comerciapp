@@ -7,30 +7,12 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No auth" }, { status: 401 });
   const storeId = (session.user as any).storeId;
-  const customers = await db.customer.findMany({
+  const suppliers = await db.supplier.findMany({
     where: { storeId },
-    include: {
-      _count: { select: { sales: true } },
-      sales: {
-        where: { onCredit: true, status: "COMPLETADA" },
-        select: { total: true },
-      },
-      payments: { select: { amount: true } },
-    },
+    include: { _count: { select: { purchaseOrders: true } } },
     orderBy: { name: "asc" },
   });
-  // Calcular saldo de cuenta corriente
-  const withSaldo = customers.map((c) => {
-    const debe = c.sales.reduce((s, v) => s + v.total, 0);
-    const haber = c.payments.reduce((s, p) => s + p.amount, 0);
-    const saldo = debe - haber;
-    // @ts-ignore
-    delete c.sales;
-    // @ts-ignore
-    delete c.payments;
-    return { ...c, saldo };
-  });
-  return NextResponse.json(withSaldo);
+  return NextResponse.json(suppliers);
 }
 
 export async function POST(req: NextRequest) {
@@ -38,37 +20,37 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "No auth" }, { status: 401 });
   const u = session.user as any;
   const body = await req.json();
-  const c = await db.customer.create({
+  const s = await db.supplier.create({
     data: {
       name: body.name,
       phone: body.phone || null,
       email: body.email || null,
       address: body.address || null,
+      contactName: body.contactName || null,
       notes: body.notes || null,
-      creditLimit: Number(body.creditLimit) || 0,
       storeId: u.storeId,
     },
   });
-  return NextResponse.json(c);
+  return NextResponse.json(s);
 }
 
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No auth" }, { status: 401 });
-  const u = session.user as any;
   const body = await req.json();
-  const c = await db.customer.update({
+  const s = await db.supplier.update({
     where: { id: body.id },
     data: {
       name: body.name,
       phone: body.phone || null,
       email: body.email || null,
       address: body.address || null,
+      contactName: body.contactName || null,
       notes: body.notes || null,
-      creditLimit: Number(body.creditLimit) || 0,
+      active: body.active ?? true,
     },
   });
-  return NextResponse.json(c);
+  return NextResponse.json(s);
 }
 
 export async function DELETE(req: NextRequest) {
@@ -81,6 +63,6 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
-  await db.customer.delete({ where: { id, storeId: u.storeId } });
+  await db.supplier.delete({ where: { id, storeId: u.storeId } });
   return NextResponse.json({ ok: true });
 }

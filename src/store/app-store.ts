@@ -9,6 +9,9 @@ export type ViewKey =
   | "sales"
   | "customers"
   | "inventory"
+  | "purchases"
+  | "expenses"
+  | "cash"
   | "settings";
 
 interface AppState {

@@ -9,6 +9,9 @@ import { ProductsView } from "@/components/views/products-view";
 import { SalesView } from "@/components/views/sales-view";
 import { CustomersView } from "@/components/views/customers-view";
 import { InventoryView } from "@/components/views/inventory-view";
+import { PurchasesView } from "@/components/views/purchases-view";
+import { ExpensesView } from "@/components/views/expenses-view";
+import { CashRegisterView } from "@/components/views/cash-register-view";
 import { SettingsView } from "@/components/views/settings-view";
 import { AuthScreen } from "@/components/app/auth-screen";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,9 @@ import {
   Receipt,
   Users,
   Warehouse,
+  Truck,
+  TrendingDown,
+  Wallet,
   Settings,
   LogOut,
   Store,
@@ -47,10 +53,13 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { key: "dashboard", label: "Panel", icon: <LayoutDashboard className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "pos", label: "Punto de Venta", icon: <ShoppingCart className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+  { key: "cash", label: "Caja", icon: <Wallet className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "products", label: "Productos", icon: <Package className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "sales", label: "Ventas", icon: <Receipt className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+  { key: "purchases", label: "Compras", icon: <Truck className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "inventory", label: "Inventario", icon: <Warehouse className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+  { key: "expenses", label: "Gastos", icon: <TrendingDown className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "settings", label: "Configuración", icon: <Settings className="w-4 h-4" />, roles: ["ADMIN"] },
 ];
 
@@ -108,14 +117,20 @@ export function AppShell() {
         return <DashboardView />;
       case "pos":
         return <PosView />;
+      case "cash":
+        return <CashRegisterView />;
       case "products":
         return <ProductsView />;
       case "sales":
         return <SalesView />;
       case "customers":
         return <CustomersView />;
+      case "purchases":
+        return <PurchasesView />;
       case "inventory":
         return <InventoryView />;
+      case "expenses":
+        return <ExpensesView />;
       case "settings":
         return <SettingsView />;
       default:

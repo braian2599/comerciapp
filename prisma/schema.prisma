@@ -34,6 +34,12 @@ model Store {
   sales         Sale[]
   stockMovements StockMovement[]
   paymentMethods PaymentMethod[]
+  cashRegisters CashRegister[]
+  cashMovements CashMovement[]
+  suppliers     Supplier[]
+  purchaseOrders PurchaseOrder[]
+  expenses      Expense[]
+  customerPayments CustomerPayment[]
 }
 
 // ===== USUARIO =====
@@ -48,9 +54,14 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sales        Sale[]
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales          Sale[]
   stockMovements StockMovement[]
+  cashRegisters  CashRegister[]
+  cashMovements  CashMovement[]
+  purchaseOrders PurchaseOrder[]
+  expenses       Expense[]
+  customerPayments CustomerPayment[]
 }
 
 // ===== CATEGORÍA =====
@@ -83,10 +94,11 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  saleItems   SaleItem[]
-  stockMovements StockMovement[]
+  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  saleItems       SaleItem[]
+  stockMovements  StockMovement[]
+  purchaseItems   PurchaseOrderItem[]
 }
 
 // ===== CLIENTE =====
@@ -98,11 +110,13 @@ model Customer {
   address   String?
   notes     String?
   storeId   String
+  creditLimit Float  @default(0) // límite de cuenta corriente (0 = sin límite)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   sales     Sale[]
+  payments  CustomerPayment[]
 }
 
 // ===== VENTA =====
@@ -111,6 +125,7 @@ model Sale {
   storeId         String
   userId          String
   customerId      String?
+  cashRegisterId  String?
   subtotal        Float
   discount        Float    @default(0)
   tax             Float    @default(0)
@@ -118,6 +133,9 @@ model Sale {
   total           Float
   paymentMethod   String   @default("EFECTIVO") // nombre del método (snapshot)
   paymentMethodId String?
+  // Cuenta corriente
+  onCredit        Boolean  @default(false) // true = venta fiada
+  amountPaid      Float    @default(0) // monto cobrado (total si es contado, 0 si es fiado completo)
   status          String   @default("COMPLETADA") // COMPLETADA, ANULADA
   notes           String?
   createdAt       DateTime @default(now())
@@ -127,10 +145,12 @@ model Sale {
   user            User            @relation(fields: [userId], references: [id])
   customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   paymentMethodRef PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
   items           SaleItem[]
 
   @@index([storeId, createdAt])
   @@index([storeId, status])
+  @@index([customerId, onCredit])
 }
 
 // ===== ITEM DE VENTA =====
@@ -171,12 +191,163 @@ model StockMovement {
   productId String
   storeId   String
   userId    String
-  type      String   // ENTRADA, SALIDA, AJUSTE, VENTA
+  type      String   // ENTRADA, SALIDA, AJUSTE, VENTA, COMPRA
   quantity  Float    // positivo entrada, negativo salida
   reason    String?
+  refType   String?  // Sale, PurchaseOrder, CashMovement (tipo de entidad origen)
+  refId     String?  // id de la entidad origen
   createdAt DateTime @default(now())
 
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
+
+  @@index([storeId, createdAt])
+  @@index([productId, createdAt])
+}
+
+// ===== CAJA / ARQUEO =====
+model CashRegister {
+  id          String    @id @default(cuid())
+  storeId     String
+  userId      String    // usuario que abrió la caja
+  openingDate DateTime  @default(now())
+  closingDate DateTime?
+  openingBalance Float  @default(0) // monto inicial en efectivo
+  closingBalance Float? // monto final declarado
+  expectedBalance Float? // monto esperado según sistema
+  difference  Float?    // closingBalance - expectedBalance
+  status      String    @default("ABIERTA") // ABIERTA, CERRADA
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  store      Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id])
+  movements  CashMovement[]
+  sales      Sale[]
+
+  @@index([storeId, status])
+  @@index([userId, openingDate])
+}
+
+// Movimientos de efectivo dentro de una caja (ingresos/egresos manuales)
+model CashMovement {
+  id              String   @id @default(cuid())
+  cashRegisterId  String
+  storeId         String
+  userId          String
+  type            String   // INGRESO, EGRESO, VENTA, PAGO_CUENTA (sentido del efectivo)
+  amount          Float    // siempre positivo; el sentido lo da type
+  concept         String   // descripción: "Venta", "Cobro cuenta", "Gasto", etc.
+  paymentMethod   String?  // EFECTIVO, TRANSFERENCIA (snapshot si aplica)
+  refType         String?  // Sale, CustomerPayment, Expense
+  refId           String?
+  createdAt       DateTime @default(now())
+
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([cashRegisterId, createdAt])
+  @@index([storeId, createdAt])
+}
+
+// ===== PROVEEDORES =====
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  contactName String?
+  notes     String?
+  storeId   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store          Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@index([storeId, active])
+}
+
+// Orden de compra a proveedor
+model PurchaseOrder {
+  id            String    @id @default(cuid())
+  storeId       String
+  userId        String
+  supplierId    String?
+  supplierName  String    // snapshot por si se borra el proveedor
+  orderNumber   String    // número legible: OC-0001
+  status        String    @default("PENDIENTE") // PENDIENTE, RECIBIDA, ANULADA
+  total         Float     @default(0)
+  notes         String?
+  orderedAt     DateTime  @default(now())
+  receivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  store     Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id])
+  supplier  Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items     PurchaseOrderItem[]
+
+  @@index([storeId, orderedAt])
+  @@index([storeId, status])
+}
+
+model PurchaseOrderItem {
+  id          String @id @default(cuid())
+  purchaseOrderId String
+  productId   String
+  quantity    Float
+  unitCost    Float  // costo unitario de compra
+  subtotal    Float
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+}
+
+// ===== GASTOS / EGRESOS =====
+model Expense {
+  id         String   @id @default(cuid())
+  storeId    String
+  userId     String
+  category   String   // ALQUILER, SERVICIOS, SUELDOS, INSUMOS, IMPUESTOS, TRANSPORTE, OTROS
+  description String
+  amount     Float
+  paymentMethod String @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, TARJETA
+  date       DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([storeId, date])
+  @@index([storeId, category])
+}
+
+// ===== PAGOS DE CUENTAS CORRIENTES =====
+// Registra cada pago que hace un cliente fiado para saldar su cuenta
+model CustomerPayment {
+  id         String   @id @default(cuid())
+  storeId    String
+  customerId String
+  userId     String
+  amount     Float    // monto pagado (positivo)
+  paymentMethod String @default("EFECTIVO")
+  cashRegisterId String?
+  date       DateTime @default(now())
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer     Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id])
+
+  @@index([storeId, date])
+  @@index([customerId, date])
 }

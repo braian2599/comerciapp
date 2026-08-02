@@ -110,11 +110,40 @@ export async function GET(req: NextRequest) {
     ventasPorMetodo[s.paymentMethod] = (ventasPorMetodo[s.paymentMethod] || 0) + s.total;
   }
 
+  // Gastos del período
+  const expenses = await db.expense.findMany({
+    where: { storeId, date: { gte: start } },
+  });
+  const totalGastos = expenses.reduce((s, e) => s + e.amount, 0);
+  const gastosPorCategoria: Record<string, number> = {};
+  for (const e of expenses) {
+    gastosPorCategoria[e.category] = (gastosPorCategoria[e.category] || 0) + e.amount;
+  }
+
+  // Saldo en cuentas corrientes (deuda de clientes)
+  const creditSales = await db.sale.findMany({
+    where: { storeId, onCredit: true, status: "COMPLETADA" },
+    select: { total: true },
+  });
+  const creditPayments = await db.customerPayment.findMany({
+    where: { storeId },
+    select: { amount: true },
+  });
+  const saldoCuentas =
+    creditSales.reduce((s, v) => s + v.total, 0) -
+    creditPayments.reduce((s, p) => s + p.amount, 0);
+
+  const gananciaNeta = ganancia - totalGastos;
+
   return NextResponse.json({
     totalVentas,
     numVentas,
     ticketPromedio,
     ganancia,
+    gananciaNeta,
+    totalGastos,
+    gastosPorCategoria,
+    saldoCuentas,
     variacion,
     variacionTicket,
     ventasPorDia,

@@ -41,9 +41,11 @@ interface Product {
   id: string;
   name: string;
   barcode?: string;
+  sku?: string;
   salePrice: number;
   stock: number;
   unit: string;
+  active: boolean;
   category?: { id: string; name: string };
   categoryId?: string;
 }
@@ -141,9 +143,24 @@ export function PosView() {
     });
   }, []);
 
-  // Atajo: Enter en el buscador si solo hay 1 resultado
+  // Atajo: Enter en el buscador
+  // 1. Si el texto matchea exacto el barcode/SKU de un producto, lo agrega directo (scanner)
+  // 2. Si solo hay 1 resultado filtrado, lo agrega
   function handleSearchEnter(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && filtered.length === 1) {
+    if (e.key !== "Enter") return;
+    const term = search.trim();
+    if (!term) return;
+    // Match exacto por barcode o SKU
+    const exact = products.find(
+      (p) => p.barcode === term || (p.sku && p.sku.toLowerCase() === term.toLowerCase())
+    );
+    if (exact) {
+      addToCart(exact);
+      setSearch("");
+      return;
+    }
+    // Un solo resultado filtrado → agregar
+    if (filtered.length === 1) {
       addToCart(filtered[0]);
       setSearch("");
     }
@@ -204,6 +221,10 @@ export function PosView() {
     }
     if (!paymentMethodId) {
       toast.error("Seleccioná un método de pago");
+      return;
+    }
+    if (selectedMethod?.type === "CUENTA" && !customerId) {
+      toast.error("Para cuenta corriente tenés que seleccionar un cliente");
       return;
     }
     setProcessing(true);
@@ -489,7 +510,7 @@ export function PosView() {
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Cliente (opcional)</Label>
+              <Label>Cliente {selectedMethod?.type === "CUENTA" && "*"}</Label>
               <Select
                 value={customerId || "none"}
                 onValueChange={(v) =>
@@ -508,6 +529,17 @@ export function PosView() {
                   ))}
                 </SelectContent>
               </Select>
+              {selectedMethod?.type === "CUENTA" && !customerId && (
+                <p className="text-xs text-red-600">
+                  Para vender en cuenta corriente tenés que seleccionar un cliente.
+                </p>
+              )}
+              {selectedMethod?.type === "CUENTA" && customerId && (
+                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                  Esta venta se registrará en la <strong>cuenta corriente</strong> de
+                  este cliente. El saldo se podrá saldar desde Clientes → Cuenta.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

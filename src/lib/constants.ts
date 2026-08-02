@@ -48,6 +48,7 @@ export const DEFAULT_PAYMENT_METHODS = [
   { name: "Tarjeta de Débito", type: "TARJETA_DEBITO", surcharge: 0, isDefault: false },
   { name: "Tarjeta de Crédito", type: "TARJETA_CREDITO", surcharge: 10, isDefault: false },
   { name: "Transferencia", type: "TRANSFERENCIA", surcharge: 0, isDefault: false },
+  { name: "Cuenta Corriente", type: "CUENTA", surcharge: 0, isDefault: false },
 ];
 
 export function formatCurrency(amount: number, symbol: string = "$") {
