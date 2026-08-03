@@ -546,3 +546,40 @@ Stage Summary:
 - API de `constants.ts` preservada (las funciones siguen devolviendo strings, ahora nombres de icono en lugar de emojis).
 - Icono de sucursal principal ahora es una estrella Lucide con fill amber en lugar de carácter ★.
 - Nota informativa en settings ahora tiene icono Lightbulb con color amber en lugar de emoji 💡.
+
+---
+Task ID: barcode-lookup
+Agent: main
+Task: Implementar autocompletado de productos por código de barras usando APIs públicas
+
+Work Log:
+- Creada librería `src/lib/barcode-lookup.ts` con:
+  - Función `lookupProductByBarcode(code)` que consulta en paralelo Open Food Facts (principal) y UPC Item DB (fallback).
+  - Normalización de respuesta a interfaz `ProductLookupResult` (name, brand, description, category, imageUrl, quantity).
+  - Función `isValidBarcode(code)` que valida dígito verificador EAN-8/EAN-13/UPC-A/UPC-E.
+  - Timeout configurable de 8s para no bloquear el formulario si una API tarda demasiado.
+- Creada API route `src/app/api/products/lookup/route.ts`:
+  - GET `/api/products/lookup?barcode=XXXX` → consulta las dos bases públicas y devuelve datos normalizados.
+  - Requiere sesión activa. Devuelve `{ found: false }` (status 200) si no encuentra, para que el cliente no rompa.
+  - Incluye flag `barcodeValid` para feedback en el frontend.
+- Modificada vista `src/components/views/products-view.tsx`:
+  - Campo de código de barras ahora ocupa todo el ancho (sm:col-span-2) con:
+    - Icono ScanLine a la izquierda (indica que se puede usar lector físico).
+    - Botón "Buscar" a la derecha del input.
+    - Auto-búsqueda al presionar Enter (compatible con lectores que envían Enter al final).
+  - Estados visuales del lookup:
+    - Loading: spinner + texto "Consultando base de datos...".
+    - Found: caja verde con imagen del producto (si viene), nombre de la fuente (OFF o UPC) y aviso de que se autocompletaron campos.
+    - Not found: texto ámbar indicando que complete manualmente.
+    - Error: texto rojo con sugerencia de reintento.
+  - Lógica de autocompletado: solo llena campos vacíos (no sobrescribe lo que el usuario ya cargó). Autocompleta `name`, `description` (con brand como fallback) y deja `barcode` como estaba.
+  - Reset del estado de lookup al abrir nuevo formulario, editar producto, o modificar el código.
+- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso, ruta `/api/products/lookup` registrada.
+
+Stage Summary:
+- Función implementada de punta a punta (lib + API + UI).
+- Usa Open Food Facts (gratuita, sin auth, cobertura global) como fuente principal y UPC Item DB como fallback.
+- Compatible con lectores de código de barras físicos: el lector escribe el código y envía Enter, lo que dispara la búsqueda automáticamente.
+- No sobrescribe datos que el usuario ya haya cargado a mano.
+- Muestra preview de la imagen del producto si está disponible.
+- No requiere claves API ni configuración adicional — funciona out of the box.

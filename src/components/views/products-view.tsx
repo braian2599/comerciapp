@@ -52,6 +52,9 @@ import {
   Package,
   Loader2,
   Tag,
+  ScanLine,
+  CheckCircle2,
+  ImageOff,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, UNITS } from "@/lib/constants";
@@ -109,6 +112,60 @@ export function ProductsView() {
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
 
+  // Lookup por código de barras
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<
+    | { status: "idle" | "loading" | "found" | "notfound" | "error"; source?: string; imageUrl?: string }
+    | null
+  >(null);
+
+  async function handleBarcodeLookup() {
+    const code = (form.barcode || "").trim();
+    if (!code) {
+      toast.error("Ingresá un código de barras primero");
+      return;
+    }
+    setLookupLoading(true);
+    setLookupResult({ status: "loading" });
+    try {
+      const res = await fetch(`/api/products/lookup?barcode=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (data.found) {
+        // Solo autocompletamos campos que el usuario aún no llenó.
+        setForm((prev: any) => ({
+          ...prev,
+          name: prev.name || data.name || "",
+          description: prev.description || data.description || data.brand || "",
+          barcode: prev.barcode || code,
+        }));
+        setLookupResult({
+          status: "found",
+          source: data.source,
+          imageUrl: data.imageUrl,
+        });
+        const sourceLabel =
+          data.source === "openfoodfacts" ? "Open Food Facts" : "UPC Item DB";
+        toast.success(`Producto encontrado en ${sourceLabel}`, {
+          description: data.name,
+        });
+      } else {
+        setLookupResult({ status: "notfound" });
+        toast.info("No se encontró el código en las bases de datos públicas", {
+          description: "Completá los datos manualmente",
+        });
+      }
+    } catch (e: any) {
+      setLookupResult({ status: "error" });
+      toast.error("No se pudo consultar la base de productos");
+    } finally {
+      setLookupLoading(false);
+    }
+  }
+
+  function resetLookup() {
+    setLookupResult(null);
+  }
+
   const symbol = store?.currencySymbol || "$";
 
   async function load() {
@@ -146,6 +203,7 @@ export function ProductsView() {
 
   function openNew() {
     setForm({ ...emptyForm });
+    resetLookup();
     setFormOpen(true);
   }
 
@@ -158,6 +216,7 @@ export function ProductsView() {
       minStock: p.minStock,
       adjustReason: "",
     });
+    resetLookup();
     setFormOpen(true);
   }
 
@@ -476,13 +535,96 @@ export function ProductsView() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="barcode">Código de barras</Label>
-              <Input
-                id="barcode"
-                value={form.barcode}
-                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-              />
+            <div className="space-y-2 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="barcode">Código de barras</Label>
+                <span className="text-xs text-muted-foreground">
+                  Escaneá con lector o escribí y presioná Enter
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <ScanLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="barcode"
+                    placeholder="Ej: 7790895005231"
+                    value={form.barcode}
+                    onChange={(e) => {
+                      setForm({ ...form, barcode: e.target.value });
+                      if (lookupResult) resetLookup();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !lookupLoading) {
+                        e.preventDefault();
+                        handleBarcodeLookup();
+                      }
+                    }}
+                    className="pl-9"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleBarcodeLookup}
+                  disabled={lookupLoading || !form.barcode}
+                  title="Buscar datos del producto por código"
+                >
+                  {lookupLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4 mr-2" />
+                  )}
+                  Buscar
+                </Button>
+              </div>
+              {/* Estado del lookup */}
+              {lookupResult?.status === "loading" && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Consultando base de datos de productos...
+                </p>
+              )}
+              {lookupResult?.status === "found" && (
+                <div className="flex items-start gap-3 p-3 rounded-md bg-emerald-50 border border-emerald-200">
+                  {lookupResult.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={lookupResult.imageUrl}
+                      alt="Producto"
+                      className="w-14 h-14 rounded-md object-cover border bg-white"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center">
+                      <ImageOff className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-emerald-800 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Encontrado en{" "}
+                      {lookupResult.source === "openfoodfacts"
+                        ? "Open Food Facts"
+                        : "UPC Item DB"}
+                    </p>
+                    <p className="text-xs text-emerald-700 mt-0.5">
+                      Se autocompletaron nombre y descripción. Revisá precios y stock.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {lookupResult?.status === "notfound" && (
+                <p className="text-xs text-amber-600">
+                  No se encontró en bases públicas. Completá los datos manualmente.
+                </p>
+              )}
+              {lookupResult?.status === "error" && (
+                <p className="text-xs text-red-600">
+                  Error al consultar. Verificá tu conexión e intentá nuevamente.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="sku">SKU</Label>
