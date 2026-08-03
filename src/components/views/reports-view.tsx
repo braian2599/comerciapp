@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDate } from "@/lib/constants";
+import { safeFetchJSON } from "@/lib/fetch";
 
 type TabKey = "sales" | "profits" | "taxes" | "products" | "customers" | "cashflow";
 
@@ -83,13 +84,12 @@ export function ReportsView() {
     setData(null); // reset para que no se renderice data de otro tab
     try {
       const params = new URLSearchParams({ from, to });
-      const res = await fetch(`/api/reports/${tab}?${params}`);
-      const json = await res.json();
-      if (!res.ok) {
-        toast.error(json.error || "Error cargando reporte");
+      const { ok, data: json, error } = await safeFetchJSON<any>(`/api/reports/${tab}?${params}`);
+      if (!ok) {
+        toast.error(error || "Error cargando reporte");
         return;
       }
-      setData(json);
+      setData(json && typeof json === "object" && !Array.isArray(json) ? json : null);
     } catch (err) {
       toast.error("Error de conexión");
     } finally {

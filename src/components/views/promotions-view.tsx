@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/constants";
 import { useAppStore } from "@/store/app-store";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Promotion {
   id: string;
@@ -143,15 +144,23 @@ export function PromotionsView() {
 
   async function load() {
     setLoading(true);
-    const [r1, r2, r3] = await Promise.all([
-      fetch("/api/promotions"),
-      fetch("/api/categories"),
-      fetch("/api/products?limit=500"),
-    ]);
-    setPromotions(await r1.json());
-    setCategories(await r2.json());
-    setProducts(await r3.json());
-    setLoading(false);
+    try {
+      const [proms, cats, prods] = await Promise.all([
+        safeFetchArray<Promotion>("/api/promotions"),
+        safeFetchArray<any>("/api/categories"),
+        safeFetchArray<any>("/api/products?limit=500"),
+      ]);
+      setPromotions(proms);
+      setCategories(cats);
+      setProducts(prods);
+    } catch (e: any) {
+      toast.error("Error al cargar promociones", { description: e?.message });
+      setPromotions([]);
+      setCategories([]);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -208,34 +217,38 @@ export function PromotionsView() {
     try {
       const payload = { ...form, id: editingId };
       const method = editingId ? "PUT" : "POST";
-      const res = await fetch("/api/promotions", {
+      const { ok, error } = await safeFetchJSON("/api/promotions", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error");
+      if (!ok) {
+        toast.error(error || "Error");
         return;
       }
       toast.success(editingId ? "Promoción actualizada" : "Promoción creada");
       setOpen(false);
       await load();
+    } catch (e: any) {
+      toast.error("Error de conexión", { description: e?.message });
     } finally {
       setSaving(false);
     }
   }
 
   async function remove(id: string) {
-    const res = await fetch(`/api/promotions?id=${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error || "Error");
-      return;
+    try {
+      const { ok, error } = await safeFetchJSON(`/api/promotions?id=${id}`, { method: "DELETE" });
+      if (!ok) {
+        toast.error(error || "Error");
+        return;
+      }
+      toast.success("Promoción eliminada");
+      setDeleteId(null);
+      await load();
+    } catch (e: any) {
+      toast.error("Error de conexión", { description: e?.message });
     }
-    toast.success("Promoción eliminada");
-    setDeleteId(null);
-    await load();
   }
 
   // Toggle día de la semana

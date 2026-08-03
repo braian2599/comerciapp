@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 const REFUND_REASONS = [
   { value: "PRODUCTO_DEFECTUOSO", label: "Producto defectuoso" },
@@ -80,10 +81,15 @@ export function RefundsView() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/refunds");
-    const data = await res.json();
-    setRefunds(data);
-    setLoading(false);
+    try {
+      const data = await safeFetchArray<any>("/api/refunds");
+      setRefunds(data);
+    } catch (e: any) {
+      toast.error("Error al cargar devoluciones", { description: e?.message });
+      setRefunds([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -95,11 +101,7 @@ export function RefundsView() {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      // Buscar ventas completadas
-      const res = await fetch(
-        `/api/sales?status=COMPLETADA&limit=50`
-      );
-      const data = await res.json();
+      const data = await safeFetchArray<any>(`/api/sales?status=COMPLETADA&limit=50`);
       const q = searchQuery.toLowerCase().trim();
       // Filtrar: por ID parcial, por nombre de cliente, por método
       const filtered = data.filter((s: any) => {
@@ -109,6 +111,9 @@ export function RefundsView() {
         return false;
       });
       setSearchResults(filtered);
+    } catch (e: any) {
+      toast.error("Error al buscar ventas", { description: e?.message });
+      setSearchResults([]);
     } finally {
       setSearching(false);
     }
@@ -167,7 +172,7 @@ export function RefundsView() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/refunds", {
+      const { ok, data, error } = await safeFetchJSON<any>("/api/refunds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -178,14 +183,15 @@ export function RefundsView() {
           notes,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error al procesar devolución");
+      if (!ok) {
+        toast.error(error || "Error al procesar devolución");
         return;
       }
       toast.success(`Devolución ${data.refundNumber} registrada`);
       setSelectedSale(null);
       await load();
+    } catch (e: any) {
+      toast.error("Error de conexión", { description: e?.message });
     } finally {
       setSaving(false);
     }

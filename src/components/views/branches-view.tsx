@@ -44,6 +44,7 @@ import {
   Phone,
   Star,
 } from "lucide-react";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Branch {
   id: string;
@@ -79,10 +80,15 @@ export function BranchesView() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/branches");
-    const data = await res.json();
-    setBranches(data);
-    setLoading(false);
+    try {
+      const data = await safeFetchArray<Branch>("/api/branches");
+      setBranches(data);
+    } catch (e: any) {
+      toast.error("Error al cargar sucursales", { description: e?.message });
+      setBranches([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -118,34 +124,38 @@ export function BranchesView() {
     try {
       const payload = { ...form, id: editingId };
       const method = editingId ? "PUT" : "POST";
-      const res = await fetch("/api/branches", {
+      const { ok, error } = await safeFetchJSON("/api/branches", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error al guardar");
+      if (!ok) {
+        toast.error(error || "Error al guardar");
         return;
       }
       toast.success(editingId ? "Sucursal actualizada" : "Sucursal creada");
       setOpen(false);
       await load();
+    } catch (e: any) {
+      toast.error("Error de conexión", { description: e?.message });
     } finally {
       setSaving(false);
     }
   }
 
   async function remove(id: string) {
-    const res = await fetch(`/api/branches?id=${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error || "Error al eliminar");
-      return;
+    try {
+      const { ok, error } = await safeFetchJSON(`/api/branches?id=${id}`, { method: "DELETE" });
+      if (!ok) {
+        toast.error(error || "Error al eliminar");
+        return;
+      }
+      toast.success("Sucursal eliminada");
+      setDeleteId(null);
+      await load();
+    } catch (e: any) {
+      toast.error("Error de conexión", { description: e?.message });
     }
-    toast.success("Sucursal eliminada");
-    setDeleteId(null);
-    await load();
   }
 
   const totalSales = branches.reduce(

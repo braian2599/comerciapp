@@ -1,0 +1,802 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useMemo } from "react";
+     4→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+     5→import { Button } from "@/components/ui/button";
+     6→import { Input } from "@/components/ui/input";
+     7→import { Label } from "@/components/ui/label";
+     8→import { Textarea } from "@/components/ui/textarea";
+     9→import { Badge } from "@/components/ui/badge";
+    10→import {
+    11→  Dialog,
+    12→  DialogContent,
+    13→  DialogDescription,
+    14→  DialogFooter,
+    15→  DialogHeader,
+    16→  DialogTitle,
+    17→} from "@/components/ui/dialog";
+    18→import {
+    19→  Table,
+    20→  TableBody,
+    21→  TableCell,
+    22→  TableHead,
+    23→  TableHeader,
+    24→  TableRow,
+    25→} from "@/components/ui/table";
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from "@/components/ui/select";
+    33→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    34→import { toast } from "sonner";
+    35→import {
+    36→  Plus,
+    37→  Search,
+    38→  Pencil,
+    39→  Trash2,
+    40→  Truck,
+    41→  Loader2,
+    42→  PackagePlus,
+    43→  X,
+    44→  CheckCircle2,
+    45→  Clock,
+    46→} from "lucide-react";
+    47→import { useAppStore } from "@/store/app-store";
+    48→import { formatCurrency, formatDateTime } from "@/lib/constants";
+    49→
+    50→interface Supplier {
+    51→  id: string;
+    52→  name: string;
+    53→  phone?: string;
+    54→  email?: string;
+    55→  address?: string;
+    56→  contactName?: string;
+    57→  notes?: string;
+    58→  active: boolean;
+    59→  _count?: { purchaseOrders: number };
+    60→}
+    61→
+    62→interface PurchaseOrderItem {
+    63→  id: string;
+    64→  productId: string;
+    65→  quantity: number;
+    66→  unitCost: number;
+    67→  subtotal: number;
+    68→  product: { name: string; unit: string };
+    69→}
+    70→
+    71→interface PurchaseOrder {
+    72→  id: string;
+    73→  orderNumber: string;
+    74→  status: string;
+    75→  total: number;
+    76→  notes: string | null;
+    77→  orderedAt: string;
+    78→  receivedAt: string | null;
+    79→  supplierName: string;
+    80→  supplier?: { name: string };
+    81→  user?: { name: string };
+    82→  items: PurchaseOrderItem[];
+    83→}
+    84→
+    85→interface Product {
+    86→  id: string;
+    87→  name: string;
+    88→  unit: string;
+    89→  costPrice: number;
+    90→  active?: boolean;
+    91→}
+    92→
+    93→const emptySupplier = {
+    94→  id: "",
+    95→  name: "",
+    96→  phone: "",
+    97→  email: "",
+    98→  address: "",
+    99→  contactName: "",
+   100→  notes: "",
+   101→  active: true,
+   102→};
+   103→
+   104→export function PurchasesView() {
+   105→  const { store } = useAppStore();
+   106→  const symbol = store?.currencySymbol || "$";
+   107→  const [tab, setTab] = useState("orders");
+   108→
+   109→  // Proveedores
+   110→  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+   111→  const [supSearch, setSupSearch] = useState("");
+   112→  const [supFormOpen, setSupFormOpen] = useState(false);
+   113→  const [supForm, setSupForm] = useState<any>(emptySupplier);
+   114→  const [supSaving, setSupSaving] = useState(false);
+   115→  const [deleteSupId, setDeleteSupId] = useState<string | null>(null);
+   116→
+   117→  // Órdenes
+   118→  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+   119→  const [ordersLoading, setOrdersLoading] = useState(true);
+   120→  const [orderFilter, setOrderFilter] = useState("all");
+   121→
+   122→  // Nueva OC
+   123→  const [ocOpen, setOcOpen] = useState(false);
+   124→  const [products, setProducts] = useState<Product[]>([]);
+   125→  const [ocSupplierId, setOcSupplierId] = useState<string>("");
+   126→  const [ocItems, setOcItems] = useState<{ productId: string; quantity: number; unitCost: number }[]>([]);
+   127→  const [ocNotes, setOcNotes] = useState("");
+   128→  const [ocSaving, setOcSaving] = useState(false);
+   129→  const [ocReceiveNow, setOcReceiveNow] = useState(true);
+   130→
+   131→  // Detalle
+   132→  const [detailOrder, setDetailOrder] = useState<PurchaseOrder | null>(null);
+   133→  const [detailOpen, setDetailOpen] = useState(false);
+   134→
+   135→  async function loadSuppliers() {
+   136→    const res = await fetch("/api/suppliers");
+   137→    const data = await res.json();
+   138→    setSuppliers(data);
+   139→  }
+   140→
+   141→  async function loadOrders() {
+   142→    setOrdersLoading(true);
+   143→    const res = await fetch("/api/purchase-orders?limit=100");
+   144→    const data = await res.json();
+   145→    setOrders(data);
+   146→    setOrdersLoading(false);
+   147→  }
+   148→
+   149→  async function loadProducts() {
+   150→    const res = await fetch("/api/products");
+   151→    const data = await res.json();
+   152→    setProducts(data.filter((p: Product) => p.active));
+   153→  }
+   154→
+   155→  useEffect(() => {
+   156→    loadSuppliers();
+   157→    loadOrders();
+   158→  }, []);
+   159→
+   160→  const filteredSuppliers = useMemo(() => {
+   161→    return suppliers.filter((s) => {
+   162→      if (!supSearch) return true;
+   163→      const q = supSearch.toLowerCase();
+   164→      return s.name.toLowerCase().includes(q) || s.phone?.includes(q) || s.contactName?.toLowerCase().includes(q);
+   165→    });
+   166→  }, [suppliers, supSearch]);
+   167→
+   168→  const filteredOrders = useMemo(() => {
+   169→    if (orderFilter === "all") return orders;
+   170→    return orders.filter((o) => o.status === orderFilter);
+   171→  }, [orders, orderFilter]);
+   172→
+   173→  async function saveSupplier() {
+   174→    if (!supForm.name) {
+   175→      toast.error("El nombre es obligatorio");
+   176→      return;
+   177→    }
+   178→    setSupSaving(true);
+   179→    try {
+   180→      const method = supForm.id ? "PUT" : "POST";
+   181→      const res = await fetch("/api/suppliers", {
+   182→        method,
+   183→        headers: { "Content-Type": "application/json" },
+   184→        body: JSON.stringify(supForm),
+   185→      });
+   186→      const data = await res.json();
+   187→      if (!res.ok) throw new Error(data.error);
+   188→      toast.success(supForm.id ? "Proveedor actualizado" : "Proveedor creado");
+   189→      setSupFormOpen(false);
+   190→      loadSuppliers();
+   191→    } catch (e: any) {
+   192→      toast.error(e.message);
+   193→    } finally {
+   194→      setSupSaving(false);
+   195→    }
+   196→  }
+   197→
+   198→  async function deleteSupplier() {
+   199→    if (!deleteSupId) return;
+   200→    try {
+   201→      const res = await fetch(`/api/suppliers?id=${deleteSupId}`, { method: "DELETE" });
+   202→      const data = await res.json();
+   203→      if (!res.ok) throw new Error(data.error);
+   204→      toast.success("Proveedor eliminado");
+   205→      setDeleteSupId(null);
+   206→      loadSuppliers();
+   207→    } catch (e: any) {
+   208→      toast.error(e.message);
+   209→    }
+   210→  }
+   211→
+   212→  function openNewOC() {
+   213→    setOcSupplierId("");
+   214→    setOcItems([]);
+   215→    setOcNotes("");
+   216→    setOcReceiveNow(true);
+   217→    if (products.length === 0) loadProducts();
+   218→    setOcOpen(true);
+   219→  }
+   220→
+   221→  function addProductToOC(productId: string) {
+   222→    const prod = products.find((p) => p.id === productId);
+   223→    if (!prod) return;
+   224→    if (ocItems.find((i) => i.productId === productId)) {
+   225→      toast.error("Ya está en la orden");
+   226→      return;
+   227→    }
+   228→    setOcItems([
+   229→      ...ocItems,
+   230→      { productId, quantity: 1, unitCost: prod.costPrice },
+   231→    ]);
+   232→  }
+   233→
+   234→  function updateOCItem(productId: string, field: "quantity" | "unitCost", value: number) {
+   235→    setOcItems((prev) =>
+   236→      prev.map((i) =>
+   237→        i.productId === productId ? { ...i, [field]: Math.max(0, value) } : i
+   238→      )
+   239→    );
+   240→  }
+   241→
+   242→  function removeOCItem(productId: string) {
+   243→    setOcItems((prev) => prev.filter((i) => i.productId !== productId));
+   244→  }
+   245→
+   246→  const ocTotal = ocItems.reduce((s, i) => s + i.quantity * i.unitCost, 0);
+   247→
+   248→  async function saveOC() {
+   249→    if (ocItems.length === 0) {
+   250→      toast.error("Agregá al menos 1 producto");
+   251→      return;
+   252→    }
+   253→    setOcSaving(true);
+   254→    try {
+   255→      const supplier = suppliers.find((s) => s.id === ocSupplierId);
+   256→      const res = await fetch("/api/purchase-orders", {
+   257→        method: "POST",
+   258→        headers: { "Content-Type": "application/json" },
+   259→        body: JSON.stringify({
+   260→          supplierId: ocSupplierId || null,
+   261→          supplierName: supplier?.name || "Sin proveedor",
+   262→          items: ocItems,
+   263→          notes: ocNotes,
+   264→          receive: ocReceiveNow,
+   265→        }),
+   266→      });
+   267→      const data = await res.json();
+   268→      if (!res.ok) throw new Error(data.error);
+   269→      toast.success(ocReceiveNow ? "Orden registrada y mercadería ingresada al stock" : "Orden creada (pendiente de recepción)");
+   270→      setOcOpen(false);
+   271→      loadOrders();
+   272→    } catch (e: any) {
+   273→      toast.error(e.message);
+   274→    } finally {
+   275→      setOcSaving(false);
+   276→    }
+   277→  }
+   278→
+   279→  async function receiveOrder(id: string) {
+   280→    try {
+   281→      const res = await fetch("/api/purchase-orders/receive", {
+   282→        method: "POST",
+   283→        headers: { "Content-Type": "application/json" },
+   284→        body: JSON.stringify({ id }),
+   285→      });
+   286→      const data = await res.json();
+   287→      if (!res.ok) throw new Error(data.error);
+   288→      toast.success("Orden recibida. Stock actualizado.");
+   289→      loadOrders();
+   290→    } catch (e: any) {
+   291→      toast.error(e.message);
+   292→    }
+   293→  }
+   294→
+   295→  return (
+   296→    <div className="space-y-4">
+   297→      <div className="flex items-center justify-between flex-wrap gap-3">
+   298→        <div>
+   299→          <h1 className="text-2xl font-bold tracking-tight">Compras</h1>
+   300→          <p className="text-sm text-muted-foreground">
+   301→            Gestión de proveedores y órdenes de compra
+   302→          </p>
+   303→        </div>
+   304→        <Button onClick={openNewOC} className="bg-indigo-600 hover:bg-indigo-700">
+   305→          <PackagePlus className="w-4 h-4 mr-2" />
+   306→          Nueva orden de compra
+   307→        </Button>
+   308→      </div>
+   309→
+   310→      <Tabs value={tab} onValueChange={setTab}>
+   311→        <TabsList>
+   312→          <TabsTrigger value="orders">Órdenes de compra</TabsTrigger>
+   313→          <TabsTrigger value="suppliers">Proveedores</TabsTrigger>
+   314→        </TabsList>
+   315→
+   316→        {/* ÓRDENES */}
+   317→        <TabsContent value="orders" className="space-y-4">
+   318→          <Card>
+   319→            <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+   320→              <Select value={orderFilter} onValueChange={setOrderFilter}>
+   321→                <SelectTrigger className="w-44">
+   322→                  <SelectValue />
+   323→                </SelectTrigger>
+   324→                <SelectContent>
+   325→                  <SelectItem value="all">Todas</SelectItem>
+   326→                  <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+   327→                  <SelectItem value="RECIBIDA">Recibidas</SelectItem>
+   328→                  <SelectItem value="ANULADA">Anuladas</SelectItem>
+   329→                </SelectContent>
+   330→              </Select>
+   331→              <span className="text-sm text-muted-foreground ml-auto">
+   332→                {filteredOrders.length} órdenes
+   333→              </span>
+   334→            </CardContent>
+   335→          </Card>
+   336→
+   337→          <Card>
+   338→            <CardContent className="p-0">
+   339→              {ordersLoading ? (
+   340→                <div className="p-8 text-center">
+   341→                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
+   342→                  Cargando órdenes...
+   343→                </div>
+   344→              ) : filteredOrders.length === 0 ? (
+   345→                <div className="p-12 text-center">
+   346→                  <Truck className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+   347→                  <p className="text-sm text-muted-foreground">
+   348→                    No hay órdenes de compra todavía
+   349→                  </p>
+   350→                </div>
+   351→              ) : (
+   352→                <div className="overflow-x-auto">
+   353→                  <Table>
+   354→                    <TableHeader>
+   355→                      <TableRow>
+   356→                        <TableHead>N°</TableHead>
+   357→                        <TableHead>Fecha</TableHead>
+   358→                        <TableHead>Proveedor</TableHead>
+   359→                        <TableHead className="text-center">Ítems</TableHead>
+   360→                        <TableHead className="text-right">Total</TableHead>
+   361→                        <TableHead className="text-center">Estado</TableHead>
+   362→                        <TableHead className="text-right">Acciones</TableHead>
+   363→                      </TableRow>
+   364→                    </TableHeader>
+   365→                    <TableBody>
+   366→                      {filteredOrders.map((o) => (
+   367→                        <TableRow key={o.id}>
+   368→                          <TableCell className="font-mono text-xs">{o.orderNumber}</TableCell>
+   369→                          <TableCell className="text-xs">
+   370→                            {formatDateTime(o.orderedAt)}
+   371→                          </TableCell>
+   372→                          <TableCell className="text-sm">{o.supplierName}</TableCell>
+   373→                          <TableCell className="text-center">
+   374→                            <Badge variant="outline">{o.items.length}</Badge>
+   375→                          </TableCell>
+   376→                          <TableCell className="text-right font-medium">
+   377→                            {formatCurrency(o.total, symbol)}
+   378→                          </TableCell>
+   379→                          <TableCell className="text-center">
+   380→                            {o.status === "RECIBIDA" ? (
+   381→                              <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-100">
+   382→                                <CheckCircle2 className="w-3 h-3 mr-1" /> Recibida
+   383→                              </Badge>
+   384→                            ) : o.status === "PENDIENTE" ? (
+   385→                              <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+   386→                                <Clock className="w-3 h-3 mr-1" /> Pendiente
+   387→                              </Badge>
+   388→                            ) : (
+   389→                              <Badge variant="outline">{o.status}</Badge>
+   390→                            )}
+   391→                          </TableCell>
+   392→                          <TableCell className="text-right">
+   393→                            <Button
+   394→                              variant="ghost"
+   395→                              size="sm"
+   396→                              className="h-8"
+   397→                              onClick={() => {
+   398→                                setDetailOrder(o);
+   399→                                setDetailOpen(true);
+   400→                              }}
+   401→                            >
+   402→                              Ver
+   403→                            </Button>
+   404→                            {o.status === "PENDIENTE" && (
+   405→                              <Button
+   406→                                variant="ghost"
+   407→                                size="sm"
+   408→                                className="h-8 text-indigo-700"
+   409→                                onClick={() => receiveOrder(o.id)}
+   410→                              >
+   411→                                Recibir
+   412→                              </Button>
+   413→                            )}
+   414→                          </TableCell>
+   415→                        </TableRow>
+   416→                      ))}
+   417→                    </TableBody>
+   418→                  </Table>
+   419→                </div>
+   420→              )}
+   421→            </CardContent>
+   422→          </Card>
+   423→        </TabsContent>
+   424→
+   425→        {/* PROVEEDORES */}
+   426→        <TabsContent value="suppliers" className="space-y-4">
+   427→          <Card>
+   428→            <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+   429→              <div className="relative flex-1 min-w-48">
+   430→                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   431→                <Input
+   432→                  placeholder="Buscar proveedor..."
+   433→                  value={supSearch}
+   434→                  onChange={(e) => setSupSearch(e.target.value)}
+   435→                  className="pl-9"
+   436→                />
+   437→              </div>
+   438→              <Button
+   439→                onClick={() => {
+   440→                  setSupForm({ ...emptySupplier });
+   441→                  setSupFormOpen(true);
+   442→                }}
+   443→                className="bg-indigo-600 hover:bg-indigo-700"
+   444→              >
+   445→                <Plus className="w-4 h-4 mr-2" /> Nuevo proveedor
+   446→              </Button>
+   447→            </CardContent>
+   448→          </Card>
+   449→
+   450→          <Card>
+   451→            <CardContent className="p-0">
+   452→              {filteredSuppliers.length === 0 ? (
+   453→                <div className="p-12 text-center">
+   454→                  <Truck className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+   455→                  <p className="text-sm text-muted-foreground">
+   456→                    No hay proveedores cargados
+   457→                  </p>
+   458→                </div>
+   459→              ) : (
+   460→                <div className="overflow-x-auto">
+   461→                  <Table>
+   462→                    <TableHeader>
+   463→                      <TableRow>
+   464→                        <TableHead>Nombre</TableHead>
+   465→                        <TableHead className="hidden sm:table-cell">Contacto</TableHead>
+   466→                        <TableHead className="hidden lg:table-cell">Dirección</TableHead>
+   467→                        <TableHead className="text-center">Órdenes</TableHead>
+   468→                        <TableHead className="text-right">Acciones</TableHead>
+   469→                      </TableRow>
+   470→                    </TableHeader>
+   471→                    <TableBody>
+   472→                      {filteredSuppliers.map((s) => (
+   473→                        <TableRow key={s.id}>
+   474→                          <TableCell>
+   475→                            <p className="font-medium">{s.name}</p>
+   476→                            {s.contactName && (
+   477→                              <p className="text-xs text-muted-foreground">{s.contactName}</p>
+   478→                            )}
+   479→                          </TableCell>
+   480→                          <TableCell className="hidden sm:table-cell text-sm">
+   481→                            <div>
+   482→                              {s.phone && <p>{s.phone}</p>}
+   483→                              {s.email && <p className="text-muted-foreground">{s.email}</p>}
+   484→                              {!s.phone && !s.email && <span className="text-muted-foreground">—</span>}
+   485→                            </div>
+   486→                          </TableCell>
+   487→                          <TableCell className="hidden lg:table-cell text-sm">
+   488→                            {s.address || <span className="text-muted-foreground">—</span>}
+   489→                          </TableCell>
+   490→                          <TableCell className="text-center">
+   491→                            <Badge variant="outline">{s._count?.purchaseOrders || 0}</Badge>
+   492→                          </TableCell>
+   493→                          <TableCell className="text-right">
+   494→                            <Button
+   495→                              variant="ghost"
+   496→                              size="icon"
+   497→                              className="h-8 w-8"
+   498→                              onClick={() => {
+   499→                                setSupForm({ ...s });
+   500→                                setSupFormOpen(true);
+   501→                              }}
+   502→                            >
+   503→                              <Pencil className="w-3.5 h-3.5" />
+   504→                            </Button>
+   505→                            <Button
+   506→                              variant="ghost"
+   507→                              size="icon"
+   508→                              className="h-8 w-8 text-red-600"
+   509→                              onClick={() => setDeleteSupId(s.id)}
+   510→                            >
+   511→                              <Trash2 className="w-3.5 h-3.5" />
+   512→                            </Button>
+   513→                          </TableCell>
+   514→                        </TableRow>
+   515→                      ))}
+   516→                    </TableBody>
+   517→                  </Table>
+   518→                </div>
+   519→              )}
+   520→            </CardContent>
+   521→          </Card>
+   522→        </TabsContent>
+   523→      </Tabs>
+   524→
+   525→      {/* Diálogo nueva OC */}
+   526→      <Dialog open={ocOpen} onOpenChange={setOcOpen}>
+   527→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   528→          <DialogHeader>
+   529→            <DialogTitle>Nueva orden de compra</DialogTitle>
+   530→            <DialogDescription>
+   531→              Registrá la mercadería que comprás a un proveedor. Podés recibirla ahora
+   532→              (actualiza stock) o dejarla pendiente.
+   533→            </DialogDescription>
+   534→          </DialogHeader>
+   535→          <div className="space-y-4 py-2">
+   536→            <div className="space-y-2">
+   537→              <Label>Proveedor</Label>
+   538→              <Select value={ocSupplierId || "none"} onValueChange={(v) => setOcSupplierId(v === "none" ? "" : v)}>
+   539→                <SelectTrigger>
+   540→                  <SelectValue placeholder="Sin proveedor" />
+   541→                </SelectTrigger>
+   542→                <SelectContent>
+   543→                  <SelectItem value="none">Sin proveedor</SelectItem>
+   544→                  {suppliers.map((s) => (
+   545→                    <SelectItem key={s.id} value={s.id}>
+   546→                      {s.name}
+   547→                    </SelectItem>
+   548→                  ))}
+   549→                </SelectContent>
+   550→              </Select>
+   551→            </div>
+   552→
+   553→            <div className="space-y-2">
+   554→              <Label>Agregar producto</Label>
+   555→              <Select value="" onValueChange={(v) => addProductToOC(v)}>
+   556→                <SelectTrigger>
+   557→                  <SelectValue placeholder="Seleccionar producto..." />
+   558→                </SelectTrigger>
+   559→                <SelectContent>
+   560→                  {products.map((p) => (
+   561→                    <SelectItem key={p.id} value={p.id}>
+   562→                      {p.name}
+   563→                    </SelectItem>
+   564→                  ))}
+   565→                </SelectContent>
+   566→              </Select>
+   567→            </div>
+   568→
+   569→            {ocItems.length > 0 && (
+   570→              <div className="border rounded-md">
+   571→                <Table>
+   572→                  <TableHeader>
+   573→                    <TableRow>
+   574→                      <TableHead>Producto</TableHead>
+   575→                      <TableHead className="w-24">Cant.</TableHead>
+   576→                      <TableHead className="w-32">Costo unit.</TableHead>
+   577→                      <TableHead className="text-right">Subtotal</TableHead>
+   578→                      <TableHead className="w-10"></TableHead>
+   579→                    </TableRow>
+   580→                  </TableHeader>
+   581→                  <TableBody>
+   582→                    {ocItems.map((i) => {
+   583→                      const prod = products.find((p) => p.id === i.productId);
+   584→                      return (
+   585→                        <TableRow key={i.productId}>
+   586→                          <TableCell className="text-sm">
+   587→                            {prod?.name || "??"}
+   588→                            <span className="text-xs text-muted-foreground ml-1">
+   589→                              ({prod?.unit || "u"})
+   590→                            </span>
+   591→                          </TableCell>
+   592→                          <TableCell>
+   593→                            <Input
+   594→                              type="number"
+   595→                              value={i.quantity}
+   596→                              onChange={(e) => updateOCItem(i.productId, "quantity", Number(e.target.value))}
+   597→                              className="h-8 px-2"
+   598→                            />
+   599→                          </TableCell>
+   600→                          <TableCell>
+   601→                            <Input
+   602→                              type="number"
+   603→                              value={i.unitCost}
+   604→                              onChange={(e) => updateOCItem(i.productId, "unitCost", Number(e.target.value))}
+   605→                              className="h-8 px-2"
+   606→                            />
+   607→                          </TableCell>
+   608→                          <TableCell className="text-right font-medium">
+   609→                            {formatCurrency(i.quantity * i.unitCost, symbol)}
+   610→                          </TableCell>
+   611→                          <TableCell>
+   612→                            <Button
+   613→                              variant="ghost"
+   614→                              size="icon"
+   615→                              className="h-7 w-7 text-red-600"
+   616→                              onClick={() => removeOCItem(i.productId)}
+   617→                            >
+   618→                              <X className="w-3.5 h-3.5" />
+   619→                            </Button>
+   620→                          </TableCell>
+   621→                        </TableRow>
+   622→                      );
+   623→                    })}
+   624→                  </TableBody>
+   625→                </Table>
+   626→              </div>
+   627→            )}
+   628→
+   629→            <div className="flex justify-between items-center p-3 rounded-md bg-indigo-50 border border-indigo-200">
+   630→              <span className="text-sm font-medium text-indigo-800">Total orden</span>
+   631→              <span className="text-xl font-bold text-indigo-700">
+   632→                {formatCurrency(ocTotal, symbol)}
+   633→              </span>
+   634→            </div>
+   635→
+   636→            <div className="space-y-2">
+   637→              <Label>Notas (opcional)</Label>
+   638→              <Textarea
+   639→                value={ocNotes}
+   640→                onChange={(e) => setOcNotes(e.target.value)}
+   641→                rows={2}
+   642→                placeholder="Ej: Remito N°, factura, observaciones..."
+   643→              />
+   644→            </div>
+   645→
+   646→            <label className="flex items-center gap-2 text-sm cursor-pointer">
+   647→              <input
+   648→                type="checkbox"
+   649→                checked={ocReceiveNow}
+   650→                onChange={(e) => setOcReceiveNow(e.target.checked)}
+   651→                className="w-4 h-4 accent-indigo-600"
+   652→              />
+   653→              Recibir mercadería ahora (actualiza stock y costo de productos)
+   654→            </label>
+   655→          </div>
+   656→          <DialogFooter>
+   657→            <Button variant="outline" onClick={() => setOcOpen(false)}>
+   658→              Cancelar
+   659→            </Button>
+   660→            <Button
+   661→              onClick={saveOC}
+   662→              disabled={ocSaving}
+   663→              className="bg-indigo-600 hover:bg-indigo-700"
+   664→            >
+   665→              {ocSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+   666→              {ocReceiveNow ? "Registrar y recibir" : "Crear orden pendiente"}
+   667→            </Button>
+   668→          </DialogFooter>
+   669→        </DialogContent>
+   670→      </Dialog>
+   671→
+   672→      {/* Diálogo detalle orden */}
+   673→      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+   674→        <DialogContent className="max-w-xl">
+   675→          <DialogHeader>
+   676→            <DialogTitle>
+   677→              Orden {detailOrder?.orderNumber}
+   678→            </DialogTitle>
+   679→            <DialogDescription>
+   680→              {detailOrder && formatDateTime(detailOrder.orderedAt)} · {detailOrder?.supplierName}
+   681→            </DialogDescription>
+   682→          </DialogHeader>
+   683→          {detailOrder && (
+   684→            <div className="space-y-3">
+   685→              <div className="flex items-center gap-2">
+   686→                <Badge
+   687→                  className={
+   688→                    detailOrder.status === "RECIBIDA"
+   689→                      ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-100"
+   690→                      : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+   691→                  }
+   692→                >
+   693→                  {detailOrder.status}
+   694→                </Badge>
+   695→                {detailOrder.receivedAt && (
+   696→                  <span className="text-xs text-muted-foreground">
+   697→                    Recibida: {formatDateTime(detailOrder.receivedAt)}
+   698→                  </span>
+   699→                )}
+   700→              </div>
+   701→              <Table>
+   702→                <TableHeader>
+   703→                  <TableRow>
+   704→                    <TableHead>Producto</TableHead>
+   705→                    <TableHead className="text-right">Cant.</TableHead>
+   706→                    <TableHead className="text-right">Costo</TableHead>
+   707→                    <TableHead className="text-right">Subtotal</TableHead>
+   708→                  </TableRow>
+   709→                </TableHeader>
+   710→                <TableBody>
+   711→                  {detailOrder.items.map((it) => (
+   712→                    <TableRow key={it.id}>
+   713→                      <TableCell className="text-sm">{it.product.name}</TableCell>
+   714→                      <TableCell className="text-right">{it.quantity}</TableCell>
+   715→                      <TableCell className="text-right">
+   716→                        {formatCurrency(it.unitCost, symbol)}
+   717→                      </TableCell>
+   718→                      <TableCell className="text-right font-medium">
+   719→                        {formatCurrency(it.subtotal, symbol)}
+   720→                      </TableCell>
+   721→                    </TableRow>
+   722→                  ))}
+   723→                </TableBody>
+   724→              </Table>
+   725→              <div className="flex justify-between p-3 rounded-md bg-muted">
+   726→                <span className="font-medium">Total</span>
+   727→                <span className="font-bold text-indigo-700">
+   728→                  {formatCurrency(detailOrder.total, symbol)}
+   729→                </span>
+   730→              </div>
+   731→              {detailOrder.notes && (
+   732→                <p className="text-sm text-muted-foreground">
+   733→                  <strong>Notas:</strong> {detailOrder.notes}
+   734→                </p>
+   735→              )}
+   736→            </div>
+   737→          )}
+   738→          <DialogFooter>
+   739→            {detailOrder?.status === "PENDIENTE" && (
+   740→              <Button
+   741→                className="bg-indigo-600 hover:bg-indigo-700"
+   742→                onClick={() => {
+   743→                  receiveOrder(detailOrder.id);
+   744→                  setDetailOpen(false);
+   745→                }}
+   746→              >
+   747→                <PackagePlus className="w-4 h-4 mr-2" />
+   748→                Recibir mercadería
+   749→              </Button>
+   750→            )}
+   751→            <Button variant="outline" onClick={() => setDetailOpen(false)}>
+   752→              Cerrar
+   753→            </Button>
+   754→          </DialogFooter>
+   755→        </DialogContent>
+   756→      </Dialog>
+   757→
+   758→      {/* Diálogo editar proveedor */}
+   759→      <Dialog open={supFormOpen} onOpenChange={setSupFormOpen}>
+   760→        <DialogContent>
+   761→          <DialogHeader>
+   762→            <DialogTitle>{supForm.id ? "Editar proveedor" : "Nuevo proveedor"}</DialogTitle>
+   763→          </DialogHeader>
+   764→          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+   765→            <div className="space-y-2 sm:col-span-2">
+   766→              <Label>Nombre *</Label>
+   767→              <Input value={supForm.name} onChange={(e) => setSupForm({ ...supForm, name: e.target.value })} />
+   768→            </div>
+   769→            <div className="space-y-2">
+   770→              <Label>Contacto</Label>
+   771→              <Input value={supForm.contactName} onChange={(e) => setSupForm({ ...supForm, contactName: e.target.value })} />
+   772→            </div>
+   773→            <div className="space-y-2">
+   774→              <Label>Teléfono</Label>
+   775→              <Input value={supForm.phone} onChange={(e) => setSupForm({ ...supForm, phone: e.target.value })} />
+   776→            </div>
+   777→            <div className="space-y-2">
+   778→              <Label>Email</Label>
+   779→              <Input value={supForm.email} onChange={(e) => setSupForm({ ...supForm, email: e.target.value })} />
+   780→            </div>
+   781→            <div className="space-y-2">
+   782→              <Label>Dirección</Label>
+   783→              <Input value={supForm.address} onChange={(e) => setSupForm({ ...supForm, address: e.target.value })} />
+   784→            </div>
+   785→            <div className="space-y-2 sm:col-span-2">
+   786→              <Label>Notas</Label>
+   787→              <Textarea value={supForm.notes} onChange={(e) => setSupForm({ ...supForm, notes: e.target.value })} rows={2} />
+   788→            </div>
+   789→          </div>
+   790→          <DialogFooter>
+   791→            <Button variant="outline" onClick={() => setSupFormOpen(false)}>Cancelar</Button>
+   792→            <Button onClick={saveSupplier} disabled={supSaving} className="bg-indigo-600 hover:bg-indigo-700">
+   793→              {supSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+   794→              {supForm.id ? "Guardar" : "Crear"}
+   795→            </Button>
+   796→          </DialogFooter>
+   797→        </DialogContent>
+   798→      </Dialog>
+   799→    </div>
+   800→  );
+   801→}
+   802→

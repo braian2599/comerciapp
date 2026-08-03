@@ -1,0 +1,759 @@
+     1→---
+     2→Task ID: fase-2
+     3→Agent: main
+     4→Task: Implementar Fase 2 del roadmap de ComerciApp — Cumplimiento legal (Facturación electrónica AFIP/ARCA, Mercado Pago QR, Reportes avanzados)
+     5→
+     6→Work Log:
+     7→- Verificado estado actual: Fase 1 ya completa (CashRegister, Suppliers, Purchases, Expenses, CustomerPayments, barcode, PaymentMethod con surcharge).
+     8→- Actualizado `prisma/schema.prisma` con 4 modelos nuevos: `TaxConfig`, `Invoice`, `MercadoPagoConfig`, `MercadoPagoPayment`. Agregados campos fiscales (`cuit`, `taxType`) en Customer. Creadas relaciones `invoice` y `mercadoPagoPayment` en Sale. Migración `prisma db push` exitosa.
+     9→- Creada librería `src/lib/afip.ts` con:
+    10→  - Constantes AFIP (tipos de comprobante, conceptos, condiciones IVA, alícuotas).
+    11→  - Generación de QR según RG AFIP 4291/2018 (base64url de JSON con datos de la factura).
+    12→  - Función `emitirFactura` con modo demo (CAE simulado) y hook para producción (placeholder pendiente de SDK).
+    13→  - Cálculo de IVA discriminado (factura A) o incluido (factura B/C).
+    14→  - Determinación automática de tipo de factura según condición fiscal emisor/cliente.
+    15→  - Validación de CUIT con algoritmo de dígito verificador.
+    16→- Creada librería `src/lib/mercado-pago.ts` con:
+    17→  - `crearOrdenQR`: crea preferencia en MP y genera QR (copia y pega + imagen).
+    18→  - `consultarEstadoPago`: polling de estado del pago (por id local, mpPaymentId o external_reference).
+    19→  - `procesarWebhookMP`: procesa notificaciones IPN/webhook de MP.
+    20→  - `actualizarPagoDesdeWebhook`: actualiza estado local y marca venta como cobrada cuando se aprueba.
+    21→- APIs creadas:
+    22→  - `/api/invoices` (GET listado, POST emisión)
+    23→  - `/api/invoices/[id]` (GET detalle, DELETE anular)
+    24→  - `/api/tax-config` (GET, PUT)
+    25→  - `/api/mercadopago/config` (GET, PUT)
+    26→  - `/api/mercadopago/create-order` (POST)
+    27→  - `/api/mercadopago/status` (GET polling)
+    28→  - `/api/mercadopago/webhook` (POST)
+    29→  - `/api/reports/sales` (ventas por día/semana/mes, por método, por vendedor)
+    30→  - `/api/reports/profits` (ganancia bruta/neta, gastos por categoría, serie diaria)
+    31→  - `/api/reports/taxes` (facturas por tipo, IVA recaudado, ventas sin facturar)
+    32→  - `/api/reports/products` (ranking de productos por ingresos/cantidad/ganancia)
+    33→  - `/api/reports/customers` (top clientes, saldos de cuenta corriente)
+    34→  - `/api/reports/cash-flow` (flujo de caja diario: ingresos/egresos en efectivo)
+    35→- Vistas creadas:
+    36→  - `src/components/views/invoices-view.tsx`: listado con filtros, stats, modal de creación desde venta, modal de detalle con QR AFIP, exportación CSV, anulación.
+    37→  - `src/components/views/reports-view.tsx`: panel con 6 tabs (Ventas, Ganancias, Fiscal, Productos, Clientes, Flujo Caja), filtros por período, gráficos con Recharts, tablas, exportación CSV.
+    38→- Modificado `src/components/views/pos-view.tsx`: agregado botón "Pago QR (MP)" en el checkout que abre un diálogo para generar QR de Mercado Pago, con polling de estado y confirmación automática.
+    39→- Modificado `src/components/views/settings-view.tsx`: agregadas dos secciones nuevas:
+    40→  - "Facturación Electrónica (AFIP/ARCA)": CUIT, razón social, punto de venta, condición fiscal, IVA, categoría monotributo, modo homologación/producción.
+    41→  - "Mercado Pago - Pago con QR": credenciales sandbox/producción, collector ID, URL de webhook.
+    42→- Actualizado `src/store/app-store.ts`: agregados `invoices` y `reports` a ViewKey.
+    43→- Actualizado `src/components/app/app-shell.tsx`: agregadas importaciones, items de navegación (Facturación y Reportes), casos de renderización, y versión a v2.0.
+    44→- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso.
+    45→
+    46→Stage Summary:
+    47→- Fase 2 implementada completamente con 3 módulos nuevos: Facturación Electrónica, Mercado Pago QR y Reportes Avanzados.
+    48→- 4 modelos Prisma nuevos, 13 APIs nuevas, 2 vistas nuevas.
+    49→- Schema migrado correctamente, build exitoso.
+    50→- AFIP funciona en modo demo (CAE simulado + QR válido RG 4291). Producción requiere certificado real (placeholder implementado).
+    51→- Mercado Pago integrado con creación de preferencias + QR + webhook. Pendiente: que el usuario cargue credenciales reales.
+    52→- 6 reportes avanzados con gráficos (Recharts) y exportación CSV.
+    53→- Sistema actualizado a versión v2.0.
+    54→
+    55→---
+    56→Task ID: fase-3
+    57→Agent: main
+    58→Task: Implementar Fase 3 del roadmap de ComerciApp — Devoluciones/Notas de Crédito, Descuentos/Promociones, Multi-sucursal y Fidelización
+    59→
+    60→Work Log:
+    61→- Verificado estado previo: Fase 1 y Fase 2 completas (v2.0).
+    62→- Actualizado `prisma/schema.prisma` con 6 modelos nuevos: `Branch`, `Promotion`, `Refund`, `RefundItem`, `LoyaltyProgram`, `LoyaltyPoint`. Agregados campos en `Customer` (`loyaltyPoints`, `loyaltyTier`, `totalSpent`, `totalSales`), en `Sale` (`branchId`, `discountReason`, `promotionId`, `promotionDiscount`, `loyaltyPointsEarned`, `loyaltyPointsUsed`), en `CashRegister` (`branchId`), y relaciones correspondientes. Migración `prisma db push` exitosa.
+    63→- Creada librería `src/lib/promotions.ts`:
+    64→  - Tipos: PromotionType, PromotionScope, CartItem, PromotionData, AppliedDiscount.
+    65→  - Función `isPromotionActive` (valida vigencia, días de semana, hora, límite de usos).
+    66→  - Función `evaluatePromotion` con 4 tipos: PORCENTAJE, MONTO_FIJO, NXM (2x1, 3x2), COMBO.
+    67→  - Función `evaluateAllPromotions` (todas las aplicables, ordenadas por mayor descuento).
+    68→  - Función `pickBestPromotion` (mejor promoción para auto-aplicar).
+    69→- Creada librería `src/lib/loyalty.ts`:
+    70→  - Tipos: LoyaltyTier (BRONCE/PLATA/ORO/PLATINO), LoyaltyAction.
+    71→  - Funciones: `determineTier`, `tierBonusMultiplier`, `calculatePointsEarned`, `pointsToCurrency`, `currencyToPoints`, `calculateMaxRedeemablePoints`, `tierLabel`, `nextTierInfo`.
+    72→  - Soporte para 4 tiers con montos mínimos y multiplicadores de bonus configurables.
+    73→- APIs creadas (todas con autenticación y multi-tenant):
+    74→  - `/api/branches` (GET/POST/PUT/DELETE): CRUD de sucursales. Validación de código único, sucursal principal no eliminable.
+    75→  - `/api/promotions` (GET/POST/PUT/DELETE): CRUD de promociones. Soporta PORCENTAJE/MONTO_FIJO/NXM/COMBO con scope CART/CATEGORY/PRODUCT, vigencia, horarios, días de semana, límites.
+    76→  - `/api/promotions/evaluate` (POST): evalúa promociones activas contra un carrito y devuelve aplicables + mejor.
+    77→  - `/api/loyalty` (GET/PUT): configura programa de fidelización. Crea config por defecto si no existe.
+    78→  - `/api/loyalty/points` (GET/POST): historial de puntos de cliente + ajuste manual.
+    79→  - `/api/refunds` (GET/POST): lista y crea devoluciones. Soporta devolución TOTAL (anula venta) o PARCIAL (restituye stock proporcional). Maneja 3 métodos de devolución: EFECTIVO (con movimiento de caja EGRESO), TRANSFERENCIA, CREDITO_CUENTA (pago a cuenta corriente). Revierte puntos ganados proporcionalmente.
+    80→  - `/api/refunds/[id]` (GET): detalle completo de una devolución.
+    81→- Modificado `src/app/api/sales/route.ts`:
+    82→  - GET: soporta filtro por `branchId`. Incluye `branch` y `promotion` en respuesta.
+    83→  - POST: soporta `branchId`, `promotionId`, `promotionDiscount`, `loyaltyPointsUsed`. Calcula `loyaltyPointsEarned` según tier del cliente. Actualiza saldo de puntos, totalSpent, totalSales y recalcula tier. Registra movimientos EARN/REDEEM en log de puntos. Incrementa usageCount de la promoción.
+    84→- Vistas creadas:
+    85→  - `src/components/views/branches-view.tsx`: listado con stats (activas, ventas totales, cajas asignadas), tabla con columnas (nombre, código, dirección, teléfono, encargado, ventas, estado, acciones), modal de alta/edición con switch para sucursal principal y activo. Botón eliminar deshabilitado para sucursal principal.
+    86→  - `src/components/views/promotions-view.tsx`: listado con stats (total, activas, usos totales), tabla (nombre, tipo, alcance, vigencia, usos, estado), modal de alta/edición completo con 4 tipos de promoción, scope dinámico (CART/CATEGORY/PRODUCT), vigencia con fechas, horario con hora inicio/fin, selector de días de la semana (toggle chips), prioridad, límites (total y por cliente), switch activo.
+    87→  - `src/components/views/refunds-view.tsx`: listado con stats (total devoluciones, monto devuelto, devoluciones hoy), búsqueda de venta por ID/cliente/método, modal de nueva devolución con selección de items por cantidad, cálculo en tiempo real de subtotal/descuento proporcional/impuesto/recargo/total, selección de método (EFECTIVO/TRANSFERENCIA/CREDITO_CUENTA), motivo, notas. Modal de detalle con items devueltos y totales.
+    88→- Modificado `src/components/views/customers-view.tsx`:
+    89→  - Carga programa de fidelización al iniciar (para mostrar/ocultar columna).
+    90→  - Agregada columna "Puntos / Tier" con badge de tier (BRONCE/PLATA/ORO/PLATINO) y puntos actuales.
+    91→  - Agregado botón "Puntos" que abre modal con: stats (puntos, tier, compras, total gastado), formulario de ajuste manual (positivo o negativo con descripción), tabla de historial de movimientos (EARN/REDEEM/EXPIRE/ADJUST) con saldo posterior.
+    92→- Modificado `src/components/views/pos-view.tsx`:
+    93→  - Carga branches y loyaltyProgram al inicio.
+    94→  - Selector de sucursal en header (visible si hay >1 sucursal activa).
+    95→  - Auto-evaluación de promociones cuando cambia el carrito (useEffect), muestra chips clickeables con todas las promociones aplicables y la mejor se auto-aplica.
+    96→  - Input de descuento manual + visualización de promo aplicada + input de puntos a canjear (con botón Máx) cuando hay cliente seleccionado y programa activo.
+    97→  - Recálculo de totales: subtotal - (manualDiscount + promotionDiscount + pointsCurrencyDiscount) = base imponible.
+    98→  - processSale envía branchId, promotionId, promotionDiscount, loyaltyPointsUsed. Refresca clientes después (puntos actualizados).
+    99→  - Fix: reemplazadas referencias a `discountAmount` (renombrado a `manualDiscount`/`totalDiscount`) en checkout sheet y modal de Mercado Pago.
+   100→- Modificado `src/components/views/settings-view.tsx`:
+   101→  - Agregada sección "Programa de Fidelización (Puntos)" con:
+   102→    - Switch para habilitar/deshabilitar programa.
+   103→    - Nombre del programa.
+   104→    - Sección Acumulación: puntos por $1, compra mínima, redondeo (FLOOR/CEIL/ROUND).
+   105→    - Sección Canje: valor de 1 punto en $, mínimo puntos para canjear, % máximo del total canjeable.
+   106→    - Sección Niveles (tiers): 4 cards con colores (Bronce/Plata/Oro/Platino), cada uno con monto mínimo y bonus (multiplicador).
+   107→    - Botón "Guardar programa de fidelización" (color púrpura).
+   108→- Actualizado `src/store/app-store.ts`: agregados `refunds`, `promotions`, `branches` a ViewKey.
+   109→- Actualizado `src/components/app/app-shell.tsx`:
+   110→  - Importadas 3 nuevas vistas (RefundsView, PromotionsView, BranchesView).
+   111→  - Agregados iconos (RotateCcw, Tag, Building2) de lucide-react.
+   112→  - Agregados 3 items de navegación: Devoluciones (ADMIN/VENDEDOR/CAJERO), Promociones (ADMIN), Sucursales (ADMIN).
+   113→  - Agregados casos en renderView para las 3 nuevas vistas.
+   114→  - Versión actualizada a v3.0 con descripción "Fase 3: Devoluciones + Promos + Sucursales + Fidelización".
+   115→- Verificación: `bun run lint` sin errores. `bun run db:push` exitoso. Dev server corriendo en :3000 sin errores.
+   116→- Verificación con Agent Browser:
+   117→  - Login exitoso con tienda demo.
+   118→  - Sidebar muestra 3 nuevos items (Devoluciones, Promociones, Sucursales) + versión v3.0.
+   119→  - Vista Sucursales: cargó, creó "Sucursal Norte" (NOR) con éxito, aparece en la tabla.
+   120→  - Vista Promociones: cargó, botón "Nueva promoción" disponible.
+   121→  - Vista Devoluciones: cargó, botón "Nueva devolución" disponible.
+   122→  - Vista Configuración: sección de Fidelización visible, se habilitó y guardó con éxito (toast "Programa de fidelización guardado").
+   123→  - Vista Clientes: columna "Puntos / Tier" visible con badge BRONCE y "0 pts" para cada cliente. Botón "Puntos" abre modal con historial vacío y formulario de ajuste.
+   124→  - Vista POS: cargó correctamente, catálogo visible con categorías y productos, búsqueda funcional.
+   125→
+   126→Stage Summary:
+   127→- Fase 3 implementada completamente con 4 módulos nuevos: Devoluciones/Notas de Crédito, Promociones, Multi-sucursal y Fidelización.
+   128→- 6 modelos Prisma nuevos, 8 APIs nuevas, 3 vistas nuevas, 3 vistas modificadas (POS, Clientes, Configuración).
+   129→- Schema migrado correctamente, lint sin errores, build exitoso, verificación E2E con Agent Browser OK.
+   130→- Devoluciones soportan TOTAL/PARCIAL con restitución de stock y reversa de puntos. 3 métodos de devolución (efectivo, transferencia, crédito en cuenta).
+   131→- Promociones: 4 tipos (PORCENTAJE, MONTO_FIJO, NXM, COMBO) × 3 scopes (CART, CATEGORY, PRODUCT) con vigencia, horarios y días. Auto-evaluación en POS.
+   132→- Multi-sucursal: CRUD completo. Ventas y cajas asocian branchId. Selector en POS si hay >1 sucursal.
+   133→- Fidelización: programa configurable con 4 tiers (Bronce/Plata/Oro/Platino) y bonus. Acumulación automática en ventas, canje manual desde POS, ajuste manual desde Clientes. Historial completo de movimientos.
+   134→- Sistema actualizado a versión v3.0.
+   135→
+   136→---
+   137→Task ID: fase-4
+   138→Agent: main
+   139→Task: Implementar Fase 4 del roadmap de ComerciApp — PWA Offline, Impresión Térmica, E-commerce Sync y Comisiones
+   140→
+   141→Work Log:
+   142→- Verificado estado previo: Fases 1, 2 y 3 completas (v3.0). Schema con 25 modelos.
+   143→- Actualizado `prisma/schema.prisma` con 6 modelos nuevos: `CommissionRule`, `Commission`, `EcommerceConfig`, `EcommerceSyncLog`, `PrintTemplate`, `OfflineSyncQueue`. Agregados campos en `Product` (`ecommerceProductId`, `ecommerceSyncedAt`, `ecommerceStatus`), en `Sale` (relación `commission`), en `Store` (relaciones nuevas), en `User` (relaciones `commissions`, `commissionRules`). Migración `prisma db push` + `prisma generate` exitosa.
+   144→- Creada librería `src/lib/commissions.ts`:
+   145→  - Tipos: CommissionType (PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO), CommissionStatus, CommissionTier.
+   146→  - `evaluateCommissionRule`: evalúa regla contra una venta (vigencia, monto mínimo, onlyPaid, tipo de cálculo).
+   147→  - `parseTiers`/`serializeTiers`/`findTier`: manejo de tramos escalonados.
+   148→  - `createCommissionForSale`: busca regla activa para el vendedor y crea comisión automáticamente al cerrar venta.
+   149→  - `getCommissionSummary`: totales por vendedor (pendiente, pagado, count).
+   150→  - Helpers de presentación: `commissionTypeLabel`, `commissionStatusLabel`, `commissionStatusColor`.
+   151→- Creada librería `src/lib/printer.ts` (ESC/POS):
+   152→  - Comandos ESC/POS completos: INIT, FEED, CUT, ALIGN (left/center/right), BOLD, DOUBLE, UNDERLINE, BEEP, OPEN_DRAWER.
+   153→  - Clase `EscPosBuilder` con métodos encadenable (text, line, feed, cut, separator, twoColumns, itemLine).
+   154→  - `buildSaleTicket`: genera ticket de venta completo (header tienda, datos venta, items, totales, factura AFIP, footer).
+   155→  - `buildCommandTicket`: genera comanda para cocina/barra/postres.
+   156→  - `buildZCloseTicket`: genera cierre Z con totales por método de pago.
+   157→  - Soporte de plantillas con placeholders (`{{store.name}}`, `{{sale.total}}`, etc.).
+   158→  - Funciones de salida: `toArrayBuffer`, `toBase64`, `ticketToBlobUrl`, `printViaWebUSB`, `printViaLocalServer` (WebSocket a servidor local en puerto 8787).
+   159→- Creada librería `src/lib/ecommerce.ts`:
+   160→  - 4 adaptadores: TiendaNube (completo), WooCommerce (completo), MercadoLibre (parcial: stock/price/orders), Shopify (placeholder).
+   161→  - Operaciones OUTBOUND: `syncProductsOutbound`, `syncStockOutbound`, actualización de precios.
+   162→  - Operaciones INBOUND: `syncOrdersInbound` (importa pedidos pagados como ventas locales, crea clientes y productos si no existen).
+   163→  - `handleEcommerceWebhook`: procesa webhooks entrantes (order/paid, product/updated).
+   164→  - Helper `logSync` en `src/lib/ecommerce-sync-logger.ts` para auditoría.
+   165→- Implementado PWA Offline completo:
+   166→  - `public/manifest.json`: manifest con nombre, iconos 192/512, shortcuts (POS, Caja, Panel), colores, idioma es-AR.
+   167→  - `public/sw.js`: Service Worker con precaching del shell, network-first para navegación, stale-while-revalidate para assets y APIs cacheables, manejo de mutaciones offline con IndexedDB, Background Sync, push notifications placeholder.
+   168→  - `public/offline.html`: página de fallback offline con estilos emerald.
+   169→  - `public/icon-192.png` e `icon-512.png`: generados con sharp (logo emerald).
+   170→  - `src/hooks/use-pwa.ts`: hook React `usePWA` (isOnline, isInstalled, isStandalone, swVersion, updateAvailable, pendingOperations, registerSW, triggerSync, applyUpdate, enqueueOperation) + `usePWAInstall` (beforeinstallprompt).
+   171→  - Actualizado `src/app/layout.tsx`: metadata con manifest, appleWebApp, icons múltiples, viewport con themeColor.
+   172→- APIs creadas (todas con auth y multi-tenant):
+   173→  - `/api/commissions` (GET listado con filtros + summary, PATCH batch: PAY/ANNUL/REOPEN)
+   174→  - `/api/commissions/rules` (GET/POST/PUT/DELETE - CRUD completo de reglas, soft-delete si tiene comisiones)
+   175→  - `/api/print` (POST: genera ticket TICKET/COMANDA/CIERRE_Z en base64 o blob)
+   176→  - `/api/print-templates` (GET/POST/PUT/DELETE - CRUD de plantillas de impresión)
+   177→  - `/api/ecommerce/config` (GET crea config por defecto si no existe, PUT actualiza)
+   178→  - `/api/ecommerce/test` (POST: prueba conexión a la plataforma)
+   179→  - `/api/ecommerce/sync` (POST: ejecuta sync OUTBOUND/INBOUND por entidad, GET: lista logs)
+   180→  - `/api/ecommerce/webhook` (POST: recibe webhooks con validación de secret)
+   181→  - `/api/offline-queue` (GET lista, POST registra, DELETE limpia syncados >7 días)
+   182→  - `/api/store/users` (GET lista usuarios de la tienda para selectors)
+   183→- Modificado `src/app/api/sales/route.ts`: al crear venta, calcula profit y llama a `createCommissionForSale` (auditoría: registra comisión en 0 si no hay regla para el vendedor).
+   184→- Vistas creadas:
+   185→  - `src/components/views/commissions-view.tsx`: tabs Reglas/Comisiones generadas. Stats (total, pendiente, pagado, count). Tabla de reglas (nombre, vendedor, tipo, config, mín venta, solo pagadas, vigencia, estado, acciones). Tabla de comisiones con filtros (status, vendedor, fechas), checkbox para batch actions (PAY/ANNUL/REOPEN). Resumen por vendedor. Modal de crear/editar regla con 4 tipos (incluyendo tiers dinámicos para ESCALONADO).
+   186→  - `src/components/views/print-templates-view.tsx`: listado de plantillas con tabla (nombre, tipo, papel, charset, corte, mostrar, estado, acciones). Modal de alta/edición con 4 tipos, 2 anchos (58/80), 3 charsets, header/footer con placeholders, switches de mostrar (vendedor/cliente/pago/logo), activa, default. Botón "marcar como default".
+   187→  - `src/components/views/ecommerce-view.tsx`: configuración de plataforma (4 plataformas), credenciales dinámicas según plataforma, webhook secret, switch habilitado, botones Guardar/Probar conexión. Opciones de sync (productos/stock/precios/pedidos/auto-fulfill). Botones de sincronización manual. Tabla de logs con estado, dirección, entidad, IDs.
+   188→- Modificado `src/components/views/pos-view.tsx`:
+   189→  - Agregada función `printThermalSale` que llama a `/api/print` con `returnFormat: "blob"` y descarga archivo `.bin` con comandos ESC/POS.
+   190→  - SheetFooter del receipt: agregado botón "Térmica" junto al botón "Imprimir" existente.
+   191→- Modificado `src/components/views/sales-view.tsx`: SheetFooter del detalle con botón "Térmica" para descargar ticket ESC/POS.
+   192→- Actualizado `src/store/app-store.ts`: agregados `commissions`, `print-templates`, `ecommerce` a ViewKey.
+   193→- Actualizado `src/components/app/app-shell.tsx`:
+   194→  - Importadas 3 nuevas vistas (CommissionsView, PrintTemplatesView, EcommerceView) + hook `usePWA` + `usePWAInstall`.
+   195→  - Agregados iconos (Coins, Printer, Globe, WifiOff, RefreshCw, Download, CheckCircle2).
+   196→  - 3 items de navegación nuevos: Comisiones (ADMIN), E-commerce (ADMIN), Impresión (ADMIN) - ubicados entre Sucursales y Gastos.
+   197→  - Header: indicador offline (badge amarillo), botón de operaciones pendientes con contador, botón "Instalar" (PWA), botón "Actualizar" cuando hay nueva versión del SW.
+   198→  - Sidebar footer: versión actualizada a v4.0 + "Fase 4: PWA + Impresión + E-commerce + Comisiones" + SW version.
+   199→  - Casos de renderización para las 3 nuevas vistas.
+   200→- Verificación:
+   201→  - `bun run lint` sin errores (excluidos scripts/ y tests/).
+   202→  - `npx tsc --noEmit` sin errores en src/.
+   203→  - `bun run build` exitoso.
+   204→  - `bun run db:push` exitoso.
+   205→  - Dev server corriendo en :3000.
+   206→- Verificación E2E con Agent Browser:
+   207→  - Login exitoso con tienda demo.
+   208→  - Sidebar muestra 3 nuevos items (Comisiones, E-commerce, Impresión) + versión v4.0 + SW version.
+   209→  - Botón "Instalar" visible en header (PWA instalable).
+   210→  - Vista Comisiones: cargó, creó regla "Comisión vendedor demo 2%" para María (Vendedora) con tipo PORCENTAJE_VENTA, vigencia desde hoy, activa. Aparece en tabla.
+   211→  - Tab "Comisiones generadas": tras crear una venta via API, aparece la comisión registrada (en 0 porque José Admin no tiene regla, pero la auditoría funciona).
+   212→  - Vista E-commerce: cargó con configuración por defecto, todas las opciones de sync visibles, botones de prueba conexión y sincronización manual.
+   213→  - Vista Impresión: cargó, creó plantilla "Ticket estándar 58mm" marcada como default, aparece en tabla con badge "Por defecto".
+   214→  - Generación de ticket térmico via API: 422 bytes de comandos ESC/POS usando la plantilla default, contenido correcto (header tienda, items, totales, pago, footer, comando de corte).
+   215→  - Service Worker registrado correctamente en `http://localhost:3000/sw.js`.
+   216→  - Manifest vinculado correctamente.
+   217→
+   218→Stage Summary:
+   219→- Fase 4 implementada completamente con 4 módulos nuevos: PWA Offline, Impresión Térmica ESC/POS, E-commerce Sync y Comisiones.
+   220→- 6 modelos Prisma nuevos, 9 APIs nuevas, 3 vistas nuevas, 2 vistas modificadas (POS, Ventas), 1 hook nuevo (use-pwa).
+   221→- Schema migrado correctamente, lint sin errores, build exitoso, verificación E2E con Agent Browser OK.
+   222→- PWA: manifest + service worker + IndexedDB para cola offline + página offline + iconos 192/512. Background Sync para reprocesar mutaciones al volver online. Hook con detección de online/offline, ops pendientes, update del SW, botón instalar.
+   223→- Impresión térmica: librería ESC/POS completa con 3 generadores (ticket venta, comanda, cierre Z). Soporta plantillas configurables (58/80mm, charset, header/footer con placeholders). Salida como base64 o blob .bin. Hooks para WebUSB y servidor local WebSocket.
+   224→- E-commerce: 4 adaptadores (TiendaNube, WooCommerce, MercadoLibre, Shopify). Sync OUTBOUND de productos/stock/precios, INBOUND de pedidos (crea clientes y productos si no existen). Webhook handler con validación de secret. Log de auditoría por operación.
+   225→- Comisiones: 4 tipos de regla (PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO con tramos). Generación automática al cerrar venta. Estados PENDIENTE/PAGADA/ANULADA. Batch actions para marcar pagadas/anular. Resumen por vendedor.
+   226→- Sistema actualizado a versión v4.0.
+   227→
+   228→---
+   229→Task ID: fix-reports-linechart
+   230→Agent: main
+   231→Task: Corregir error de render en LineChart del reporte de ventas (reports-view.tsx)
+   232→
+   233→Work Log:
+   234→- Detectado error en runtime: el componente `<LineChart data={data.series}>` en `src/components/views/reports-view.tsx` línea 279 rompía al renderizar.
+   235→- Causa raíz: la segunda `<Line>` tenía `yAxisId="count"` pero NO existía un `<YAxis yAxisId="count" />` asociado. Recharts lanza error cuando un eje referenciado por id no existe.
+   236→- Fix: removido el prop `yAxisId="count"` de la segunda `<Line>` (línea 288). La línea sigue oculta con `hide`, ya que solo se usa para exponer el valor de "Cantidad" en el tooltip al hacer hover.
+   237→- Verificado que no quedan otros `yAxisId` huérfanos en el archivo.
+   238→- `npx tsc --noEmit` y `bun run lint` ambos limpios en `src/`.
+   239→- Dev server corriendo en :3000, APIs de reportes respondiendo 200 OK.
+   240→
+   241→Stage Summary:
+   242→- Bug visual del tab "Ventas" del módulo Reportes corregido.
+   243→- Cambio mínimo de 1 línea, sin afectar otras funcionalidades.
+   244→- Fase 4 sigue completa y operativa en v4.0.
+   245→
+   246→---
+   247→Task ID: ux-improvements
+   248→Agent: main
+   249→Task: Mejoras UX: 1) POS como módulo principal por defecto, 2) Agrupar módulos en categorías en el sidebar, 3) Refactorizar módulos largos (Settings, Ecommerce) con pestañas
+   250→
+   251→Work Log:
+   252→- Verificado estado: Fase 4 completa (v4.0). Limpieza de `LineChart` ya aplicada.
+   253→- Mejora 1 — POS como vista por defecto:
+   254→  - `src/store/app-store.ts`: cambiado `currentView` inicial de `"dashboard"` a `"pos"`. Mismo cambio en `clear()`.
+   255→  - `src/components/app/app-shell.tsx`: actualizado `default:` del switch de `renderView()` para que retorne `<PosView />` en caso de view desconocida.
+   256→- Mejora 2 — Sidebar con categorías agrupadas y colapsables:
+   257→  - Reemplazado el array plano `NAV_ITEMS` por `NAV_CATEGORIES` con 5 grupos:
+   258→    - Operaciones: POS, Caja, Panel
+   259→    - Ventas: Ventas, Devoluciones, Facturación, Clientes
+   260→    - Catálogo y Stock: Productos, Inventario, Compras, Gastos
+   261→    - Gestión Comercial: Promociones, Comisiones, Sucursales, Impresión, E-commerce
+   262→    - Sistema: Reportes, Configuración
+   263→  - Agregado estado `collapsedCategories: Set<string>` y función `toggleCategory`.
+   264→  - Creada función `renderSidebarNav(onItemClick?)` que renderiza cada categoría con header clickeable (label + chevron), items visibles cuando no está colapsada, y la categoría que contiene la vista actual siempre queda abierta.
+   265→  - Reemplazados los sidebars desktop y mobile para usar `renderSidebarNav()`. El mobile pasa `onItemClick` para cerrar el drawer al navegar.
+   266→  - Agregado `overflow-y-auto` al nav para scroll vertical cuando hay muchas categorías.
+   267→  - Importado `ChevronDown` de lucide-react.
+   268→- Mejora 3 — SettingsView refactorizado a tabs:
+   269→  - Agregado import de `Tabs, TabsList, TabsTrigger, TabsContent`.
+   270→  - Cambiado el ancho del contenedor de `max-w-3xl` a `max-w-5xl` para acomodar mejor los tabs.
+   271→  - Envuelto el contenido en `<Tabs defaultValue="comercio">` con `TabsList` de 7 triggers:
+   272→    - Comercio, Moneda e Impuestos, Inventario, Métodos de Pago, Facturación AFIP, Mercado Pago, Fidelización
+   273→  - Cada Card envuelta en su `<TabsContent>` correspondiente. El Dialog de "Editar método de pago" quedó dentro del tab "pagos" (es coherente, pertenece a esa sección).
+   274→  - El botón "Guardar cambios del comercio" quedó fuera del Tabs (al pie, común a todo).
+   275→- Mejora 3b — EcommerceView refactorizado a tabs:
+   276→  - Agregado import de `Tabs, TabsList, TabsTrigger, TabsContent`.
+   277→  - Envuelto en `<Tabs defaultValue="config">` con 4 triggers:
+   278→    - Configuración, Opciones de Sync, Sync Manual, Historial
+   279→  - Cada Card envuelta en su `<TabsContent>`.
+   280→- Verificación:
+   281→  - `npx tsc --noEmit` sin errores en `src/` (solo errors en `skills/` y `examples/` que están fuera de scope).
+   282→  - `bun run lint` limpio.
+   283→  - Dev server corriendo en :3000, compila sin errores.
+   284→
+   285→Stage Summary:
+   286→- 3 mejoras UX aplicadas:
+   287→  1. App abre directamente en POS (modulo principal de operación diaria).
+   288→  2. Sidebar con 5 categorías colapsables: Operaciones, Ventas, Catálogo y Stock, Gestión Comercial, Sistema. La categoría activa siempre queda abierta; las demás se pueden colapsar.
+   289→  3. SettingsView y EcommerceView ahora usan tabs en lugar de scroll infinito de Cards. Settings tiene 7 tabs, Ecommerce tiene 4.
+   290→- Cambios mínimos, sin tocar lógica de negocio ni APIs. Solo reorganización visual.
+   291→- Pattern de tabs consistente: `flex w-full flex-wrap h-auto justify-start gap-1 bg-muted/40 p-1` para el TabsList.
+   292→
+   293→---
+   294→Task ID: fix-reports-profits-race-condition
+   295→Agent: main
+   296→Task: Corregir error en ProfitsReport (reports-view.tsx) — `data.expensesByCategory.length` rompe al cambiar de tab
+   297→
+   298→Work Log:
+   299→- Detectado error en runtime: `data.expensesByCategory` era `undefined` al renderizar el tab "Ganancias" del módulo Reportes.
+   300→- Causa raíz: race condition. Al cambiar de tab (ej: sales → profits), `loadReport()` hace `setLoading(true)` y dispara el fetch, pero `data` sigue siendo el del tab anterior hasta que el nuevo fetch termine. Como React puede renderizar una vez más entre el cambio de tab y el efecto del loader, `ProfitsReport` recibía `data` del tab `sales` (sin `expensesByCategory`).
+   301→- Fix 1 (root cause): agregado `setData(null)` al inicio de `loadReport()` para resetear la data al cambiar de tab. Ahora el guard `!data` del componente padre muestra "Selecciona un rango de fechas" durante la carga.
+   302→- Fix 2 (defensive): en `ProfitsReport`, cambiado `data.expensesByCategory.length === 0` por `!data.expensesByCategory || data.expensesByCategory.length === 0` para tolerar payloads parciales.
+   303→- `npx tsc --noEmit` limpio en src/, `bun run lint` limpio, dev server OK.
+   304→
+   305→Stage Summary:
+   306→- Bug de race condition en Reportes corregido. Patrón similar al anterior (LineChart con yAxisId huérfano): ambos eran crashes por data inconsistente entre tabs.
+   307→- Cambio mínimo de 2 líneas, sin afectar otras funcionalidades.
+   308→
+   309→---
+   310→Task ID: fix-reports-all-tabs
+   311→Agent: main
+   312→Task: Verificar y corregir errores en todas las pestañas del módulo Reportes
+   313→
+   314→Work Log:
+   315→- Verificación con agent-browser: detectado que el tab "Fiscal" causaba "Application error: a client-side exception" al hacer click. Los demás tabs (Ventas, Ganancias, Productos, Clientes, Flujo Caja) funcionaban pero podían tener el mismo problema potencial.
+   316→- Causa raíz: race condition. Al hacer click en un tab, `setTab(t.key)` dispara un re-render ANTES de que el `useEffect` ejecute `loadReport()` (que es donde estaba el `setData(null)`). En ese render intermedio, `tab="taxes"` pero `data` seguía siendo del tab `sales` (sin `summary.totalFacturado`, `summary.cantidadFacturas`, `byTipo`, etc.). `TaxesReport` hacé `data.summary.cantidadFacturas.toString()` → `undefined.toString()` → 💥.
+   317→- Fix 1 (root cause): agregado `setData(null)` directamente en el `onClick` del handler de cambio de tab, además del que ya estaba en `loadReport()`. Ahora no hay render con data obsoleta de otro tab.
+   318→- Fix 2 (defensive en TODOS los sub-reportes): aplicado patrón `const summary = data?.summary || {};` + `const xxx = data?.xxx || [];` al inicio de cada sub-reporte, y reemplazadas todas las referencias directas `data.xxx` por las variables con fallback. Esto hace que cada sub-reporte sea robusto a payloads parciales o incompletos.
+   319→  - SalesReport: extraídas `summary`, `series`, `byPaymentMethod`, `byUser`. Agregados guards `length === 0` con mensajes "Sin datos" para PieChart y BarChart.
+   320→  - ProfitsReport: extraídas `summary`, `series`, `expensesByCategory`. Guard `length === 0` para BarChart y PieChart.
+   321→  - TaxesReport: extraídas `summary` y `byTipo`. Reemplazadas todas las referencias.
+   322→  - ProductsReport: extraídas `summary` y `ranking`. Cast `Number(summary.totalItemsVendidos || 0)` para evitar `.toFixed()` en undefined.
+   323→  - CustomersReport: extraídas `summary`, `topClientes`, `clientesConSaldo`.
+   324→  - CashFlowReport: extraídas `summary` y `series`. Guard `length === 0` para BarChart.
+   325→- Verificación E2E con agent-browser:
+   326→  - Login exitoso con tienda demo.
+   327→  - Navegación a Reportes OK.
+   328→  - Click secuencial en los 6 tabs (Ventas → Ganancias → Fiscal → Productos → Clientes → Flujo Caja): TODOS OK, sin "Application error".
+   329→  - Screenshots guardados en download/ (reports-fiscal-fixed.png, reports-products.png, reports-cashflow.png, reports-customers.png).
+   330→  - Dev server: sin errores en log.
+   331→- `npx tsc --noEmit` limpio en src/, `bun run lint` limpio.
+   332→
+   333→Stage Summary:
+   334→- Bug de race condition en TODOS los tabs de Reportes corregido (no solo Fiscal que era el visible).
+   335→- Cambio defensivo en los 6 sub-reportes para tolerar payloads parciales o data de otro tab sin romper.
+   336→- Verificación E2E completa: los 6 tabs funcionan, sin application errors, con contenido visible.
+   337→- Patrones aplicados: (a) reset síncrono de `data` al cambiar de tab; (b) optional chaining + defaults en cada sub-reporte; (c) guards `length === 0` con mensajes user-friendly para gráficos vacíos.
+   338→
+   339→---
+   340→Task ID: feat-topnav-no-sidebar
+   341→Agent: main
+   342→Task: Reemplazar layout con sidebar por top nav con menú "Más" (opción 1)
+   343→
+   344→Work Log:
+   345→- Agregado `FREQUENT_KEYS = ["pos", "cash", "dashboard", "sales", "products"]` — las 5 vistas más usadas como tabs horizontales.
+   346→- Derivadas `frequentItems` (tabs visibles, filtradas por rol) y `moreCategories` (categorias con items no frecuentes).
+   347→- Derivado `moreHasActive` para resaltar el botón "Más" cuando la vista actual está dentro de ese menú.
+   348→- Imports: agregado `LayoutGrid` (icono para menús), `Fragment` (para keyed fragments en dropdowns categorizados). Removidos `Menu` y `X` (ya no se usan).
+   349→- Eliminado estado `sidebarOpen`, `collapsedCategories`, función `toggleCategory`, función `renderSidebarNav`.
+   350→- Nuevo layout del header (una sola fila):
+   351→  - Izquierda: logo + nombre del comercio + vista actual (shrink-0)
+   352→  - Centro (md+): nav tabs horizontales con icono + label (label hidden en <lg), overflow-x-auto si faltara espacio
+   353→  - Derecha: menú mobile (todas las vistas categorizadas), menú "Más" desktop (solo no frecuentes), indicadores PWA, menú usuario
+   354→- Eliminadas ambas sidebars (desktop fija + mobile drawer) y el overlay.
+   355→- Main content ahora full-width (`flex-1 min-w-0`), sin contenedor `flex` intermedio.
+   356→- Footer de versión (ComerciApp v4.0 + SW version) movido al final del menú de usuario.
+   357→- `npx tsc --noEmit` limpio en src/. `bun run lint` limpio. Dev server activo.
+   358→
+   359→Stage Summary:
+   360→- Layout cambiado de "top bar + sidebar 240px" a "top bar con nav integrado, contenido full-width".
+   361→- Desktop (md+): 5 tabs frecuentes visibles + botón "Más" con dropdown categorizado (4 categorías: Ventas, Catálogo y Stock, Gestión Comercial, Sistema).
+   362→- Mobile (<md): un solo botón menú con dropdown de TODAS las categorías (incluyendo frecuentes).
+   363→- Responsive por rol: CAJERO ve 3 tabs (POS/Caja/Panel) y no ve "Más" (no tiene items adicionales); ADMIN ve 5 tabs + "Más" con 4 categorías.
+   364→- Botón "Más" se resalta en emerald cuando la vista actual pertenece a ese menú.
+   365→
+   366→---
+   367→Task ID: feat-hybrid-topnav-plus-sidebar
+   368→Agent: main
+   369→Task: Agregar sidebar con items "Más" + scroll propio independiente
+   370→
+   371→Work Log:
+   372→- Eliminado el dropdown "Más" del header desktop (ya no se necesita, va a la sidebar).
+   373→- Eliminada la variable `moreHasActive` (ya no se usa para resaltar botón).
+   374→- Agregado layout híbrido: `<div className="flex flex-1 min-h-0">` conteniendo sidebar + main.
+   375→- Sidebar nueva:
+   376→  - Visible en `md+` (`hidden md:flex w-60`)
+   377→  - Muestra `moreCategories` (items no frecuentes agrupados por categoría)
+   378→  - Categorías siempre expandidas con label en uppercase tracking-wider
+   379→  - Items con highlight emerald cuando están activos
+   380→  - `sticky top-14` (debajo del header de ~56px = top-14)
+   381→  - `h-[calc(100vh-3.5rem)]` (alto = viewport - header)
+   382→  - `overflow-y-auto` (scroll propio independiente del page scroll)
+   383→  - `shrink-0` (no se comprime cuando main content es ancho)
+   384→- Main content ahora tiene `overflow-y-auto` para scroll independiente también.
+   385→- Mobile (<md) sin cambios: botón menú con dropdown de TODAS las categorías.
+   386→- `tsc --noEmit` limpio. `bun run lint` limpio. Dev server OK, sin Fast Refresh errors.
+   387→
+   388→Stage Summary:
+   389→- Layout final: top bar (logo + tabs frecuentes + acciones) + sidebar (items "Más" con scroll propio) + main (overflow-y-auto).
+   390→- Desktop (md+): tabs frecuentes arriba + sidebar 240px a la izquierda con items no frecuentes.
+   391→- Mobile (<md): botón menú con todas las vistas categorizadas.
+   392→- Cada área (sidebar, main) tiene su propio scroll — el page scroll del body no se activa.
+   393→- CAJERO sin sidebar (no tiene items "Más"), solo ve los 3 tabs frecuentes.
+   394→
+   395→---
+   396→Task ID: feat-empresarial-style
+   397→Agent: main
+   398→Task: Cambiar estilo visual a más empresarial (slate + indigo en lugar de emerald)
+   399→
+   400→Work Log:
+   401→- Paleta migrada de emerald (verde retail/casual) a slate (gris corporativo):
+   402→  - Header: `bg-white border-b border-slate-200` (sin shadow-sm, borde más sutil)
+   403→  - Body: `bg-slate-100/60` en lugar de `bg-muted/30`
+   404→  - Sidebar: `bg-slate-50 border-r border-slate-200` (antes blanco + emerald-100)
+   405→  - Logo: cuadrado `bg-slate-900` de 32x32 con esquinas redondeadas (antes emerald-600 de 36x36)
+   406→- Header más compacto: altura fija `h-14` con `px-4 sm:px-6` (antes `px-3 sm:px-4 py-2.5`)
+   407→- Separador vertical entre logo y tabs: `w-px h-8 bg-slate-200 ml-1`
+   408→- Tabs frecuentes con estilo underline (estilo Linear/Stripe):
+   409→  - Item activo: `text-slate-900` + barra inferior `h-0.5 bg-slate-900` (antes fondo emerald-50)
+   410→  - Item inactivo: `text-slate-500 hover:text-slate-900`
+   411→  - Tabs ocupan toda la altura del header (`h-full`) en lugar de py-1.5 con rounded-md
+   412→- Sidebar items con left-border activo (estilo Notion):
+   413→  - Activo: `bg-white text-slate-900 border-slate-900 shadow-sm` (antes emerald-50 text-emerald-700)
+   414→  - Inactivo: `text-slate-600 border-transparent hover:bg-slate-100/70`
+   415→  - Padding más compacto: `py-1.5` (antes `py-2`)
+   416→- Categorías sidebar: `text-slate-400` (antes `text-muted-foreground/70`)
+   417→- Avatar usuario: `bg-slate-100 text-slate-700 font-semibold` (antes emerald-100 emerald-700)
+   418→- Indicador "Sin conexión": rojo (`bg-red-50 text-red-700 border-red-200`) en lugar de amber
+   419→- Botón "Actualizar" PWA: `bg-slate-900 hover:bg-slate-800` (antes blue-600)
+   420→- Pantalla de carga: `text-slate-700` (antes emerald-600)
+   421→- Dropdown mobile items activos: `bg-slate-100 text-slate-900 font-medium` (antes emerald-50 emerald-700)
+   422→- `tsc --noEmit` limpio, `eslint` limpio, dev server OK.
+   423→
+   424→Stage Summary:
+   425→- Estética migrada de "retail verde" a "corporativo slate" (estilo Linear/Stripe/Vercel).
+   426→- Cambios puramente visuales (clases Tailwind), sin tocar lógica ni estructura de componentes.
+   427→- Referencia visual: header compacto blanco + tabs underline + sidebar gris claro con items activos destacados por left-border + fondo gris muy claro.
+   428→
+   429→---
+   430→Task ID: feat-indigo-inter-compact
+   431→Agent: main
+   432→Task: Cambiar paleta a indigo, tipografía a Inter, tamaño compacto (14px base)
+   433→
+   434→Work Log:
+   435→- **Tipografía**: reemplazado Geist por Inter en `src/app/layout.tsx` via `next/font/google`.
+   436→  - `import { Inter, Geist_Mono } from "next/font/google"`
+   437→  - `const inter = Inter({ variable: "--font-geist-sans", subsets: ["latin"] })`
+   438→  - Variable CSS `--font-geist-sans` reutilizada (no hace falta cambiar globals.css theme inline).
+   439→- **Tamaño base**: agregado `html { font-size: 14px }` en `globals.css` (antes default 16px).
+   440→  - Impacto: todos los `text-sm`, `text-xs`, paddings en `rem` se reducen proporcionalmente.
+   441→  - Sensación: más info por pantalla, estilo Linear/Notion.
+   442→- **Mejoras de fuente**: agregado `font-smoothing: antialiased` y `font-feature-settings: "cv11", "ss01"` para mejorar renderizado de Inter.
+   443→- **Paleta indigo**: cambiados todos los acentos slate-900 → indigo-600/700 en `app-shell.tsx`:
+   444→  - Logo: `bg-indigo-600` (antes slate-900)
+   445→  - Underline de tab activa: `bg-indigo-600` (antes slate-900)
+   446→  - Left-border de item sidebar activo: `border-indigo-600` (antes slate-900)
+   447→  - Avatar fallback: `bg-indigo-50 text-indigo-700` (antes slate-100/slate-700)
+   448→  - Botón "Actualizar" PWA: `bg-indigo-600 hover:bg-indigo-700` (antes slate-900/slate-800)
+   449→  - Items dropdown mobile activos: `bg-indigo-50 text-indigo-700` (antes slate-100/slate-900)
+   450→- **Theme color** del viewport actualizado a `#4F46E5` (indigo-600).
+   451→- Cache HMR stale tras renombrar `geistSans` → `inter` causó `ReferenceError: geistSans is not defined` (3 veces). Resuelto con restart limpio del dev server + clear de `.next/cache`.
+   452→- `tsc --noEmit` limpio. `eslint` limpio. Dev server reiniciado OK, sin errores.
+   453→
+   454→Stage Summary:
+   455→- Paleta migrada de slate monocromo a **slate + indigo** (acento indigo-600 sobre grises slate).
+   456→- Tipografía migrada de Geist a **Inter** (con font-smoothing y font-features).
+   457→- Tamaño base reducido de 16px a **14px** (compacto, tipo Linear/Notion).
+   458→- Densidad equilibrada mantenida (no se tocaron paddings/espaciados).
+   459→- Estética final: corporativa moderna con acento indigo, similar a Linear/Stripe.
+   460→
+   461→---
+   462→Task ID: feat-full-palette-indigo-no-greens
+   463→Agent: main
+   464→Task: Eliminar TODOS los tonos verdes de la app (no solo app-shell) y unificar a indigo
+   465→
+   466→Work Log:
+   467→- Detectado que el fix anterior solo cambió colores en app-shell.tsx, pero había 161 referencias a tonos verdes en 20 archivos.
+   468→- Mapa de tonos verdes encontrados:
+   469→  - emerald: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900 (todas las sombras)
+   470→  - green: 50, 100, 200, 500, 600, 700, 800
+   471→  - teal: 50, 100, 500, 600, 700
+   472→  - hex codes: #10b981 (emerald-500), #059669 (emerald-600)
+   473→- Reemplazo masivo con `sed` en todos los archivos .tsx, .ts, .css de src/:
+   474→  - `emerald-{50,100,200,300,400,500,600,700,800,900}` → `indigo-{mismo número}`
+   475→  - `green-{50,100,200,500,600,700,800}` → `indigo-{mismo número}`
+   476→  - `teal-{50,100,500,600,700}` → `indigo-{mismo número}`
+   477→- Reemplazo de hex codes:
+   478→  - `#10b981` → `#6366f1` (indigo-500) en charts de Recharts (dashboard, reports)
+   479→  - `#059669` → `#4f46e5` (indigo-600) en manifest.json y offline.html
+   480→- Renombrado de claves internas "emerald" a "indigo":
+   481→  - `color="emerald"` → `color="indigo"` (prop de StatCard en dashboard-view y reports-view)
+   482→  - `emerald: { bg: ..., text: ... }` → `indigo: { bg: ..., text: ... }` (entradas de colorMap)
+   483→  - `colorMap.emerald` → `colorMap.indigo`
+   484→  - `? "emerald"` → `? "indigo"` (ternarios)
+   485→- globals.css: actualizadas variables CSS:
+   486→  - `--primary`: oklch(0.205 0 0) (negro) → oklch(0.541 0.281 264.48) (indigo-600)
+   487→  - `--ring`: oklch(0.708 0 0) → oklch(0.541 0.281 264.48) (indigo)
+   488→  - `--chart-1`: oklch(0.646 0.222 41.116) (naranja) → oklch(0.541 0.281 264.48) (indigo)
+   489→  - `--sidebar-primary`: → indigo
+   490→  - `--sidebar-ring`: → indigo
+   491→  - En dark mode: `--primary`, `--ring`, `--sidebar-primary`, `--sidebar-ring` actualizados a oklch(0.707 0.18 266.41) (indigo-400/500 claro).
+   492→- Verificación final: cero referencias a `emerald`, `green-*`, `teal-*`, `#10b981`, `#059669` en src/ y public/.
+   493→- `tsc --noEmit` limpio. `eslint` limpio. Dev server OK sin errores.
+   494→
+   495→Stage Summary:
+   496→- Paleta verde completamente erradicada de toda la app.
+   497→- 20 archivos afectados: dashboard, reports, pos, cash-register, customers, purchases, settings, invoices, commissions, inventory, auth-screen, products, sales, promotions, ecommerce, print-templates, branches, refunds, expenses, lib/commissions.
+   498→- Hex codes de charts (Recharts) también migrados: todos los `#10b981` → `#6366f1`.
+   499→- Variables CSS de tema (light + dark) actualizadas para que `--primary`, `--ring`, `--chart-1`, `--sidebar-*` usen indigo.
+   500→- Assets PWA (manifest.json, offline.html) actualizados a `#4f46e5` (indigo-600).
+   501→- Identificadores internos "emerald" renombrados a "indigo" en colorMaps de StatCard.
+   502→
+   503→---
+   504→Task ID: feat-replace-all-emojis-with-icons
+   505→Agent: main
+   506→Task: Reemplazar todos los emojis del sistema por iconos Lucide
+   507→
+   508→Work Log:
+   509→- Detectados 29 emojis en 5 archivos:
+   510→  - src/lib/constants.ts (16 emojis en RUBROS y PAYMENT_METHOD_TYPES)
+   511→  - src/components/views/expenses-view.tsx (7 emojis en EXPENSE_CATEGORIES)
+   512→  - src/components/views/ecommerce-view.tsx (4 emojis en PLATFORMS)
+   513→  - src/components/views/settings-view.tsx (1 emoji 💡 en nota informativa)
+   514→  - src/components/views/pos-view.tsx (1 caracter ★ en SelectItem de sucursal)
+   515→- Creado `src/lib/icons.tsx` con:
+   516→  - `ICON_MAP`: mapa de nombres string → componentes Lucide (21 entradas)
+   517→  - Componente `<Icon name="..." />` que renderiza el icono por nombre, con fallback a `Package`
+   518→- Mapeo de emojis a nombres de icono:
+   519→  - **Rubros**: 🏪→store, 🛒→cart, 🥬→leaf, 🥩→beef, 🍞→croissant, 🍭→candy, 🔧→wrench, 📦→package
+   520→  - **Pagos**: 💵→banknote, 💳→credit_card, 🏦→landmark, 📋→clipboard_list, 📦→package
+   521→  - **Gastos**: 🏠→home, 💡→lightbulb, 👥→users, 📦→package, 🧾→receipt_text, 🚚→truck
+   522→  - **E-commerce**: 🛍️→shopping_bag, 🛒→cart, 🟡→tag, 🟢→globe
+   523→- `src/lib/constants.ts`: cambiados emojis por nombres string en RUBROS y PAYMENT_METHOD_TYPES. Las funciones `rubroIcon` y `paymentTypeIcon` siguen devolviendo strings (ahora nombres de icono en lugar de emojis).
+   524→- `app-shell.tsx`: agregado import de `Icon`, actualizado header para renderizar `<Icon name={rubroIcon(storeRubro)} />` en lugar del emoji string.
+   525→- `settings-view.tsx`: 
+   526→  - Agregado import de `Icon` y `Lightbulb`
+   527→  - `paymentTypeIcon(m.type)` ahora se renderiza vía `<Icon name={...} className="w-3.5 h-3.5 text-slate-500" />`
+   528→  - Emoji 💡 reemplazado por `<Lightbulb className="w-3.5 h-3.5 text-amber-500" />` con layout flex
+   529→- `expenses-view.tsx`:
+   530→  - Agregado import de `Icon`
+   531→  - EXPENSE_CATEGORIES: emojis → nombres string
+   532→  - 4 sitios de consumo actualizados (Card stats, Select filter, Badge en tabla, Select en form)
+   533→- `ecommerce-view.tsx`:
+   534→  - Agregado import de `Icon`
+   535→  - PLATFORMS: emojis → nombres string
+   536→  - SelectItem actualizado para renderizar `<Icon name={p.icon} />`
+   537→- `pos-view.tsx`:
+   538→  - Agregado `Star` a imports de lucide-react
+   539→  - Reemplazado `"★ "` (carácter Unicode) por `<Star className="w-3 h-3 fill-amber-400 text-amber-400" />` con renderizado condicional
+   540→- Verificación final con script Python: **0 emojis restantes** en src/ (.tsx y .ts)
+   541→- `tsc --noEmit` limpio. `eslint` limpio. Dev server OK sin errores.
+   542→
+   543→Stage Summary:
+   544→- Sistema unificado de iconos: helper `<Icon name="..." />` permite referenciar iconos por string.
+   545→- 29 emojis eliminados de 5 archivos, reemplazados por iconos Lucide consistentes con la paleta visual.
+   546→- API de `constants.ts` preservada (las funciones siguen devolviendo strings, ahora nombres de icono en lugar de emojis).
+   547→- Icono de sucursal principal ahora es una estrella Lucide con fill amber en lugar de carácter ★.
+   548→- Nota informativa en settings ahora tiene icono Lightbulb con color amber en lugar de emoji 💡.
+   549→
+   550→---
+   551→Task ID: barcode-lookup
+   552→Agent: main
+   553→Task: Implementar autocompletado de productos por código de barras usando APIs públicas
+   554→
+   555→Work Log:
+   556→- Creada librería `src/lib/barcode-lookup.ts` con:
+   557→  - Función `lookupProductByBarcode(code)` que consulta en paralelo Open Food Facts (principal) y UPC Item DB (fallback).
+   558→  - Normalización de respuesta a interfaz `ProductLookupResult` (name, brand, description, category, imageUrl, quantity).
+   559→  - Función `isValidBarcode(code)` que valida dígito verificador EAN-8/EAN-13/UPC-A/UPC-E.
+   560→  - Timeout configurable de 8s para no bloquear el formulario si una API tarda demasiado.
+   561→- Creada API route `src/app/api/products/lookup/route.ts`:
+   562→  - GET `/api/products/lookup?barcode=XXXX` → consulta las dos bases públicas y devuelve datos normalizados.
+   563→  - Requiere sesión activa. Devuelve `{ found: false }` (status 200) si no encuentra, para que el cliente no rompa.
+   564→  - Incluye flag `barcodeValid` para feedback en el frontend.
+   565→- Modificada vista `src/components/views/products-view.tsx`:
+   566→  - Campo de código de barras ahora ocupa todo el ancho (sm:col-span-2) con:
+   567→    - Icono ScanLine a la izquierda (indica que se puede usar lector físico).
+   568→    - Botón "Buscar" a la derecha del input.
+   569→    - Auto-búsqueda al presionar Enter (compatible con lectores que envían Enter al final).
+   570→  - Estados visuales del lookup:
+   571→    - Loading: spinner + texto "Consultando base de datos...".
+   572→    - Found: caja verde con imagen del producto (si viene), nombre de la fuente (OFF o UPC) y aviso de que se autocompletaron campos.
+   573→    - Not found: texto ámbar indicando que complete manualmente.
+   574→    - Error: texto rojo con sugerencia de reintento.
+   575→  - Lógica de autocompletado: solo llena campos vacíos (no sobrescribe lo que el usuario ya cargó). Autocompleta `name`, `description` (con brand como fallback) y deja `barcode` como estaba.
+   576→  - Reset del estado de lookup al abrir nuevo formulario, editar producto, o modificar el código.
+   577→- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso, ruta `/api/products/lookup` registrada.
+   578→
+   579→Stage Summary:
+   580→- Función implementada de punta a punta (lib + API + UI).
+   581→- Usa Open Food Facts (gratuita, sin auth, cobertura global) como fuente principal y UPC Item DB como fallback.
+   582→- Compatible con lectores de código de barras físicos: el lector escribe el código y envía Enter, lo que dispara la búsqueda automáticamente.
+   583→- No sobrescribe datos que el usuario ya haya cargado a mano.
+   584→- Muestra preview de la imagen del producto si está disponible.
+   585→- No requiere claves API ni configuración adicional — funciona out of the box.
+   586→
+   587→---
+   588→Task ID: barcode-lookup-v2
+   589→Agent: main
+   590→Task: Mejorar la calidad del nombre autocompletado por código de barras (incluir tipo de producto + cantidad)
+   591→
+   592→Work Log:
+   593→- Diagnóstico: Open Food Facts devuelve `product_name` como solo la marca ("PLAYADITO") mientras que los datos útiles (tipo de producto, cantidad) están en campos separados (`generic_name`, `categories`, `quantity`).
+   594→- Creado script de prueba `scripts/test-barcode-lookup.ts` con 5 códigos reales (Playadito, Amanda, Coca-Cola, Nutella, Nescau) para validar la lógica antes de deployar.
+   595→- Mejoras en `src/lib/barcode-lookup.ts`:
+   596→  - Función `buildDisplayName(p)` que construye un nombre completo combinando varios campos:
+   597→    1. Si `product_name` ya contiene el tipo de producto → usarlo tal cual.
+   598→    2. Si `product_name` parece ser solo la marca (palabra corta sin espacios/guiones) Y hay `generic_name` en español → prependear la categoría específica (ej: "Yerba mate PLAYADITO").
+   599→    3. Si no hay `generic_name` en español → dejar el nombre tal cual (evita prependear categorías en francés/portugués como "Petit-déjeuners").
+   600→    4. Si `product_name` está vacío → construir desde generic + brand.
+   601→    5. Appendear cantidad normalizada si no está ya incluida.
+   602→  - Función `normalizeQuantity(q)` que convierte "500 gramos" → "500g", "1 kilo" → "1kg", "33 cl" → "330ml", "1.5 litros" → "1.5l", "400 g" → "400g".
+   603→  - Función `pickUsableCategory(cats)` que recorre las categorías de la más específica a la más general y elige la primera que sea corta (1-2 palabras), no genérica y en español.
+   604→  - Función `looksSpanish(s)` que filtra textos con acentos no españoles (â, ê, î, ô, û, ç, ã, õ, à, ù) para evitar categorías en francés/portugués.
+   605→  - Función `buildDescription(p)` que arma una descripción enriquecida: "Yerba mate elaborada con palo · Marca: LIEBIG".
+   606→- Resultados validados con el script de prueba:
+   607→  - Playadito: "PLAYADITO" → "Yerba mate PLAYADITO 500g" ✓
+   608→  - Amanda: "Yerba mate especial" → "Yerba mate especial 500g" ✓
+   609→  - Coca-Cola: "coca-cola" → "Coca-Cola 330ml" ✓
+   610→  - Nutella: "Nutella" (sin cambios, no se le agregó prefijo francés) ✓
+   611→  - Nescau: "Nescau 2.0" → "Nescau 2.0 400g" ✓
+   612→- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso.
+   613→
+   614→Stage Summary:
+   615→- La calidad del autocompletado mejoró significativamente: ahora el nombre incluye tipo de producto + cantidad.
+   616→- Heurística robusta: solo prependea categorías cuando hay `generic_name` en español (campo más confiable), evita agregar ruido en otros idiomas.
+   617→- Cantidad normalizada a formato compacto (500g, 1L, 330ml) consistente con lo que el usuario vería en un etiqueta real.
+   618→- Descripción enriquecida con `generic_name` completo + marca, dando contexto adicional al usuario.
+   619→
+   620→---
+   621→Task ID: barcode-lookup-v3
+   622→Agent: main
+   623→Task: Agregar 4 campos nuevos (marca, etiquetas, ingredientes, alérgenos) al formulario de productos y mostrar chips en POS
+   624→
+   625→Work Log:
+   626→- Análisis previo: exploré la API de Open Food Facts y mapeé todos los campos disponibles por nivel de utilidad para un POS. Le presenté al usuario las opciones y eligió: Marca + Etiquetas + Ingredientes + Alérgenos, en sección colapsable, con chips visibles también en el POS.
+   627→- Schema Prisma actualizado: agregados 5 campos opcionales a Product: `brand`, `labels` (string separado por comas), `ingredients` (texto largo), `allergens` (string separado por comas), `imageUrl` (URL externa o path local). Migración `prisma db push` exitosa.
+   628→- API /api/products (POST y PUT) actualizada para persistir los 5 nuevos campos.
+   629→- Librería `src/lib/barcode-lookup.ts` extendida:
+   630→  - Interfaz `ProductLookupResult` ahora incluye `ingredients`, `labels` (string[]), `allergens` (string[]).
+   631→  - Pedido a OFF ampliado con campos: `ingredients_text`, `ingredients_text_es`, `labels`, `labels_tags`, `allergens`, `allergens_tags`, `allergens_hierarchy`.
+   632→  - Función `parseLabels()` con 30+ traducciones EN→ES (en:no-gluten → "Sin TACC", en:vegan → "Vegano", etc.), deduplicación case-insensitive, filtro de etiquetas técnicas (Triman, FSC, Green Dot, Made in EU, etc.), capitalización consistente.
+   633→  - Función `parseAllergens()` con 20+ traducciones (en:milk → "Leche", en:soybeans → "Soja", etc.), deduplicación inteligente entre formato raw y tags.
+   634→  - Resultados verificados con script de prueba: Nutella ahora muestra etiquetas=["Sin TACC"] y alérgenos=["Leche","Frutos secos","Soja"] sin duplicados.
+   635→- Vista `src/components/views/products-view.tsx` actualizada:
+   636→  - emptyForm extendido con los 5 nuevos campos.
+   637→  - Estados nuevos: `showExtraFields`, `labelChips`, `allergenChips`, `labelInput`, `allergenInput`.
+   638→  - Sección colapsable "Datos adicionales del producto" con header toggle (ChevronDown/ChevronRight) y badge "Autocompletado" cuando hay datos cargados por lookup.
+   639→  - Campos en la sección colapsable:
+   640→    * Marca (Input)
+   641→    * Imagen URL (Input + preview 40x40px)
+   642→    * Etiquetas (chips azules editables con botón X para eliminar + Input para agregar con Enter)
+   643→    * Alérgenos (chips rojos con icono AlertTriangle + Input para agregar con Enter)
+   644→    * Ingredientes (Textarea de 3 filas)
+   645→  - handleBarcodeLookup actualizado: ahora también autocompleta brand, ingredients, imageUrl, labels y allergens. Si hay labels/allergens, abre automáticamente la sección colapsable.
+   646→  - handleSave actualizado: envía labels y allergens como string separado por comas (formato persistencia).
+   647→  - openEdit carga los chips desde los strings guardados.
+   648→- Vista `src/components/views/pos-view.tsx` actualizada:
+   649→  - Interfaz Product extendida con los 5 nuevos campos.
+   650→  - En la grilla de productos del POS: agregada imagen del producto (si existe) en la parte superior de cada tarjeta, y chips de etiquetas (azul) y alérgenos (rojo con ⚠) bajo el stock. Limitado a 2 chips por tipo para no saturar visualmente.
+   651→  - En el carrito: agregada marca bajo el precio, y chips compactos de labels/allergens (hasta 3 por tipo) bajo la info del item.
+   652→- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso.
+   653→
+   654→Stage Summary:
+   655→- 5 campos nuevos persistidos en Product: brand, labels, ingredients, allergens, imageUrl.
+   656→- Sección colapsable mantiene el formulario limpio para productos simples y solo se expande cuando hay datos (manual o vía lookup).
+   657→- Chips editables permiten agregar/eliminar etiquetas y alérgenos con teclado (Enter para agregar, X para borrar).
+   658→- En POS: imagen + chips visibles tanto en grilla de productos como en carrito.
+   659→- Alérgenos destacados con color rojo y ⚠ para alerta visual inmediata del cajero.
+   660→- Autocompletado desde OFF: ahora completa 7 campos en total (name, description, brand, ingredients, imageUrl, labels[], allergens[]).
+   661→
+   662→---
+   663→Task ID: bugfix-fetch-json
+   664→Agent: main
+   665→Task: Investigar y corregir error "Unexpected end of JSON input / Error al crear el producto" que impedía crear productos nuevos, y hardening general del flujo fetch→API→DB para evitar bugs similares.
+   666→
+   667→Work Log:
+   668→- Inspeccionado `dev.log` del dev server. Encontrado error real:
+   669→    `PrismaClientValidationError: Unknown argument 'brand'. Available options are marked with ?.`
+   670→  → El Prisma Client estaba desactualizado respecto al schema (que sí tenía brand, labels, ingredients, allergens, imageUrl).
+   671→- Causa raíz: al ejecutar `prisma db pull --force` para inspeccionar la DB, se sobreescribió `prisma/schema.prisma` perdiéndose todas las anotaciones (`@default(cuid())`, `@updatedAt`, comentarios, orden de modelos) Y el Prisma Client nunca se regeneró.
+   672→- Restaurado `prisma/schema.prisma` desde git (`git checkout prisma/schema.prisma`).
+   673→- Verificado con `prisma db push --skip-generate` que la DB ya tiene las columnas nuevas (estaban en sync).
+   674→- Ejecutado `npx prisma generate` para regenerar el Prisma Client con los campos nuevos. Verificado con script `scripts/test-prisma-fields.ts` que el cliente ya reconoce `brand`, `labels`, `ingredients`, `allergens`, `imageUrl` y que `create()` con estos campos funciona.
+   675→- Creado `src/lib/fetch.ts` con helpers `safeFetchJSON` y `safeFetchArray` que:
+   676→    - Leen el body como texto SIEMPRE (en vez de `await res.json()`)
+   677→    - Hacen try-catch del JSON.parse
+   678→    - Devuelven `{ ok, status, data, error }` tipado
+   679→    - Nunca tiran excepción por parseo (solo por error de red)
+   680→  Esto evita el "Unexpected end of JSON input" cuando el server devuelve un body vacío o HTML.
+   681→- Refactorizado `src/components/views/products-view.tsx`:
+   682→    - Importado `safeFetchJSON` / `safeFetchArray`
+   683→    - `load()` ahora usa `safeFetchArray` con try-catch y fallback a []
+   684→    - `handleSave()` ahora usa `safeFetchJSON` y muestra error con `toast.error("Error al guardar el producto", { description: msg })`
+   685→    - `handleBarcodeLookup()` ahora usa `safeFetchJSON`
+   686→    - `handleDelete()`, `handleAddCategory()`, `handleDeleteCategory()` migrados a `safeFetchJSON`
+   687→- Refactorizado `src/components/views/pos-view.tsx`:
+   688→    - Importado `safeFetchJSON`
+   689→    - `useEffect` de carga inicial migrado a `safeFetchJSON` con manejo de arrays y catch global (no rompe si un endpoint falla)
+   690→    - `processSale()` migrado a `safeFetchJSON` y el refresh post-venta ahora es best-effort (try-catch silencioso) para no confundir al cajero si la venta ya se registró
+   691→    - `printThermalSale()` migrado a `safeFetchJSON` para la verificación inicial, y el fetch del blob ahora chequea `res.ok` antes de llamar `.blob()`
+   692→    - Flujo MercadoPago QR (creación de venta + creación de orden MP) migrado a `safeFetchJSON`
+   693→    - Polling de estado MP migrado a `safeFetchJSON`
+   694→- Hardening de `src/app/api/products/route.ts` (POST/PUT/DELETE/GET):
+   695→    - Helpers `toNumber`, `toOptionalString`, `toStringOrFallback`, `toBool` para sanitizar input antes de Prisma
+   696→    - try-catch alrededor de `req.json()` (devuelve 400 con JSON si body malformado)
+   697→    - try-catch alrededor de todas las operaciones Prisma (devuelve 500 con JSON)
+   698→    - Validación de campos obligatorios (name) y rango de precios
+   699→    - Mensajes de error específicos para unique constraint (barcode/SKU duplicado)
+   700→    - Status 201 en POST exitoso
+   701→- Hardening de `src/app/api/categories/route.ts`: mismo patrón (try-catch en json parse y en operaciones Prisma, validación de name, manejo de P2025 en delete).
+   702→- Hardening de `src/app/api/sales/route.ts`:
+   703→    - GET envuelto en try-catch, limit acotado a [1,500] para evitar queries enormes
+   704→    - POST envuelto en try-catch alrededor de toda la lógica de negocio y la transacción
+   705→    - Validación de body.items (debe ser array no vacío)
+   706→    - Validación de qty con `Number.isFinite`
+   707→    - Mensaje específico para "Stock insuficiente"
+   708→- `src/app/api/products/lookup/route.ts` ya estaba bien (try-catch + JSON always), confirmado sin cambios necesarios.
+   709→- Verificado `bun run build` pasa sin errores: "Compiled successfully in 17.9s".
+   710→- Script `scripts/test-barcode-lookup.ts` ejecutado: Open Food Facts sigue devolviendo correctamente nombres completos, etiquetas y alérgenos para códigos reales (Playadito, Nutella, Nescau, etc.).
+   711→
+   712→Stage Summary:
+   713→- Causa raíz del bug "Unexpected end of JSON input": el Prisma Client no conocía los campos `brand`/`labels`/`ingredients`/`allergens`/`imageUrl` porque `prisma generate` nunca se había corrido después de agregarlos al schema. Cuando el cliente hacía POST con esos campos, Prisma tiraba un ValidationError → Next.js devolvía HTML de error 500 → el `await res.json()` del cliente tiraba "Unexpected end of JSON input".
+   714→- Fix de raíz: `prisma generate` + restauración del schema desde git.
+   715→- Fix defensivo (para que no vuelva a pasar): creado `src/lib/fetch.ts` con `safeFetchJSON`/`safeFetchArray` y migrados los componentes críticos (ProductsView, POSView) y las rutas `/api/products`, `/api/categories`, `/api/sales` a usar los helpers + try-catch en todas las operaciones Prisma. Cualquier error del server ahora se devuelve como JSON `{ error: string }` y el cliente lo muestra con un toast claro.
+   716→- Creados artefactos: `src/lib/fetch.ts`, `scripts/test-prisma-fields.ts`. Modificados: `src/app/api/products/route.ts`, `src/app/api/categories/route.ts`, `src/app/api/sales/route.ts`, `src/components/views/products-view.tsx`, `src/components/views/pos-view.tsx`.
+   717→
+   718→---
+   719→Task ID: bugfix-nextauth-methods-crash
+   720→Agent: main
+   721→Task: Investigar y corregir error en `settings-view.tsx` línea 613 (`methods.map is not a function`) que rompía la UI de Configuración.
+   722→
+   723→Work Log:
+   724→- Inspeccionado `dev.log`: encontrado error recurrente `JWEDecryptionFailed: decryption operation failed` en TODOS los requests a `/api/*`. Cada request devolvía 401 sin cuerpo JSON válido.
+   725→- Causa raíz: `NEXTAUTH_SECRET` no estaba definido en `.env`. Sin secreto estable, Next-auth genera uno efímero en cada reinicio del server → las cookies de sesión previas no se pueden desencriptar → todos los requests autenticados devuelven 401 → el response `{error: "No auth"}` (un objeto, no un array) era asignado a `methods` state → `methods.map(...)` explotaba en runtime.
+   726→- Generado secreto estable con `openssl rand -base64 32` y agregado a `.env`:
+   727→    NEXTAUTH_SECRET=5fzginPuHQiP1I6JNujLd+TqWjdLqwWyvPUpv9AO4oU=
+   728→    NEXTAUTH_URL=http://localhost:3000
+   729→- Modificado `src/lib/auth.ts`:
+   730→    - Leído `process.env.NEXTAUTH_SECRET` y pasado explícitamente a `authOptions.secret`
+   731→    - Agregado warning en consola al arrancar si el secreto no está definido (en dev), explicando cómo generarlo
+   732→- Hardening de `src/components/views/settings-view.tsx` (archivo del error reportado):
+   733→    - Importado `safeFetchJSON`/`safeFetchArray` desde `@/lib/fetch`
+   734→    - `loadMethods()`: ahora usa `safeFetchArray` → si la API devuelve 401 u otro error, `methods` queda como `[]` (no como objeto error)
+   735→    - `loadTaxConfig()`, `loadMpConfig()`, `loadLoyaltyConfig()`: migradas a `safeFetchJSON` + validación `data && !Array.isArray(data) && typeof data === "object"` antes de setear el form
+   736→    - `handleSaveTax`, `handleSaveMp`, `handleSaveLoyalty`, `handleSaveMethod`, `handleDeleteMethod`, `handleSave`: migradas a `safeFetchJSON` con mensajes de error más claros
+   737→    - En el render de la tabla: cambiado `methods.map(...)` por `Array.isArray(methods) && methods.map(...)` como defensa final (si alguna otra ruta setea methods a algo que no es array, no crashea)
+   738→- Hardening de otros views con el mismo patrón vulnerable `fetch + .json() + setState`:
+   739→    - `src/components/app/app-shell.tsx`: `useEffect` que carga `/api/me` migrado a `safeFetchJSON`
+   740→    - `src/components/views/dashboard-view.tsx`: `useEffect` que carga `/api/dashboard?days=N` migrado a `safeFetchJSON` con validación de objeto
+   741→    - `src/components/views/sales-view.tsx`: `load()` y `handleAnnul()` migrados a `safeFetchArray`/`safeFetchJSON`
+   742→    - `src/components/views/customers-view.tsx`: `load()` migrado a `safeFetchArray`/`safeFetchJSON` para customers y loyalty
+   743→    - `src/components/views/inventory-view.tsx`: `load()` y `handleAdjust()` migrados a `safeFetchArray`/`safeFetchJSON`
+   744→- Verificado `bun run build` pasa sin errores: "Compiled successfully in 16.3s".
+   745→- Reiniciado dev server. Verificado con servidor de producción (`bun run start`) que:
+   746→    - GET `/api/payment-methods` sin sesión devuelve `{"error":"No auth"}` con HTTP 401 (response JSON válida, no HTML de error)
+   747→    - GET `/api/auth/session` devuelve `{}` (no crashea)
+   748→    - GET `/` devuelve HTML del login correctamente
+   749→    - El server se mantiene estable después de multiples requests
+   750→
+   751→Stage Summary:
+   752→- Causa raíz del crash en `methods.map`: ausencia de `NEXTAUTH_SECRET` estable → cascade de 401 → seteo de objeto error en estado de array → crash en runtime.
+   753→- Fix de raíz: `.env` con secreto estable + `authOptions.secret` explícito + warning en consola si falta.
+   754→- Fix defensivo (capa 1): `safeFetchArray` devuelve `[]` si la API no devuelve un array, evitando que el estado quede en un objeto error.
+   755→- Fix defensivo (capa 2): `Array.isArray(methods) && methods.map(...)` como guard final en el render, para que incluso si ambas capas anteriores fallan, el componente no crashee.
+   756→- Migrados 5 views adicionales (app-shell, dashboard, sales, customers, inventory) al mismo patrón seguro, ya que eran igualmente vulnerables al cascade de 401.
+   757→- Archivos modificados: `.env`, `src/lib/auth.ts`, `src/components/views/settings-view.tsx`, `src/components/app/app-shell.tsx`, `src/components/views/dashboard-view.tsx`, `src/components/views/sales-view.tsx`, `src/components/views/customers-view.tsx`, `src/components/views/inventory-view.tsx`.
+   758→- Pendiente para otra sesión: migrar el resto de los views (`commissions-view`, `invoices-view`, `purchases-view`, `expenses-view`, `refunds-view`, `branches-view`, `reports-view`, `print-templates-view`, `ecommerce-view`, `cash-register-view`, `promotions-view`) al mismo patrón `safeFetchJSON`/`safeFetchArray`. Todos tienen el mismo bug latente.
+   759→

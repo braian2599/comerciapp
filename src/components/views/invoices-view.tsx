@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDate } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 export function InvoicesView() {
   const { store } = useAppStore();
@@ -80,20 +81,21 @@ export function InvoicesView() {
   async function load() {
     setLoading(true);
     try {
-      const [invRes, salesRes, taxRes] = await Promise.all([
-        fetch("/api/invoices?limit=200"),
-        fetch("/api/sales?limit=200"),
-        fetch("/api/tax-config"),
+      const [inv, sal, tax] = await Promise.all([
+        safeFetchArray<any>("/api/invoices?limit=200"),
+        safeFetchArray<any>("/api/sales?limit=200"),
+        safeFetchJSON<any>("/api/tax-config"),
       ]);
-      const invData = await invRes.json();
-      const salesData = await salesRes.json();
-      const taxData = await taxRes.json();
-      setInvoices(invData);
+      setInvoices(inv);
       // Solo ventas sin factura y completadas
-      setSales(salesData.filter((s: any) => !s.invoice && s.status === "COMPLETADA"));
-      setTaxConfig(taxData);
+      setSales(sal.filter((s: any) => !s.invoice && s.status === "COMPLETADA"));
+      if (tax.ok && tax.data && !Array.isArray(tax.data) && typeof tax.data === "object") {
+        setTaxConfig(tax.data);
+      }
     } catch (err) {
       toast.error("Error cargando facturas");
+      setInvoices([]);
+      setSales([]);
     } finally {
       setLoading(false);
     }
@@ -136,14 +138,13 @@ export function InvoicesView() {
       const body: any = { saleId: createForm.saleId };
       if (createForm.tipo) body.tipo = createForm.tipo;
       body.concepto = createForm.concepto;
-      const res = await fetch("/api/invoices", {
+      const { ok, data, error } = await safeFetchJSON<any>("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error emitiendo factura");
+      if (!ok) {
+        toast.error(error || "Error emitiendo factura");
         return;
       }
       toast.success(`Factura ${data.numeroCompleto} emitida. CAE: ${data.cae}`);
@@ -160,10 +161,9 @@ export function InvoicesView() {
   async function handleAnular() {
     if (!anularId) return;
     try {
-      const res = await fetch(`/api/invoices/${anularId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error anulando");
+      const { ok, error } = await safeFetchJSON(`/api/invoices/${anularId}`, { method: "DELETE" });
+      if (!ok) {
+        toast.error(error || "Error anulando");
         return;
       }
       toast.success("Factura anulada");
@@ -174,14 +174,18 @@ export function InvoicesView() {
     }
   }
 
-  function openDetailModal(inv: any) {
-    fetch(`/api/invoices/${inv.id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setSelectedInvoice(data);
-        setOpenDetail(true);
-      })
-      .catch(() => toast.error("Error cargando detalle"));
+  async function openDetailModal(inv: any) {
+    try {
+      const { ok, data, error } = await safeFetchJSON<any>(`/api/invoices/${inv.id}`);
+      if (!ok) {
+        toast.error(error || "Error cargando detalle");
+        return;
+      }
+      setSelectedInvoice(data);
+      setOpenDetail(true);
+    } catch {
+      toast.error("Error cargando detalle");
+    }
   }
 
   function exportarCSV() {

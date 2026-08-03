@@ -52,6 +52,7 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDate } from "@/lib/constants";
 import { Icon } from "@/lib/icons";
+import { safeFetchJSON } from "@/lib/fetch";
 
 export const EXPENSE_CATEGORIES = [
   { value: "ALQUILER", label: "Alquiler", icon: "home" },
@@ -88,16 +89,24 @@ export function ExpensesView() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filterCat !== "all") params.set("category", filterCat);
-    if (filterFrom) params.set("from", filterFrom);
-    if (filterTo) params.set("to", filterTo);
-    const res = await fetch(`/api/expenses?${params.toString()}`);
-    const data = await res.json();
-    setExpenses(data.expenses || []);
-    setTotal(data.total || 0);
-    setPorCategoria(data.porCategoria || {});
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (filterCat !== "all") params.set("category", filterCat);
+      if (filterFrom) params.set("from", filterFrom);
+      if (filterTo) params.set("to", filterTo);
+      const { ok, data, error } = await safeFetchJSON<any>(`/api/expenses?${params.toString()}`);
+      if (!ok) throw new Error(error);
+      setExpenses(Array.isArray(data?.expenses) ? data.expenses : []);
+      setTotal(typeof data?.total === "number" ? data.total : 0);
+      setPorCategoria(data?.porCategoria && typeof data.porCategoria === "object" ? data.porCategoria : {});
+    } catch (e: any) {
+      toast.error("Error al cargar gastos", { description: e?.message });
+      setExpenses([]);
+      setTotal(0);
+      setPorCategoria({});
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -111,13 +120,12 @@ export function ExpensesView() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/expenses", {
+      const { ok, error } = await safeFetchJSON("/api/expenses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Gasto registrado");
       setOpen(false);
       setForm({
@@ -129,7 +137,7 @@ export function ExpensesView() {
       });
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar gasto", { description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -138,14 +146,13 @@ export function ExpensesView() {
   async function handleDelete() {
     if (!deleteId) return;
     try {
-      const res = await fetch(`/api/expenses?id=${deleteId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(`/api/expenses?id=${deleteId}`, { method: "DELETE" });
+      if (!ok) throw new Error(error);
       toast.success("Gasto eliminado");
       setDeleteId(null);
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar gasto", { description: e?.message });
     }
   }
 

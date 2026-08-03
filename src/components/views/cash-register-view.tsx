@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface CashMovement {
   id: string;
@@ -103,13 +104,14 @@ export function CashRegisterView() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/cash-registers?limit=30");
-      const data = await res.json();
+      const data = await safeFetchArray<CashRegister>("/api/cash-registers?limit=30");
       setRegisters(data);
       const open = data.find((r: CashRegister) => r.status === "ABIERTA");
       setOpenRegister(open || null);
-    } catch {
-      toast.error("Error al cargar cajas");
+    } catch (e: any) {
+      toast.error("Error al cargar cajas", { description: e?.message });
+      setRegisters([]);
+      setOpenRegister(null);
     } finally {
       setLoading(false);
     }
@@ -150,20 +152,19 @@ export function CashRegisterView() {
   async function openNewRegister() {
     setCreating(true);
     try {
-      const res = await fetch("/api/cash-registers", {
+      const { ok, error } = await safeFetchJSON("/api/cash-registers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ openingBalance, notes: openNotes }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Caja abierta");
       setOpenDlg(false);
       setOpeningBalance(0);
       setOpenNotes("");
       await load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al abrir caja", { description: e?.message });
     } finally {
       setCreating(false);
     }
@@ -173,7 +174,7 @@ export function CashRegisterView() {
     if (!openRegister) return;
     setClosing(true);
     try {
-      const res = await fetch("/api/cash-registers/close", {
+      const { ok, data, error } = await safeFetchJSON<any>("/api/cash-registers/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -182,8 +183,7 @@ export function CashRegisterView() {
           notes: closeNotes,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(
         `Caja cerrada. Diferencia: ${formatCurrency(data.difference || 0, symbol)}`
       );
@@ -192,7 +192,7 @@ export function CashRegisterView() {
       setCloseNotes("");
       await load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al cerrar caja", { description: e?.message });
     } finally {
       setClosing(false);
     }
@@ -210,7 +210,7 @@ export function CashRegisterView() {
     }
     setSavingMov(true);
     try {
-      const res = await fetch("/api/cash-registers/movements", {
+      const { ok, error } = await safeFetchJSON("/api/cash-registers/movements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -221,15 +221,14 @@ export function CashRegisterView() {
           paymentMethod: "EFECTIVO",
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(movType === "INGRESO" ? "Ingreso registrado" : "Egreso registrado");
       setMovDlg(false);
       setMovAmount(0);
       setMovConcept("");
       await load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al registrar movimiento", { description: e?.message });
     } finally {
       setSavingMov(false);
     }

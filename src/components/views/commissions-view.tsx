@@ -59,6 +59,7 @@ import {
   commissionStatusColor,
   type CommissionTier,
 } from "@/lib/commissions";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface CommissionRule {
   id: string;
@@ -136,13 +137,20 @@ export function CommissionsView() {
 
   async function loadRules() {
     setLoadingRules(true);
-    const [r, u] = await Promise.all([
-      fetch("/api/commissions/rules").then((r) => r.json()),
-      fetch("/api/store/users").then((r) => r.json()).catch(() => []),
-    ]);
-    setRules(r || []);
-    setUsers(Array.isArray(u) ? u : []);
-    setLoadingRules(false);
+    try {
+      const [r, u] = await Promise.all([
+        safeFetchArray<any>("/api/commissions/rules"),
+        safeFetchArray<any>("/api/store/users"),
+      ]);
+      setRules(r);
+      setUsers(u);
+    } catch (e: any) {
+      toast.error("Error al cargar reglas", { description: e?.message });
+      setRules([]);
+      setUsers([]);
+    } finally {
+      setLoadingRules(false);
+    }
   }
 
   async function loadCommissions() {
@@ -153,13 +161,20 @@ export function CommissionsView() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
 
-    const [comms, sum] = await Promise.all([
-      fetch(`/api/commissions?${params}`).then((r) => r.json()),
-      fetch(`/api/commissions?summary=true&${params}`).then((r) => r.json()),
-    ]);
-    setCommissions(Array.isArray(comms) ? comms : []);
-    setSummary(Array.isArray(sum) ? sum : []);
-    setLoadingComms(false);
+    try {
+      const [comms, sum] = await Promise.all([
+        safeFetchArray<any>(`/api/commissions?${params}`),
+        safeFetchArray<any>(`/api/commissions?summary=true&${params}`),
+      ]);
+      setCommissions(comms);
+      setSummary(sum);
+    } catch (e: any) {
+      toast.error("Error al cargar comisiones", { description: e?.message });
+      setCommissions([]);
+      setSummary([]);
+    } finally {
+      setLoadingComms(false);
+    }
   }
 
   useEffect(() => {
@@ -188,18 +203,17 @@ export function CommissionsView() {
     setSavingRule(true);
     try {
       const method = editingRule.id ? "PUT" : "POST";
-      const res = await fetch("/api/commissions/rules", {
+      const { ok, error } = await safeFetchJSON("/api/commissions/rules", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingRule),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(editingRule.id ? "Regla actualizada" : "Regla creada");
       setEditingRule(null);
       loadRules();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar regla", { description: e?.message });
     } finally {
       setSavingRule(false);
     }
@@ -208,32 +222,30 @@ export function CommissionsView() {
   async function deleteRule(id: string) {
     if (!confirm("¿Eliminar regla? Las comisiones ya generadas se conservan.")) return;
     try {
-      const res = await fetch(`/api/commissions/rules?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(`/api/commissions/rules?id=${id}`, { method: "DELETE" });
+      if (!ok) throw new Error(error);
       toast.success("Regla eliminada");
       loadRules();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar regla", { description: e?.message });
     }
   }
 
   async function applyBatch() {
     if (!batchAction || selected.length === 0) return;
     try {
-      const res = await fetch("/api/commissions", {
+      const { ok, error } = await safeFetchJSON("/api/commissions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: selected, action: batchAction }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(`${selected.length} comisión(es) actualizada(s)`);
       setSelected([]);
       setBatchAction(null);
       loadCommissions();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al aplicar acción", { description: e?.message });
     }
   }
 

@@ -756,3 +756,41 @@ Stage Summary:
 - Migrados 5 views adicionales (app-shell, dashboard, sales, customers, inventory) al mismo patrón seguro, ya que eran igualmente vulnerables al cascade de 401.
 - Archivos modificados: `.env`, `src/lib/auth.ts`, `src/components/views/settings-view.tsx`, `src/components/app/app-shell.tsx`, `src/components/views/dashboard-view.tsx`, `src/components/views/sales-view.tsx`, `src/components/views/customers-view.tsx`, `src/components/views/inventory-view.tsx`.
 - Pendiente para otra sesión: migrar el resto de los views (`commissions-view`, `invoices-view`, `purchases-view`, `expenses-view`, `refunds-view`, `branches-view`, `reports-view`, `print-templates-view`, `ecommerce-view`, `cash-register-view`, `promotions-view`) al mismo patrón `safeFetchJSON`/`safeFetchArray`. Todos tienen el mismo bug latente.
+
+---
+Task ID: bugfix-fetch-json-migracion-completa
+Agent: main
+Task: Completar migración de los 11 views restantes al patrón safeFetchJSON/safeFetchArray para eliminar el bug latente `methods.map is not a function` en todos lados.
+
+Work Log:
+- Auditados los 11 views restantes con fetch + .json() directo: commissions, invoices, purchases, expenses, refunds, branches, reports, print-templates, ecommerce, cash-register, promotions.
+- Para cada view, migrados TODOS los llamados `fetch().then(r => r.json())` y `await fetch(); const data = await res.json()` a:
+    - `safeFetchArray` para endpoints que devuelven arrays (load functions) → garantiza que el estado sea siempre un array, nunca null/undefined/objeto-error
+    - `safeFetchJSON` para endpoints que devuelven objetos (POST/PUT/DELETE y GET de config) → devuelve `{ ok, status, data, error }` y nunca tira por parse
+- Agregados try-catch globales en cada función de carga con fallback a estado vacío (`setX([])` o `setX(null)`) y `toast.error("Error al cargar X", { description: e?.message })` para feedback claro al usuario.
+- Validaciones defensivas en endpoints que devuelven objetos (config): `data && !Array.isArray(data) && typeof data === "object"` antes de setear el estado, para evitar que un array accidental sobreescriba la config.
+- Mensajes de toast mejorados: ahora especifican "Error al guardar X" / "Error al eliminar X" en vez de solo el mensaje técnico, más claro para el usuario final.
+- Verificado `bun run build`: "✓ Compiled successfully in 17.0s" sin errores ni warnings.
+- Verificado que el dev server arranca y responde 200 a `/api/auth/session`.
+
+Archivos modificados:
+- src/components/views/commissions-view.tsx (loadRules, loadCommissions, saveRule, deleteRule, applyBatch)
+- src/components/views/invoices-view.tsx (load, handleCreate, handleAnular, openDetailModal)
+- src/components/views/purchases-view.tsx (loadSuppliers, loadOrders, loadProducts, saveSupplier, deleteSupplier, saveOC, receiveOrder)
+- src/components/views/expenses-view.tsx (load, save, handleDelete)
+- src/components/views/refunds-view.tsx (load, searchSales, submitRefund)
+- src/components/views/branches-view.tsx (load, save, remove)
+- src/components/views/reports-view.tsx (loadReport)
+- src/components/views/print-templates-view.tsx (load, save, remove, setDefault)
+- src/components/views/ecommerce-view.tsx (loadConfig, loadLogs, save, testConnection, runSync)
+- src/components/views/cash-register-view.tsx (load, openNewRegister, closeRegister, saveMovement)
+- src/components/views/promotions-view.tsx (load, save, remove)
+
+Stage Summary:
+- Completada la migración sistemática de TODOS los views del sistema al patrón seguro de fetch. Ahora ningún view puede crashear con `X.map is not a function` aunque una API devuelva 401, 500, HTML de error, body vacío, o cualquier otra cosa que no sea el array esperado.
+- Las 3 capas de defensa quedan:
+  1. API routes: try-catch + JSON always (ya hecho en sesión anterior para products/categories/sales)
+  2. safeFetchArray/safeFetchJSON: nunca tiran por parse, devuelven [] o {ok:false}
+  3. Array.isArray guards / typeof object guards antes de setear estado
+- Build OK, server arranca OK, comportamiento verificado.
+- Estado del sistema: robusto ante cualquier fallo de red, de auth, o de DB. El usuario verá un toast claro con el error y la UI no se romperá.

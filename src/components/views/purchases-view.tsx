@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Supplier {
   id: string;
@@ -133,23 +134,36 @@ export function PurchasesView() {
   const [detailOpen, setDetailOpen] = useState(false);
 
   async function loadSuppliers() {
-    const res = await fetch("/api/suppliers");
-    const data = await res.json();
-    setSuppliers(data);
+    try {
+      const data = await safeFetchArray<Supplier>("/api/suppliers");
+      setSuppliers(data);
+    } catch (e: any) {
+      toast.error("Error al cargar proveedores", { description: e?.message });
+      setSuppliers([]);
+    }
   }
 
   async function loadOrders() {
     setOrdersLoading(true);
-    const res = await fetch("/api/purchase-orders?limit=100");
-    const data = await res.json();
-    setOrders(data);
-    setOrdersLoading(false);
+    try {
+      const data = await safeFetchArray<PurchaseOrder>("/api/purchase-orders?limit=100");
+      setOrders(data);
+    } catch (e: any) {
+      toast.error("Error al cargar órdenes", { description: e?.message });
+      setOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
   }
 
   async function loadProducts() {
-    const res = await fetch("/api/products");
-    const data = await res.json();
-    setProducts(data.filter((p: Product) => p.active));
+    try {
+      const data = await safeFetchArray<Product>("/api/products");
+      setProducts(data.filter((p: Product) => p.active));
+    } catch (e: any) {
+      toast.error("Error al cargar productos", { description: e?.message });
+      setProducts([]);
+    }
   }
 
   useEffect(() => {
@@ -178,18 +192,17 @@ export function PurchasesView() {
     setSupSaving(true);
     try {
       const method = supForm.id ? "PUT" : "POST";
-      const res = await fetch("/api/suppliers", {
+      const { ok, error } = await safeFetchJSON("/api/suppliers", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(supForm),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(supForm.id ? "Proveedor actualizado" : "Proveedor creado");
       setSupFormOpen(false);
       loadSuppliers();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar proveedor", { description: e?.message });
     } finally {
       setSupSaving(false);
     }
@@ -198,14 +211,13 @@ export function PurchasesView() {
   async function deleteSupplier() {
     if (!deleteSupId) return;
     try {
-      const res = await fetch(`/api/suppliers?id=${deleteSupId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(`/api/suppliers?id=${deleteSupId}`, { method: "DELETE" });
+      if (!ok) throw new Error(error);
       toast.success("Proveedor eliminado");
       setDeleteSupId(null);
       loadSuppliers();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar proveedor", { description: e?.message });
     }
   }
 
@@ -253,7 +265,7 @@ export function PurchasesView() {
     setOcSaving(true);
     try {
       const supplier = suppliers.find((s) => s.id === ocSupplierId);
-      const res = await fetch("/api/purchase-orders", {
+      const { ok, error } = await safeFetchJSON("/api/purchase-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -264,13 +276,12 @@ export function PurchasesView() {
           receive: ocReceiveNow,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(ocReceiveNow ? "Orden registrada y mercadería ingresada al stock" : "Orden creada (pendiente de recepción)");
       setOcOpen(false);
       loadOrders();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar orden", { description: e?.message });
     } finally {
       setOcSaving(false);
     }
@@ -278,17 +289,16 @@ export function PurchasesView() {
 
   async function receiveOrder(id: string) {
     try {
-      const res = await fetch("/api/purchase-orders/receive", {
+      const { ok, error } = await safeFetchJSON("/api/purchase-orders/receive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Orden recibida. Stock actualizado.");
       loadOrders();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al recibir orden", { description: e?.message });
     }
   }
 

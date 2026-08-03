@@ -1,0 +1,819 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useMemo } from "react";
+     4→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+     5→import { Button } from "@/components/ui/button";
+     6→import { Input } from "@/components/ui/input";
+     7→import { Label } from "@/components/ui/label";
+     8→import { Badge } from "@/components/ui/badge";
+     9→import { Switch } from "@/components/ui/switch";
+    10→import { Textarea } from "@/components/ui/textarea";
+    11→import {
+    12→  Select,
+    13→  SelectContent,
+    14→  SelectItem,
+    15→  SelectTrigger,
+    16→  SelectValue,
+    17→} from "@/components/ui/select";
+    18→import {
+    19→  Dialog,
+    20→  DialogContent,
+    21→  DialogDescription,
+    22→  DialogFooter,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→} from "@/components/ui/dialog";
+    26→import {
+    27→  Table,
+    28→  TableBody,
+    29→  TableCell,
+    30→  TableHead,
+    31→  TableHeader,
+    32→  TableRow,
+    33→} from "@/components/ui/table";
+    34→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    35→import { toast } from "sonner";
+    36→import {
+    37→  Users,
+    38→  Plus,
+    39→  Edit2,
+    40→  Trash2,
+    41→  Loader2,
+    42→  DollarSign,
+    43→  Clock,
+    44→  CheckCircle2,
+    45→  XCircle,
+    46→  Percent,
+    47→  TrendingUp,
+    48→  Coins,
+    49→} from "lucide-react";
+    50→import { useAppStore } from "@/store/app-store";
+    51→import {
+    52→  formatCurrency,
+    53→  formatDate,
+    54→  formatDateTime,
+    55→} from "@/lib/constants";
+    56→import {
+    57→  commissionTypeLabel,
+    58→  commissionStatusLabel,
+    59→  commissionStatusColor,
+    60→  type CommissionTier,
+    61→} from "@/lib/commissions";
+    62→
+    63→interface CommissionRule {
+    64→  id: string;
+    65→  userId: string;
+    66→  name: string;
+    67→  type: string;
+    68→  rate: number;
+    69→  tiers: string | null;
+    70→  tiersParsed: CommissionTier[];
+    71→  minSaleAmount: number;
+    72→  onlyPaid: boolean;
+    73→  active: boolean;
+    74→  startDate: string;
+    75→  endDate: string | null;
+    76→  user: { id: string; name: string; role: string };
+    77→}
+    78→
+    79→interface Commission {
+    80→  id: string;
+    81→  userId: string;
+    82→  saleId: string;
+    83→  ruleId: string | null;
+    84→  saleTotal: number;
+    85→  saleProfit: number;
+    86→  base: number;
+    87→  rate: number;
+    88→  amount: number;
+    89→  status: string;
+    90→  notes: string | null;
+    91→  createdAt: string;
+    92→  user: { id: string; name: string; role: string };
+    93→  sale: {
+    94→    id: string;
+    95→    total: number;
+    96→    paymentMethod: string;
+    97→    createdAt: string;
+    98→    customer: { name: string } | null;
+    99→  };
+   100→  rule: { id: string; name: string; type: string } | null;
+   101→  ruleTypeLabel: string | null;
+   102→}
+   103→
+   104→interface CommissionSummary {
+   105→  userId: string;
+   106→  userName: string;
+   107→  totalAmount: number;
+   108→  pendingAmount: number;
+   109→  paidAmount: number;
+   110→  count: number;
+   111→  pendingCount: number;
+   112→}
+   113→
+   114→export function CommissionsView() {
+   115→  const { store, user } = useAppStore();
+   116→  const symbol = store?.currencySymbol || "$";
+   117→  const [tab, setTab] = useState("rules");
+   118→
+   119→  // Rules state
+   120→  const [rules, setRules] = useState<CommissionRule[]>([]);
+   121→  const [users, setUsers] = useState<{ id: string; name: string; role: string }[]>([]);
+   122→  const [loadingRules, setLoadingRules] = useState(true);
+   123→  const [editingRule, setEditingRule] = useState<Partial<CommissionRule> | null>(null);
+   124→  const [savingRule, setSavingRule] = useState(false);
+   125→
+   126→  // Commissions state
+   127→  const [commissions, setCommissions] = useState<Commission[]>([]);
+   128→  const [summary, setSummary] = useState<CommissionSummary[]>([]);
+   129→  const [loadingComms, setLoadingComms] = useState(true);
+   130→  const [filterStatus, setFilterStatus] = useState("all");
+   131→  const [filterUser, setFilterUser] = useState("all");
+   132→  const [from, setFrom] = useState("");
+   133→  const [to, setTo] = useState("");
+   134→  const [selected, setSelected] = useState<string[]>([]);
+   135→  const [batchAction, setBatchAction] = useState<string | null>(null);
+   136→
+   137→  async function loadRules() {
+   138→    setLoadingRules(true);
+   139→    const [r, u] = await Promise.all([
+   140→      fetch("/api/commissions/rules").then((r) => r.json()),
+   141→      fetch("/api/store/users").then((r) => r.json()).catch(() => []),
+   142→    ]);
+   143→    setRules(r || []);
+   144→    setUsers(Array.isArray(u) ? u : []);
+   145→    setLoadingRules(false);
+   146→  }
+   147→
+   148→  async function loadCommissions() {
+   149→    setLoadingComms(true);
+   150→    const params = new URLSearchParams();
+   151→    if (filterStatus !== "all") params.set("status", filterStatus);
+   152→    if (filterUser !== "all") params.set("userId", filterUser);
+   153→    if (from) params.set("from", from);
+   154→    if (to) params.set("to", to);
+   155→
+   156→    const [comms, sum] = await Promise.all([
+   157→      fetch(`/api/commissions?${params}`).then((r) => r.json()),
+   158→      fetch(`/api/commissions?summary=true&${params}`).then((r) => r.json()),
+   159→    ]);
+   160→    setCommissions(Array.isArray(comms) ? comms : []);
+   161→    setSummary(Array.isArray(sum) ? sum : []);
+   162→    setLoadingComms(false);
+   163→  }
+   164→
+   165→  useEffect(() => {
+   166→    loadRules();
+   167→  }, []);
+   168→
+   169→  useEffect(() => {
+   170→    if (tab === "commissions") loadCommissions();
+   171→  }, [tab, filterStatus, filterUser, from, to]);
+   172→
+   173→  // Calcular totales globales
+   174→  const totals = useMemo(() => {
+   175→    return summary.reduce(
+   176→      (acc, s) => ({
+   177→        total: acc.total + s.totalAmount,
+   178→        pending: acc.pending + s.pendingAmount,
+   179→        paid: acc.paid + s.paidAmount,
+   180→        count: acc.count + s.count,
+   181→      }),
+   182→      { total: 0, pending: 0, paid: 0, count: 0 }
+   183→    );
+   184→  }, [summary]);
+   185→
+   186→  async function saveRule() {
+   187→    if (!editingRule) return;
+   188→    setSavingRule(true);
+   189→    try {
+   190→      const method = editingRule.id ? "PUT" : "POST";
+   191→      const res = await fetch("/api/commissions/rules", {
+   192→        method,
+   193→        headers: { "Content-Type": "application/json" },
+   194→        body: JSON.stringify(editingRule),
+   195→      });
+   196→      const data = await res.json();
+   197→      if (!res.ok) throw new Error(data.error);
+   198→      toast.success(editingRule.id ? "Regla actualizada" : "Regla creada");
+   199→      setEditingRule(null);
+   200→      loadRules();
+   201→    } catch (e: any) {
+   202→      toast.error(e.message);
+   203→    } finally {
+   204→      setSavingRule(false);
+   205→    }
+   206→  }
+   207→
+   208→  async function deleteRule(id: string) {
+   209→    if (!confirm("¿Eliminar regla? Las comisiones ya generadas se conservan.")) return;
+   210→    try {
+   211→      const res = await fetch(`/api/commissions/rules?id=${id}`, { method: "DELETE" });
+   212→      const data = await res.json();
+   213→      if (!res.ok) throw new Error(data.error);
+   214→      toast.success("Regla eliminada");
+   215→      loadRules();
+   216→    } catch (e: any) {
+   217→      toast.error(e.message);
+   218→    }
+   219→  }
+   220→
+   221→  async function applyBatch() {
+   222→    if (!batchAction || selected.length === 0) return;
+   223→    try {
+   224→      const res = await fetch("/api/commissions", {
+   225→        method: "PATCH",
+   226→        headers: { "Content-Type": "application/json" },
+   227→        body: JSON.stringify({ ids: selected, action: batchAction }),
+   228→      });
+   229→      const data = await res.json();
+   230→      if (!res.ok) throw new Error(data.error);
+   231→      toast.success(`${selected.length} comisión(es) actualizada(s)`);
+   232→      setSelected([]);
+   233→      setBatchAction(null);
+   234→      loadCommissions();
+   235→    } catch (e: any) {
+   236→      toast.error(e.message);
+   237→    }
+   238→  }
+   239→
+   240→  const isAdmin = user?.role === "ADMIN";
+   241→
+   242→  return (
+   243→    <div className="space-y-4">
+   244→      <div>
+   245→        <h1 className="text-2xl font-bold tracking-tight">Comisiones</h1>
+   246→        <p className="text-sm text-muted-foreground">
+   247→          Configura reglas de comisión por vendedor y gestiona pagos
+   248→        </p>
+   249→      </div>
+   250→
+   251→      {/* Stats */}
+   252→      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+   253→        <Card>
+   254→          <CardContent className="p-4">
+   255→            <div className="flex items-center justify-between">
+   256→              <p className="text-xs text-muted-foreground">Total acumulado</p>
+   257→              <Coins className="w-4 h-4 text-indigo-600" />
+   258→            </div>
+   259→            <p className="text-xl font-bold">{formatCurrency(totals.total, symbol)}</p>
+   260→          </CardContent>
+   261→        </Card>
+   262→        <Card>
+   263→          <CardContent className="p-4">
+   264→            <div className="flex items-center justify-between">
+   265→              <p className="text-xs text-muted-foreground">Pendiente</p>
+   266→              <Clock className="w-4 h-4 text-amber-600" />
+   267→            </div>
+   268→            <p className="text-xl font-bold text-amber-700">{formatCurrency(totals.pending, symbol)}</p>
+   269→          </CardContent>
+   270→        </Card>
+   271→        <Card>
+   272→          <CardContent className="p-4">
+   273→            <div className="flex items-center justify-between">
+   274→              <p className="text-xs text-muted-foreground">Pagado</p>
+   275→              <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+   276→            </div>
+   277→            <p className="text-xl font-bold text-indigo-700">{formatCurrency(totals.paid, symbol)}</p>
+   278→          </CardContent>
+   279→        </Card>
+   280→        <Card>
+   281→          <CardContent className="p-4">
+   282→            <div className="flex items-center justify-between">
+   283→              <p className="text-xs text-muted-foreground">Comisiones</p>
+   284→              <Users className="w-4 h-4 text-blue-600" />
+   285→            </div>
+   286→            <p className="text-xl font-bold">{totals.count}</p>
+   287→          </CardContent>
+   288→        </Card>
+   289→      </div>
+   290→
+   291→      <Tabs value={tab} onValueChange={setTab}>
+   292→        <TabsList>
+   293→          <TabsTrigger value="rules">Reglas</TabsTrigger>
+   294→          <TabsTrigger value="commissions">Comisiones generadas</TabsTrigger>
+   295→        </TabsList>
+   296→
+   297→        {/* TAB: REGLAS */}
+   298→        <TabsContent value="rules" className="space-y-3">
+   299→          <Card>
+   300→            <CardContent className="p-3 flex justify-between items-center">
+   301→              <p className="text-sm text-muted-foreground">
+   302→                Define cómo se calcula la comisión de cada vendedor
+   303→              </p>
+   304→              {isAdmin && (
+   305→                <Button
+   306→                  onClick={() =>
+   307→                    setEditingRule({
+   308→                      type: "PORCENTAJE_VENTA",
+   309→                      rate: 2,
+   310→                      onlyPaid: true,
+   311→                      active: true,
+   312→                      tiersParsed: [{ min: 0, max: null, rate: 2 }],
+   313→                    })
+   314→                  }
+   315→                >
+   316→                  <Plus className="w-4 h-4 mr-1" />
+   317→                  Nueva regla
+   318→                </Button>
+   319→              )}
+   320→            </CardContent>
+   321→          </Card>
+   322→
+   323→          <Card>
+   324→            <CardContent className="p-0">
+   325→              {loadingRules ? (
+   326→                <div className="p-8 text-center">
+   327→                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
+   328→                  Cargando reglas...
+   329→                </div>
+   330→              ) : rules.length === 0 ? (
+   331→                <div className="p-12 text-center">
+   332→                  <Percent className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+   333→                  <p className="text-sm text-muted-foreground">
+   334→                    No hay reglas de comisión configuradas
+   335→                  </p>
+   336→                </div>
+   337→              ) : (
+   338→                <div className="overflow-x-auto">
+   339→                  <Table>
+   340→                    <TableHeader>
+   341→                      <TableRow>
+   342→                        <TableHead>Nombre</TableHead>
+   343→                        <TableHead>Vendedor</TableHead>
+   344→                        <TableHead>Tipo</TableHead>
+   345→                        <TableHead>Configuración</TableHead>
+   346→                        <TableHead>Mín. venta</TableHead>
+   347→                        <TableHead>Solo pagadas</TableHead>
+   348→                        <TableHead>Vigencia</TableHead>
+   349→                        <TableHead className="text-center">Estado</TableHead>
+   350→                        {isAdmin && <TableHead className="text-right">Acciones</TableHead>}
+   351→                      </TableRow>
+   352→                    </TableHeader>
+   353→                    <TableBody>
+   354→                      {rules.map((r) => (
+   355→                        <TableRow key={r.id}>
+   356→                          <TableCell className="font-medium">{r.name}</TableCell>
+   357→                          <TableCell>{r.user.name}</TableCell>
+   358→                          <TableCell>
+   359→                            <Badge variant="outline">{commissionTypeLabel(r.type)}</Badge>
+   360→                          </TableCell>
+   361→                          <TableCell className="text-sm">
+   362→                            {r.type === "PORCENTAJE_VENTA" && `${r.rate}% sobre venta`}
+   363→                            {r.type === "PORCENTAJE_GANANCIA" && `${r.rate}% sobre ganancia`}
+   364→                            {r.type === "MONTO_FIJO_POR_VENTA" && `${formatCurrency(r.rate, symbol)} fijo`}
+   365→                            {r.type === "ESCALONADO" &&
+   366→                              `${(r.tiersParsed || []).length} tramos`}
+   367→                          </TableCell>
+   368→                          <TableCell>{formatCurrency(r.minSaleAmount, symbol)}</TableCell>
+   369→                          <TableCell>
+   370→                            {r.onlyPaid ? (
+   371→                              <Badge className="bg-indigo-100 text-indigo-700">Sí</Badge>
+   372→                            ) : (
+   373→                              <Badge variant="outline">No</Badge>
+   374→                            )}
+   375→                          </TableCell>
+   376→                          <TableCell className="text-xs text-muted-foreground">
+   377→                            {formatDate(r.startDate)} - {r.endDate ? formatDate(r.endDate) : "∞"}
+   378→                          </TableCell>
+   379→                          <TableCell className="text-center">
+   380→                            {r.active ? (
+   381→                              <Badge className="bg-indigo-100 text-indigo-700">Activa</Badge>
+   382→                            ) : (
+   383→                              <Badge variant="outline">Inactiva</Badge>
+   384→                            )}
+   385→                          </TableCell>
+   386→                          {isAdmin && (
+   387→                            <TableCell className="text-right">
+   388→                              <Button
+   389→                                variant="ghost"
+   390→                                size="icon"
+   391→                                className="h-8 w-8"
+   392→                                onClick={() =>
+   393→                                  setEditingRule({
+   394→                                    ...r,
+   395→                                    tiersParsed: r.tiersParsed || [],
+   396→                                  })
+   397→                                }
+   398→                              >
+   399→                                <Edit2 className="w-3.5 h-3.5" />
+   400→                              </Button>
+   401→                              <Button
+   402→                                variant="ghost"
+   403→                                size="icon"
+   404→                                className="h-8 w-8 text-red-600"
+   405→                                onClick={() => deleteRule(r.id)}
+   406→                              >
+   407→                                <Trash2 className="w-3.5 h-3.5" />
+   408→                              </Button>
+   409→                            </TableCell>
+   410→                          )}
+   411→                        </TableRow>
+   412→                      ))}
+   413→                    </TableBody>
+   414→                  </Table>
+   415→                </div>
+   416→              )}
+   417→            </CardContent>
+   418→          </Card>
+   419→        </TabsContent>
+   420→
+   421→        {/* TAB: COMISIONES */}
+   422→        <TabsContent value="commissions" className="space-y-3">
+   423→          <Card>
+   424→            <CardContent className="p-3">
+   425→              <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
+   426→                <Select value={filterStatus} onValueChange={setFilterStatus}>
+   427→                  <SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger>
+   428→                  <SelectContent>
+   429→                    <SelectItem value="all">Todos</SelectItem>
+   430→                    <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+   431→                    <SelectItem value="PAGADA">Pagadas</SelectItem>
+   432→                    <SelectItem value="ANULADA">Anuladas</SelectItem>
+   433→                  </SelectContent>
+   434→                </Select>
+   435→                <Select value={filterUser} onValueChange={setFilterUser}>
+   436→                  <SelectTrigger><SelectValue placeholder="Vendedor" /></SelectTrigger>
+   437→                  <SelectContent>
+   438→                    <SelectItem value="all">Todos</SelectItem>
+   439→                    {users.map((u) => (
+   440→                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+   441→                    ))}
+   442→                  </SelectContent>
+   443→                </Select>
+   444→                <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+   445→                <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+   446→              </div>
+   447→            </CardContent>
+   448→          </Card>
+   449→
+   450→          {/* Resumen por vendedor */}
+   451→          {summary.length > 0 && (
+   452→            <Card>
+   453→              <CardHeader><CardTitle className="text-sm">Resumen por vendedor</CardTitle></CardHeader>
+   454→              <CardContent className="p-0">
+   455→                <div className="overflow-x-auto">
+   456→                  <Table>
+   457→                    <TableHeader>
+   458→                      <TableRow>
+   459→                        <TableHead>Vendedor</TableHead>
+   460→                        <TableHead className="text-right">Total</TableHead>
+   461→                        <TableHead className="text-right">Pendiente</TableHead>
+   462→                        <TableHead className="text-right">Pagado</TableHead>
+   463→                        <TableHead className="text-center">Comisiones</TableHead>
+   464→                      </TableRow>
+   465→                    </TableHeader>
+   466→                    <TableBody>
+   467→                      {summary.map((s) => (
+   468→                        <TableRow key={s.userId}>
+   469→                          <TableCell className="font-medium">{s.userName}</TableCell>
+   470→                          <TableCell className="text-right font-semibold">
+   471→                            {formatCurrency(s.totalAmount, symbol)}
+   472→                          </TableCell>
+   473→                          <TableCell className="text-right text-amber-700">
+   474→                            {formatCurrency(s.pendingAmount, symbol)}
+   475→                          </TableCell>
+   476→                          <TableCell className="text-right text-indigo-700">
+   477→                            {formatCurrency(s.paidAmount, symbol)}
+   478→                          </TableCell>
+   479→                          <TableCell className="text-center">{s.count}</TableCell>
+   480→                        </TableRow>
+   481→                      ))}
+   482→                    </TableBody>
+   483→                  </Table>
+   484→                </div>
+   485→              </CardContent>
+   486→            </Card>
+   487→          )}
+   488→
+   489→          {/* Batch actions */}
+   490→          {isAdmin && selected.length > 0 && (
+   491→            <Card>
+   492→              <CardContent className="p-3 flex flex-wrap items-center gap-2">
+   493→                <span className="text-sm font-medium">{selected.length} seleccionada(s)</span>
+   494→                <Select value={batchAction || ""} onValueChange={setBatchAction}>
+   495→                  <SelectTrigger className="w-48"><SelectValue placeholder="Acción..." /></SelectTrigger>
+   496→                  <SelectContent>
+   497→                    <SelectItem value="PAY">Marcar pagada</SelectItem>
+   498→                    <SelectItem value="ANNUL">Anular</SelectItem>
+   499→                    <SelectItem value="REOPEN">Reabrir</SelectItem>
+   500→                  </SelectContent>
+   501→                </Select>
+   502→                <Button onClick={applyBatch} disabled={!batchAction}>Aplicar</Button>
+   503→                <Button variant="ghost" onClick={() => setSelected([])}>Cancelar</Button>
+   504→              </CardContent>
+   505→            </Card>
+   506→          )}
+   507→
+   508→          <Card>
+   509→            <CardContent className="p-0">
+   510→              {loadingComms ? (
+   511→                <div className="p-8 text-center">
+   512→                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
+   513→                  Cargando comisiones...
+   514→                </div>
+   515→              ) : commissions.length === 0 ? (
+   516→                <div className="p-12 text-center">
+   517→                  <Coins className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+   518→                  <p className="text-sm text-muted-foreground">No hay comisiones en este período</p>
+   519→                </div>
+   520→              ) : (
+   521→                <div className="overflow-x-auto">
+   522→                  <Table>
+   523→                    <TableHeader>
+   524→                      <TableRow>
+   525→                        {isAdmin && (
+   526→                          <TableHead className="w-8">
+   527→                            <input
+   528→                              type="checkbox"
+   529→                              checked={selected.length === commissions.filter(c => c.status === "PENDIENTE").length && commissions.length > 0}
+   530→                              onChange={(e) => {
+   531→                                if (e.target.checked) {
+   532→                                  setSelected(commissions.filter(c => c.status === "PENDIENTE").map(c => c.id));
+   533→                                } else {
+   534→                                  setSelected([]);
+   535→                                }
+   536→                              }}
+   537→                            />
+   538→                          </TableHead>
+   539→                        )}
+   540→                        <TableHead>Fecha</TableHead>
+   541→                        <TableHead>Vendedor</TableHead>
+   542→                        <TableHead>Venta</TableHead>
+   543→                        <TableHead className="text-right">Total venta</TableHead>
+   544→                        <TableHead className="text-right">Base</TableHead>
+   545→                        <TableHead className="text-right">Tasa</TableHead>
+   546→                        <TableHead className="text-right">Comisión</TableHead>
+   547→                        <TableHead className="text-center">Estado</TableHead>
+   548→                      </TableRow>
+   549→                    </TableHeader>
+   550→                    <TableBody>
+   551→                      {commissions.map((c) => (
+   552→                        <TableRow key={c.id}>
+   553→                          {isAdmin && (
+   554→                            <TableCell>
+   555→                              <input
+   556→                                type="checkbox"
+   557→                                checked={selected.includes(c.id)}
+   558→                                disabled={c.status !== "PENDIENTE"}
+   559→                                onChange={(e) => {
+   560→                                  if (e.target.checked) setSelected([...selected, c.id]);
+   561→                                  else setSelected(selected.filter((s) => s !== c.id));
+   562→                                }}
+   563→                              />
+   564→                            </TableCell>
+   565→                          )}
+   566→                          <TableCell className="text-sm">{formatDateTime(c.createdAt)}</TableCell>
+   567→                          <TableCell className="font-medium">{c.user.name}</TableCell>
+   568→                          <TableCell className="text-xs text-muted-foreground font-mono">
+   569→                            #{c.saleId.slice(-6).toUpperCase()}
+   570→                          </TableCell>
+   571→                          <TableCell className="text-right">{formatCurrency(c.saleTotal, symbol)}</TableCell>
+   572→                          <TableCell className="text-right text-muted-foreground">
+   573→                            {formatCurrency(c.base, symbol)}
+   574→                          </TableCell>
+   575→                          <TableCell className="text-right">{c.rate}%</TableCell>
+   576→                          <TableCell className="text-right font-bold text-indigo-700">
+   577→                            {formatCurrency(c.amount, symbol)}
+   578→                          </TableCell>
+   579→                          <TableCell className="text-center">
+   580→                            <Badge className={commissionStatusColor(c.status)}>
+   581→                              {commissionStatusLabel(c.status)}
+   582→                            </Badge>
+   583→                          </TableCell>
+   584→                        </TableRow>
+   585→                      ))}
+   586→                    </TableBody>
+   587→                  </Table>
+   588→                </div>
+   589→              )}
+   590→            </CardContent>
+   591→          </Card>
+   592→        </TabsContent>
+   593→      </Tabs>
+   594→
+   595→      {/* Modal editar/crear regla */}
+   596→      <Dialog open={!!editingRule} onOpenChange={(o) => !o && setEditingRule(null)}>
+   597→        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+   598→          <DialogHeader>
+   599→            <DialogTitle>
+   600→              {editingRule?.id ? "Editar regla de comisión" : "Nueva regla de comisión"}
+   601→            </DialogTitle>
+   602→            <DialogDescription>
+   603→              Define cómo se calcula la comisión de un vendedor
+   604→            </DialogDescription>
+   605→          </DialogHeader>
+   606→
+   607→          {editingRule && (
+   608→            <div className="space-y-4 py-2">
+   609→              <div className="grid gap-3 grid-cols-2">
+   610→                <div>
+   611→                  <Label>Nombre *</Label>
+   612→                  <Input
+   613→                    value={editingRule.name || ""}
+   614→                    onChange={(e) => setEditingRule({ ...editingRule, name: e.target.value })}
+   615→                    placeholder="Ej: Comisión vendedor mes julio"
+   616→                  />
+   617→                </div>
+   618→                <div>
+   619→                  <Label>Vendedor *</Label>
+   620→                  <Select
+   621→                    value={editingRule.userId || ""}
+   622→                    onValueChange={(v) => setEditingRule({ ...editingRule, userId: v })}
+   623→                  >
+   624→                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+   625→                    <SelectContent>
+   626→                      {users
+   627→                        .filter((u) => u.role !== "CAJERO" || true) // todos pueden tener comisión
+   628→                        .map((u) => (
+   629→                          <SelectItem key={u.id} value={u.id}>
+   630→                            {u.name} ({u.role})
+   631→                          </SelectItem>
+   632→                        ))}
+   633→                    </SelectContent>
+   634→                  </Select>
+   635→                </div>
+   636→              </div>
+   637→
+   638→              <div>
+   639→                <Label>Tipo de cálculo *</Label>
+   640→                <Select
+   641→                  value={editingRule.type || "PORCENTAJE_VENTA"}
+   642→                  onValueChange={(v) => setEditingRule({ ...editingRule, type: v })}
+   643→                >
+   644→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   645→                  <SelectContent>
+   646→                    <SelectItem value="PORCENTAJE_VENTA">% sobre el total de la venta</SelectItem>
+   647→                    <SelectItem value="PORCENTAJE_GANANCIA">% sobre la ganancia</SelectItem>
+   648→                    <SelectItem value="MONTO_FIJO_POR_VENTA">Monto fijo por venta</SelectItem>
+   649→                    <SelectItem value="ESCALONADO">Escalonado por tramos</SelectItem>
+   650→                  </SelectContent>
+   651→                </Select>
+   652→              </div>
+   653→
+   654→              {editingRule.type !== "ESCALONADO" && (
+   655→                <div>
+   656→                  <Label>
+   657→                    {editingRule.type === "MONTO_FIJO_POR_VENTA"
+   658→                      ? "Monto fijo ($)"
+   659→                      : "Tasa (%)"}
+   660→                  </Label>
+   661→                  <Input
+   662→                    type="number"
+   663→                    step="0.01"
+   664→                    value={editingRule.rate ?? 0}
+   665→                    onChange={(e) =>
+   666→                      setEditingRule({ ...editingRule, rate: Number(e.target.value) })
+   667→                    }
+   668→                  />
+   669→                </div>
+   670→              )}
+   671→
+   672→              {editingRule.type === "ESCALONADO" && (
+   673→                <div className="space-y-2">
+   674→                  <Label>Tramos (rango de venta → tasa %)</Label>
+   675→                  <div className="space-y-2">
+   676→                    {(editingRule.tiersParsed || []).map((t, idx) => (
+   677→                      <div key={idx} className="flex gap-2 items-end">
+   678→                        <div>
+   679→                          <Label className="text-xs">Mín. ($)</Label>
+   680→                          <Input
+   681→                            type="number"
+   682→                            value={t.min}
+   683→                            onChange={(e) => {
+   684→                              const tiers = [...(editingRule.tiersParsed || [])];
+   685→                              tiers[idx] = { ...t, min: Number(e.target.value) };
+   686→                              setEditingRule({ ...editingRule, tiersParsed: tiers });
+   687→                            }}
+   688→                          />
+   689→                        </div>
+   690→                        <div>
+   691→                          <Label className="text-xs">Máx. ($)</Label>
+   692→                          <Input
+   693→                            type="number"
+   694→                            placeholder="vacío = sin tope"
+   695→                            value={t.max ?? ""}
+   696→                            onChange={(e) => {
+   697→                              const tiers = [...(editingRule.tiersParsed || [])];
+   698→                              tiers[idx] = {
+   699→                                ...t,
+   700→                                max: e.target.value ? Number(e.target.value) : null,
+   701→                              };
+   702→                              setEditingRule({ ...editingRule, tiersParsed: tiers });
+   703→                            }}
+   704→                          />
+   705→                        </div>
+   706→                        <div>
+   707→                          <Label className="text-xs">Tasa (%)</Label>
+   708→                          <Input
+   709→                            type="number"
+   710→                            step="0.01"
+   711→                            value={t.rate}
+   712→                            onChange={(e) => {
+   713→                              const tiers = [...(editingRule.tiersParsed || [])];
+   714→                              tiers[idx] = { ...t, rate: Number(e.target.value) };
+   715→                              setEditingRule({ ...editingRule, tiersParsed: tiers });
+   716→                            }}
+   717→                          />
+   718→                        </div>
+   719→                        <Button
+   720→                          variant="outline"
+   721→                          size="icon"
+   722→                          onClick={() => {
+   723→                            const tiers = (editingRule.tiersParsed || []).filter((_, i) => i !== idx);
+   724→                            setEditingRule({ ...editingRule, tiersParsed: tiers });
+   725→                          }}
+   726→                        >
+   727→                          <Trash2 className="w-3.5 h-3.5" />
+   728→                        </Button>
+   729→                      </div>
+   730→                    ))}
+   731→                    <Button
+   732→                      variant="outline"
+   733→                      size="sm"
+   734→                      onClick={() => {
+   735→                        const tiers = [...(editingRule.tiersParsed || [])];
+   736→                        const lastMax = tiers.length > 0 ? tiers[tiers.length - 1].max : 0;
+   737→                        tiers.push({ min: lastMax || 0, max: null, rate: 0 });
+   738→                        setEditingRule({ ...editingRule, tiersParsed: tiers });
+   739→                      }}
+   740→                    >
+   741→                      <Plus className="w-3 h-3 mr-1" />
+   742→                      Agregar tramo
+   743→                    </Button>
+   744→                  </div>
+   745→                </div>
+   746→              )}
+   747→
+   748→              <div className="grid gap-3 grid-cols-2">
+   749→                <div>
+   750→                  <Label>Monto mínimo de venta ($)</Label>
+   751→                  <Input
+   752→                    type="number"
+   753→                    value={editingRule.minSaleAmount ?? 0}
+   754→                    onChange={(e) =>
+   755→                      setEditingRule({ ...editingRule, minSaleAmount: Number(e.target.value) })
+   756→                    }
+   757→                  />
+   758→                </div>
+   759→                <div className="flex items-end">
+   760→                  <div className="flex items-center space-x-2 pb-2">
+   761→                    <Switch
+   762→                      id="onlyPaid"
+   763→                      checked={editingRule.onlyPaid !== false}
+   764→                      onCheckedChange={(v) => setEditingRule({ ...editingRule, onlyPaid: v })}
+   765→                    />
+   766→                    <Label htmlFor="onlyPaid">Solo ventas cobradas (no fiado)</Label>
+   767→                  </div>
+   768→                </div>
+   769→              </div>
+   770→
+   771→              <div className="grid gap-3 grid-cols-2">
+   772→                <div>
+   773→                  <Label>Inicio</Label>
+   774→                  <Input
+   775→                    type="date"
+   776→                    value={editingRule.startDate ? editingRule.startDate.split("T")[0] : ""}
+   777→                    onChange={(e) =>
+   778→                      setEditingRule({ ...editingRule, startDate: e.target.value })
+   779→                    }
+   780→                  />
+   781→                </div>
+   782→                <div>
+   783→                  <Label>Fin (vacío = sin fin)</Label>
+   784→                  <Input
+   785→                    type="date"
+   786→                    value={editingRule.endDate ? editingRule.endDate.split("T")[0] : ""}
+   787→                    onChange={(e) =>
+   788→                      setEditingRule({ ...editingRule, endDate: e.target.value || null })
+   789→                    }
+   790→                  />
+   791→                </div>
+   792→              </div>
+   793→
+   794→              <div className="flex items-center space-x-2">
+   795→                <Switch
+   796→                  id="active"
+   797→                  checked={editingRule.active !== false}
+   798→                  onCheckedChange={(v) => setEditingRule({ ...editingRule, active: v })}
+   799→                />
+   800→                <Label htmlFor="active">Regla activa</Label>
+   801→              </div>
+   802→            </div>
+   803→          )}
+   804→
+   805→          <DialogFooter>
+   806→            <Button variant="outline" onClick={() => setEditingRule(null)}>
+   807→              Cancelar
+   808→            </Button>
+   809→            <Button onClick={saveRule} disabled={savingRule}>
+   810→              {savingRule && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+   811→              {editingRule?.id ? "Guardar cambios" : "Crear regla"}
+   812→            </Button>
+   813→          </DialogFooter>
+   814→        </DialogContent>
+   815→      </Dialog>
+   816→    </div>
+   817→  );
+   818→}
+   819→

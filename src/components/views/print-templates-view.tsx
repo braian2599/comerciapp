@@ -42,6 +42,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface PrintTemplate {
   id: string;
@@ -84,10 +85,15 @@ export function PrintTemplatesView() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/print-templates");
-    const data = await res.json();
-    setTemplates(Array.isArray(data) ? data : []);
-    setLoading(false);
+    try {
+      const data = await safeFetchArray<PrintTemplate>("/api/print-templates");
+      setTemplates(data);
+    } catch (e: any) {
+      toast.error("Error al cargar plantillas", { description: e?.message });
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -99,18 +105,17 @@ export function PrintTemplatesView() {
     setSaving(true);
     try {
       const method = editing.id ? "PUT" : "POST";
-      const res = await fetch("/api/print-templates", {
+      const { ok, error } = await safeFetchJSON("/api/print-templates", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editing),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(editing.id ? "Plantilla actualizada" : "Plantilla creada");
       setEditing(null);
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar plantilla", { description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -119,29 +124,27 @@ export function PrintTemplatesView() {
   async function remove(id: string) {
     if (!confirm("¿Eliminar plantilla?")) return;
     try {
-      const res = await fetch(`/api/print-templates?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(`/api/print-templates?id=${id}`, { method: "DELETE" });
+      if (!ok) throw new Error(error);
       toast.success("Plantilla eliminada");
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar plantilla", { description: e?.message });
     }
   }
 
   async function setDefault(id: string) {
     try {
-      const res = await fetch("/api/print-templates", {
+      const { ok, error } = await safeFetchJSON("/api/print-templates", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, isDefault: true }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Plantilla por defecto actualizada");
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al actualizar plantilla", { description: e?.message });
     }
   }
 

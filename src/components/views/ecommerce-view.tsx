@@ -40,6 +40,7 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { formatDateTime } from "@/lib/constants";
 import { Icon } from "@/lib/icons";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface EcommerceConfig {
   id: string;
@@ -92,18 +93,35 @@ export function EcommerceView() {
 
   async function loadConfig() {
     setLoading(true);
-    const res = await fetch("/api/ecommerce/config");
-    const data = await res.json();
-    setConfig(data);
-    setLoading(false);
+    try {
+      const { ok, data, error } = await safeFetchJSON<EcommerceConfig>("/api/ecommerce/config");
+      if (!ok) {
+        toast.error(error || "Error al cargar config");
+        setConfig(null);
+      } else if (data && !Array.isArray(data) && typeof data === "object") {
+        setConfig(data);
+      } else {
+        setConfig(null);
+      }
+    } catch (e: any) {
+      toast.error("Error de conexión", { description: e?.message });
+      setConfig(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadLogs() {
     setLoadingLogs(true);
-    const res = await fetch("/api/ecommerce/sync?limit=50");
-    const data = await res.json();
-    setLogs(Array.isArray(data) ? data : []);
-    setLoadingLogs(false);
+    try {
+      const data = await safeFetchArray<SyncLog>("/api/ecommerce/sync?limit=50");
+      setLogs(data);
+    } catch (e: any) {
+      toast.error("Error al cargar logs", { description: e?.message });
+      setLogs([]);
+    } finally {
+      setLoadingLogs(false);
+    }
   }
 
   useEffect(() => {
@@ -115,17 +133,16 @@ export function EcommerceView() {
     if (!config) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/ecommerce/config", {
+      const { ok, data, error } = await safeFetchJSON<EcommerceConfig>("/api/ecommerce/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setConfig(data);
+      if (!ok) throw new Error(error);
+      if (data && !Array.isArray(data) && typeof data === "object") setConfig(data);
       toast.success("Configuración guardada");
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar", { description: e?.message });
     } finally {
       setSaving(false);
     }
@@ -135,7 +152,7 @@ export function EcommerceView() {
     if (!config) return;
     setTesting(true);
     try {
-      const res = await fetch("/api/ecommerce/test", {
+      const { ok, data, error } = await safeFetchJSON<any>("/api/ecommerce/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -147,14 +164,17 @@ export function EcommerceView() {
           storeExternalId: config.storeExternalId,
         }),
       });
-      const data = await res.json();
-      if (data.ok) {
+      if (!ok) {
+        toast.error(error || "Error de conexión");
+        return;
+      }
+      if (data?.ok) {
         toast.success(data.message || "Conexión exitosa");
       } else {
-        toast.error(data.message || "Error de conexión");
+        toast.error(data?.message || "Error de conexión");
       }
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error de conexión", { description: e?.message });
     } finally {
       setTesting(false);
     }
@@ -164,19 +184,18 @@ export function EcommerceView() {
     const key = `${direction}-${entity}`;
     setSyncing(key);
     try {
-      const res = await fetch("/api/ecommerce/sync", {
+      const { ok, data, error } = await safeFetchJSON<any>("/api/ecommerce/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction, entity, onlyDirty: true, limit: 50 }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(
-        `Sincronización: ${data.success} OK, ${data.error} error${data.total ? ` de ${data.total}` : ""}`
+        `Sincronización: ${data?.success ?? 0} OK, ${data?.error ?? 0} error${data?.total ? ` de ${data.total}` : ""}`
       );
       loadLogs();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al sincronizar", { description: e?.message });
     } finally {
       setSyncing(null);
     }
