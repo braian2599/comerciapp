@@ -335,3 +335,30 @@ Stage Summary:
 - Cambio defensivo en los 6 sub-reportes para tolerar payloads parciales o data de otro tab sin romper.
 - Verificación E2E completa: los 6 tabs funcionan, sin application errors, con contenido visible.
 - Patrones aplicados: (a) reset síncrono de `data` al cambiar de tab; (b) optional chaining + defaults en cada sub-reporte; (c) guards `length === 0` con mensajes user-friendly para gráficos vacíos.
+
+---
+Task ID: feat-topnav-no-sidebar
+Agent: main
+Task: Reemplazar layout con sidebar por top nav con menú "Más" (opción 1)
+
+Work Log:
+- Agregado `FREQUENT_KEYS = ["pos", "cash", "dashboard", "sales", "products"]` — las 5 vistas más usadas como tabs horizontales.
+- Derivadas `frequentItems` (tabs visibles, filtradas por rol) y `moreCategories` (categorias con items no frecuentes).
+- Derivado `moreHasActive` para resaltar el botón "Más" cuando la vista actual está dentro de ese menú.
+- Imports: agregado `LayoutGrid` (icono para menús), `Fragment` (para keyed fragments en dropdowns categorizados). Removidos `Menu` y `X` (ya no se usan).
+- Eliminado estado `sidebarOpen`, `collapsedCategories`, función `toggleCategory`, función `renderSidebarNav`.
+- Nuevo layout del header (una sola fila):
+  - Izquierda: logo + nombre del comercio + vista actual (shrink-0)
+  - Centro (md+): nav tabs horizontales con icono + label (label hidden en <lg), overflow-x-auto si faltara espacio
+  - Derecha: menú mobile (todas las vistas categorizadas), menú "Más" desktop (solo no frecuentes), indicadores PWA, menú usuario
+- Eliminadas ambas sidebars (desktop fija + mobile drawer) y el overlay.
+- Main content ahora full-width (`flex-1 min-w-0`), sin contenedor `flex` intermedio.
+- Footer de versión (ComerciApp v4.0 + SW version) movido al final del menú de usuario.
+- `npx tsc --noEmit` limpio en src/. `bun run lint` limpio. Dev server activo.
+
+Stage Summary:
+- Layout cambiado de "top bar + sidebar 240px" a "top bar con nav integrado, contenido full-width".
+- Desktop (md+): 5 tabs frecuentes visibles + botón "Más" con dropdown categorizado (4 categorías: Ventas, Catálogo y Stock, Gestión Comercial, Sistema).
+- Mobile (<md): un solo botón menú con dropdown de TODAS las categorías (incluyendo frecuentes).
+- Responsive por rol: CAJERO ve 3 tabs (POS/Caja/Panel) y no ve "Más" (no tiene items adicionales); ADMIN ve 5 tabs + "Más" con 4 categorías.
+- Botón "Más" se resalta en emerald cuando la vista actual pertenece a ese menú.
