@@ -658,3 +658,59 @@ Stage Summary:
 - En POS: imagen + chips visibles tanto en grilla de productos como en carrito.
 - Alérgenos destacados con color rojo y ⚠ para alerta visual inmediata del cajero.
 - Autocompletado desde OFF: ahora completa 7 campos en total (name, description, brand, ingredients, imageUrl, labels[], allergens[]).
+
+---
+Task ID: bugfix-fetch-json
+Agent: main
+Task: Investigar y corregir error "Unexpected end of JSON input / Error al crear el producto" que impedía crear productos nuevos, y hardening general del flujo fetch→API→DB para evitar bugs similares.
+
+Work Log:
+- Inspeccionado `dev.log` del dev server. Encontrado error real:
+    `PrismaClientValidationError: Unknown argument 'brand'. Available options are marked with ?.`
+  → El Prisma Client estaba desactualizado respecto al schema (que sí tenía brand, labels, ingredients, allergens, imageUrl).
+- Causa raíz: al ejecutar `prisma db pull --force` para inspeccionar la DB, se sobreescribió `prisma/schema.prisma` perdiéndose todas las anotaciones (`@default(cuid())`, `@updatedAt`, comentarios, orden de modelos) Y el Prisma Client nunca se regeneró.
+- Restaurado `prisma/schema.prisma` desde git (`git checkout prisma/schema.prisma`).
+- Verificado con `prisma db push --skip-generate` que la DB ya tiene las columnas nuevas (estaban en sync).
+- Ejecutado `npx prisma generate` para regenerar el Prisma Client con los campos nuevos. Verificado con script `scripts/test-prisma-fields.ts` que el cliente ya reconoce `brand`, `labels`, `ingredients`, `allergens`, `imageUrl` y que `create()` con estos campos funciona.
+- Creado `src/lib/fetch.ts` con helpers `safeFetchJSON` y `safeFetchArray` que:
+    - Leen el body como texto SIEMPRE (en vez de `await res.json()`)
+    - Hacen try-catch del JSON.parse
+    - Devuelven `{ ok, status, data, error }` tipado
+    - Nunca tiran excepción por parseo (solo por error de red)
+  Esto evita el "Unexpected end of JSON input" cuando el server devuelve un body vacío o HTML.
+- Refactorizado `src/components/views/products-view.tsx`:
+    - Importado `safeFetchJSON` / `safeFetchArray`
+    - `load()` ahora usa `safeFetchArray` con try-catch y fallback a []
+    - `handleSave()` ahora usa `safeFetchJSON` y muestra error con `toast.error("Error al guardar el producto", { description: msg })`
+    - `handleBarcodeLookup()` ahora usa `safeFetchJSON`
+    - `handleDelete()`, `handleAddCategory()`, `handleDeleteCategory()` migrados a `safeFetchJSON`
+- Refactorizado `src/components/views/pos-view.tsx`:
+    - Importado `safeFetchJSON`
+    - `useEffect` de carga inicial migrado a `safeFetchJSON` con manejo de arrays y catch global (no rompe si un endpoint falla)
+    - `processSale()` migrado a `safeFetchJSON` y el refresh post-venta ahora es best-effort (try-catch silencioso) para no confundir al cajero si la venta ya se registró
+    - `printThermalSale()` migrado a `safeFetchJSON` para la verificación inicial, y el fetch del blob ahora chequea `res.ok` antes de llamar `.blob()`
+    - Flujo MercadoPago QR (creación de venta + creación de orden MP) migrado a `safeFetchJSON`
+    - Polling de estado MP migrado a `safeFetchJSON`
+- Hardening de `src/app/api/products/route.ts` (POST/PUT/DELETE/GET):
+    - Helpers `toNumber`, `toOptionalString`, `toStringOrFallback`, `toBool` para sanitizar input antes de Prisma
+    - try-catch alrededor de `req.json()` (devuelve 400 con JSON si body malformado)
+    - try-catch alrededor de todas las operaciones Prisma (devuelve 500 con JSON)
+    - Validación de campos obligatorios (name) y rango de precios
+    - Mensajes de error específicos para unique constraint (barcode/SKU duplicado)
+    - Status 201 en POST exitoso
+- Hardening de `src/app/api/categories/route.ts`: mismo patrón (try-catch en json parse y en operaciones Prisma, validación de name, manejo de P2025 en delete).
+- Hardening de `src/app/api/sales/route.ts`:
+    - GET envuelto en try-catch, limit acotado a [1,500] para evitar queries enormes
+    - POST envuelto en try-catch alrededor de toda la lógica de negocio y la transacción
+    - Validación de body.items (debe ser array no vacío)
+    - Validación de qty con `Number.isFinite`
+    - Mensaje específico para "Stock insuficiente"
+- `src/app/api/products/lookup/route.ts` ya estaba bien (try-catch + JSON always), confirmado sin cambios necesarios.
+- Verificado `bun run build` pasa sin errores: "Compiled successfully in 17.9s".
+- Script `scripts/test-barcode-lookup.ts` ejecutado: Open Food Facts sigue devolviendo correctamente nombres completos, etiquetas y alérgenos para códigos reales (Playadito, Nutella, Nescau, etc.).
+
+Stage Summary:
+- Causa raíz del bug "Unexpected end of JSON input": el Prisma Client no conocía los campos `brand`/`labels`/`ingredients`/`allergens`/`imageUrl` porque `prisma generate` nunca se había corrido después de agregarlos al schema. Cuando el cliente hacía POST con esos campos, Prisma tiraba un ValidationError → Next.js devolvía HTML de error 500 → el `await res.json()` del cliente tiraba "Unexpected end of JSON input".
+- Fix de raíz: `prisma generate` + restauración del schema desde git.
+- Fix defensivo (para que no vuelva a pasar): creado `src/lib/fetch.ts` con `safeFetchJSON`/`safeFetchArray` y migrados los componentes críticos (ProductsView, POSView) y las rutas `/api/products`, `/api/categories`, `/api/sales` a usar los helpers + try-catch en todas las operaciones Prisma. Cualquier error del server ahora se devuelve como JSON `{ error: string }` y el cliente lo muestra con un toast claro.
+- Creados artefactos: `src/lib/fetch.ts`, `scripts/test-prisma-fields.ts`. Modificados: `src/app/api/products/route.ts`, `src/app/api/categories/route.ts`, `src/app/api/sales/route.ts`, `src/components/views/products-view.tsx`, `src/components/views/pos-view.tsx`.

@@ -1,0 +1,1051 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useEffect, useState, useMemo } from "react";
+     4→     4→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+     5→     5→import { Button } from "@/components/ui/button";
+     6→     6→import { Input } from "@/components/ui/input";
+     7→     7→import { Label } from "@/components/ui/label";
+     8→     8→import { Badge } from "@/components/ui/badge";
+     9→     9→import { Textarea } from "@/components/ui/textarea";
+    10→    10→import { Switch } from "@/components/ui/switch";
+    11→    11→import {
+    12→    12→  Dialog,
+    13→    13→  DialogContent,
+    14→    14→  DialogDescription,
+    15→    15→  DialogFooter,
+    16→    16→  DialogHeader,
+    17→    17→  DialogTitle,
+    18→    18→  DialogTrigger,
+    19→    19→  DialogClose,
+    20→    20→} from "@/components/ui/dialog";
+    21→    21→import {
+    22→    22→  Select,
+    23→    23→  SelectContent,
+    24→    24→  SelectItem,
+    25→    25→  SelectTrigger,
+    26→    26→  SelectValue,
+    27→    27→} from "@/components/ui/select";
+    28→    28→import {
+    29→    29→  Table,
+    30→    30→  TableBody,
+    31→    31→  TableCell,
+    32→    32→  TableHead,
+    33→    33→  TableHeader,
+    34→    34→  TableRow,
+    35→    35→} from "@/components/ui/table";
+    36→    36→import {
+    37→    37→  AlertDialog,
+    38→    38→  AlertDialogAction,
+    39→    39→  AlertDialogCancel,
+    40→    40→  AlertDialogContent,
+    41→    41→  AlertDialogDescription,
+    42→    42→  AlertDialogFooter,
+    43→    43→  AlertDialogHeader,
+    44→    44→  AlertDialogTitle,
+    45→    45→} from "@/components/ui/alert-dialog";
+    46→    46→import { toast } from "sonner";
+    47→    47→import {
+    48→    48→  Plus,
+    49→    49→  Search,
+    50→    50→  Pencil,
+    51→    51→  Trash2,
+    52→    52→  Package,
+    53→    53→  Loader2,
+    54→    54→  Tag,
+    55→    55→  ScanLine,
+    56→    56→  CheckCircle2,
+    57→    57→  ImageOff,
+    58→    58→  ChevronDown,
+    59→    59→  ChevronRight,
+    60→    60→  AlertTriangle,
+    61→    61→  X,
+    62→    62→} from "lucide-react";
+    63→    63→import { useAppStore } from "@/store/app-store";
+    64→    64→import { formatCurrency, UNITS } from "@/lib/constants";
+    65→    65→
+    66→    66→interface Product {
+    67→    67→  id: string;
+    68→    68→  name: string;
+    69→    69→  description?: string;
+    70→    70→  barcode?: string;
+    71→    71→  sku?: string;
+    72→    72→  categoryId?: string;
+    73→    73→  category?: { id: string; name: string };
+    74→    74→  costPrice: number;
+    75→    75→  salePrice: number;
+    76→    76→  stock: number;
+    77→    77→  minStock: number;
+    78→    78→  unit: string;
+    79→    79→  active: boolean;
+    80→    80→  brand?: string;
+    81→    81→  labels?: string;
+    82→    82→  ingredients?: string;
+    83→    83→  allergens?: string;
+    84→    84→  imageUrl?: string;
+    85→    85→}
+    86→    86→
+    87→    87→interface Category {
+    88→    88→  id: string;
+    89→    89→  name: string;
+    90→    90→  _count?: { products: number };
+    91→    91→}
+    92→    92→
+    93→    93→const emptyForm = {
+    94→    94→  id: "",
+    95→    95→  name: "",
+    96→    96→  description: "",
+    97→    97→  barcode: "",
+    98→    98→  sku: "",
+    99→    99→  categoryId: "",
+   100→   100→  costPrice: 0,
+   101→   101→  salePrice: 0,
+   102→   102→  stock: 0,
+   103→   103→  minStock: 5,
+   104→   104→  unit: "UNIDAD",
+   105→   105→  active: true,
+   106→   106→  brand: "",
+   107→   107→  labels: "",
+   108→   108→  ingredients: "",
+   109→   109→  allergens: "",
+   110→   110→  imageUrl: "",
+   111→   111→};
+   112→   112→
+   113→   113→export function ProductsView() {
+   114→   114→  const { store } = useAppStore();
+   115→   115→  const [products, setProducts] = useState<Product[]>([]);
+   116→   116→  const [categories, setCategories] = useState<Category[]>([]);
+   117→   117→  const [loading, setLoading] = useState(true);
+   118→   118→  const [search, setSearch] = useState("");
+   119→   119→  const [filterCat, setFilterCat] = useState("all");
+   120→   120→  const [filterStock, setFilterStock] = useState("all");
+   121→   121→
+   122→   122→  const [formOpen, setFormOpen] = useState(false);
+   123→   123→  const [form, setForm] = useState<any>(emptyForm);
+   124→   124→  const [saving, setSaving] = useState(false);
+   125→   125→  const [deleteId, setDeleteId] = useState<string | null>(null);
+   126→   126→  const [catDialogOpen, setCatDialogOpen] = useState(false);
+   127→   127→  const [newCatName, setNewCatName] = useState("");
+   128→   128→
+   129→   129→  // Lookup por código de barras
+   130→   130→  const [lookupLoading, setLookupLoading] = useState(false);
+   131→   131→  const [lookupResult, setLookupResult] = useState<
+   132→   132→    | {
+   133→   133→        status: "idle" | "loading" | "found" | "notfound" | "error";
+   134→   134→        source?: string;
+   135→   135→        imageUrl?: string;
+   136→   136→        labels?: string[];
+   137→   137→        allergens?: string[];
+   138→   138→      }
+   139→   139→    | null
+   140→   140→  >(null);
+   141→   141→  // Sección colapsable de datos adicionales
+   142→   142→  const [showExtraFields, setShowExtraFields] = useState(false);
+   143→   143→  // Etiquetas y alérgenos editados como chips
+   144→   144→  const [labelChips, setLabelChips] = useState<string[]>([]);
+   145→   145→  const [allergenChips, setAllergenChips] = useState<string[]>([]);
+   146→   146→  const [labelInput, setLabelInput] = useState("");
+   147→   147→  const [allergenInput, setAllergenInput] = useState("");
+   148→   148→
+   149→   149→  async function handleBarcodeLookup() {
+   150→   150→    const code = (form.barcode || "").trim();
+   151→   151→    if (!code) {
+   152→   152→      toast.error("Ingresá un código de barras primero");
+   153→   153→      return;
+   154→   154→    }
+   155→   155→    setLookupLoading(true);
+   156→   156→    setLookupResult({ status: "loading" });
+   157→   157→    try {
+   158→   158→      const res = await fetch(`/api/products/lookup?barcode=${encodeURIComponent(code)}`);
+   159→   159→      const data = await res.json();
+   160→   160→      if (data.found) {
+   161→   161→        // Solo autocompletamos campos que el usuario aún no llenó.
+   162→   162→        setForm((prev: any) => ({
+   163→   163→          ...prev,
+   164→   164→          name: prev.name || data.name || "",
+   165→   165→          description: prev.description || data.description || data.brand || "",
+   166→   166→          barcode: prev.barcode || code,
+   167→   167→          brand: prev.brand || data.brand || "",
+   168→   168→          ingredients: prev.ingredients || data.ingredients || "",
+   169→   169→          imageUrl: prev.imageUrl || data.imageUrl || "",
+   170→   170→        }));
+   171→   171→        // Merge de etiquetas y alérgenos (sin duplicar)
+   172→   172→        if (Array.isArray(data.labels) && data.labels.length > 0) {
+   173→   173→          setLabelChips((prev) =>
+   174→   174→            Array.from(new Set([...prev, ...data.labels])).slice(0, 15)
+   175→   175→          );
+   176→   176→          setShowExtraFields(true);
+   177→   177→        }
+   178→   178→        if (Array.isArray(data.allergens) && data.allergens.length > 0) {
+   179→   179→          setAllergenChips((prev) =>
+   180→   180→            Array.from(new Set([...prev, ...data.allergens])).slice(0, 15)
+   181→   181→          );
+   182→   182→          setShowExtraFields(true);
+   183→   183→        }
+   184→   184→        setLookupResult({
+   185→   185→          status: "found",
+   186→   186→          source: data.source,
+   187→   187→          imageUrl: data.imageUrl,
+   188→   188→          labels: data.labels,
+   189→   189→          allergens: data.allergens,
+   190→   190→        });
+   191→   191→        const sourceLabel =
+   192→   192→          data.source === "openfoodfacts" ? "Open Food Facts" : "UPC Item DB";
+   193→   193→        toast.success(`Producto encontrado en ${sourceLabel}`, {
+   194→   194→          description: data.name,
+   195→   195→        });
+   196→   196→      } else {
+   197→   197→        setLookupResult({ status: "notfound" });
+   198→   198→        toast.info("No se encontró el código en las bases de datos públicas", {
+   199→   199→          description: "Completá los datos manualmente",
+   200→   200→        });
+   201→   201→      }
+   202→   202→    } catch (e: any) {
+   203→   203→      setLookupResult({ status: "error" });
+   204→   204→      toast.error("No se pudo consultar la base de productos");
+   205→   205→    } finally {
+   206→   206→      setLookupLoading(false);
+   207→   207→    }
+   208→   208→  }
+   209→   209→
+   210→   210→  function resetLookup() {
+   211→   211→    setLookupResult(null);
+   212→   212→  }
+   213→   213→
+   214→   214→  const symbol = store?.currencySymbol || "$";
+   215→   215→
+   216→   216→  async function load() {
+   217→   217→    setLoading(true);
+   218→   218→    const [p, c] = await Promise.all([
+   219→   219→      fetch("/api/products").then((r) => r.json()),
+   220→   220→      fetch("/api/categories").then((r) => r.json()),
+   221→   221→    ]);
+   222→   222→    setProducts(p);
+   223→   223→    setCategories(c);
+   224→   224→    setLoading(false);
+   225→   225→  }
+   226→   226→
+   227→   227→  useEffect(() => {
+   228→   228→    load();
+   229→   229→  }, []);
+   230→   230→
+   231→   231→  const filtered = useMemo(() => {
+   232→   232→    return products.filter((p) => {
+   233→   233→      const matchSearch =
+   234→   234→        !search ||
+   235→   235→        p.name.toLowerCase().includes(search.toLowerCase()) ||
+   236→   236→        p.barcode?.includes(search) ||
+   237→   237→        p.sku?.toLowerCase().includes(search.toLowerCase());
+   238→   238→      const matchCat =
+   239→   239→        filterCat === "all" || p.categoryId === filterCat;
+   240→   240→      const matchStock =
+   241→   241→        filterStock === "all" ||
+   242→   242→        (filterStock === "low" && p.stock <= p.minStock) ||
+   243→   243→        (filterStock === "out" && p.stock <= 0) ||
+   244→   244→        (filterStock === "ok" && p.stock > p.minStock);
+   245→   245→      return matchSearch && matchCat && matchStock;
+   246→   246→    });
+   247→   247→  }, [products, search, filterCat, filterStock]);
+   248→   248→
+   249→   249→  function openNew() {
+   250→   250→    setForm({ ...emptyForm });
+   251→   251→    resetLookup();
+   252→   252→    setLabelChips([]);
+   253→   253→    setAllergenChips([]);
+   254→   254→    setShowExtraFields(false);
+   255→   255→    setFormOpen(true);
+   256→   256→  }
+   257→   257→
+   258→   258→  function openEdit(p: Product) {
+   259→   259→    setForm({
+   260→   260→      ...p,
+   261→   261→      costPrice: p.costPrice,
+   262→   262→      salePrice: p.salePrice,
+   263→   263→      stock: p.stock,
+   264→   264→      minStock: p.minStock,
+   265→   265→      adjustReason: "",
+   266→   266→    });
+   267→   267→    resetLookup();
+   268→   268→    setLabelChips(p.labels ? p.labels.split(",").map((s) => s.trim()).filter(Boolean) : []);
+   269→   269→    setAllergenChips(p.allergens ? p.allergens.split(",").map((s) => s.trim()).filter(Boolean) : []);
+   270→   270→    setShowExtraFields(
+   271→   271→      !!(p.brand || p.ingredients || p.labels || p.allergens || p.imageUrl)
+   272→   272→    );
+   273→   273→    setFormOpen(true);
+   274→   274→  }
+   275→   275→
+   276→   276→  async function handleSave() {
+   277→   277→    if (!form.name || !form.salePrice) {
+   278→   278→      toast.error("Nombre y precio de venta son obligatorios");
+   279→   279→      return;
+   280→   280→    }
+   281→   281→    setSaving(true);
+   282→   282→    try {
+   283→   283→      const method = form.id ? "PUT" : "POST";
+   284→   284→      const payload = {
+   285→   285→        ...form,
+   286→   286→        labels: labelChips.join(","),
+   287→   287→        allergens: allergenChips.join(","),
+   288→   288→      };
+   289→   289→      const res = await fetch("/api/products", {
+   290→   290→        method,
+   291→   291→        headers: { "Content-Type": "application/json" },
+   292→   292→        body: JSON.stringify(payload),
+   293→   293→      });
+   294→   294→      const data = await res.json();
+   295→   295→      if (!res.ok) throw new Error(data.error);
+   296→   296→      toast.success(form.id ? "Producto actualizado" : "Producto creado");
+   297→   297→      setFormOpen(false);
+   298→   298→      load();
+   299→   299→    } catch (e: any) {
+   300→   300→      toast.error(e.message);
+   301→   301→    } finally {
+   302→   302→      setSaving(false);
+   303→   303→    }
+   304→   304→  }
+   305→   305→
+   306→   306→  async function handleDelete() {
+   307→   307→    if (!deleteId) return;
+   308→   308→    try {
+   309→   309→      const res = await fetch(`/api/products?id=${deleteId}`, { method: "DELETE" });
+   310→   310→      const data = await res.json();
+   311→   311→      if (!res.ok) throw new Error(data.error);
+   312→   312→      toast.success("Producto desactivado");
+   313→   313→      setDeleteId(null);
+   314→   314→      load();
+   315→   315→    } catch (e: any) {
+   316→   316→      toast.error(e.message);
+   317→   317→    }
+   318→   318→  }
+   319→   319→
+   320→   320→  async function handleAddCategory() {
+   321→   321→    if (!newCatName.trim()) return;
+   322→   322→    try {
+   323→   323→      const res = await fetch("/api/categories", {
+   324→   324→        method: "POST",
+   325→   325→        headers: { "Content-Type": "application/json" },
+   326→   326→        body: JSON.stringify({ name: newCatName }),
+   327→   327→      });
+   328→   328→      const data = await res.json();
+   329→   329→      if (!res.ok) throw new Error(data.error);
+   330→   330→      toast.success("Categoría creada");
+   331→   331→      setNewCatName("");
+   332→   332→      setCatDialogOpen(false);
+   333→   333→      load();
+   334→   334→    } catch (e: any) {
+   335→   335→      toast.error(e.message);
+   336→   336→    }
+   337→   337→  }
+   338→   338→
+   339→   339→  async function handleDeleteCategory(id: string, name: string) {
+   340→   340→    if (!confirm(`¿Eliminar la categoría "${name}"? Los productos quedarán sin categoría.`)) return;
+   341→   341→    try {
+   342→   342→      const res = await fetch(`/api/categories?id=${id}`, { method: "DELETE" });
+   343→   343→      const data = await res.json();
+   344→   344→      if (!res.ok) throw new Error(data.error);
+   345→   345→      toast.success("Categoría eliminada");
+   346→   346→      load();
+   347→   347→    } catch (e: any) {
+   348→   348→      toast.error(e.message);
+   349→   349→    }
+   350→   350→  }
+   351→   351→
+   352→   352→  return (
+   353→   353→    <div className="space-y-4">
+   354→   354→      <div className="flex items-center justify-between flex-wrap gap-3">
+   355→   355→        <div>
+   356→   356→          <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
+   357→   357→          <p className="text-sm text-muted-foreground">
+   358→   358→            {products.length} productos · {categories.length} categorías
+   359→   359→          </p>
+   360→   360→        </div>
+   361→   361→        <div className="flex gap-2">
+   362→   362→          <Dialog open={catDialogOpen} onOpenChange={setCatDialogOpen}>
+   363→   363→            <DialogTrigger asChild>
+   364→   364→              <Button variant="outline">
+   365→   365→                <Tag className="w-4 h-4 mr-2" />
+   366→   366→                Categorías
+   367→   367→              </Button>
+   368→   368→            </DialogTrigger>
+   369→   369→            <DialogContent>
+   370→   370→              <DialogHeader>
+   371→   371→                <DialogTitle>Gestionar categorías</DialogTitle>
+   372→   372→                <DialogDescription>
+   373→   373→                  Agregá o eliminá categorías para organizar tus productos
+   374→   374→                </DialogDescription>
+   375→   375→              </DialogHeader>
+   376→   376→              <div className="flex gap-2">
+   377→   377→                <Input
+   378→   378→                  placeholder="Nueva categoría..."
+   379→   379→                  value={newCatName}
+   380→   380→                  onChange={(e) => setNewCatName(e.target.value)}
+   381→   381→                  onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+   382→   382→                />
+   383→   383→                <Button onClick={handleAddCategory} className="bg-indigo-600 hover:bg-indigo-700">
+   384→   384→                  <Plus className="w-4 h-4" />
+   385→   385→                </Button>
+   386→   386→              </div>
+   387→   387→              <div className="max-h-60 overflow-y-auto space-y-1 mt-2">
+   388→   388→                {categories.length === 0 ? (
+   389→   389→                  <p className="text-sm text-muted-foreground text-center py-4">
+   390→   390→                    Sin categorías
+   391→   391→                  </p>
+   392→   392→                ) : (
+   393→   393→                  categories.map((c) => (
+   394→   394→                    <div
+   395→   395→                      key={c.id}
+   396→   396→                      className="flex items-center justify-between p-2 rounded-md bg-muted/50"
+   397→   397→                    >
+   398→   398→                      <div>
+   399→   399→                        <p className="text-sm font-medium">{c.name}</p>
+   400→   400→                        <p className="text-xs text-muted-foreground">
+   401→   401→                          {c._count?.products || 0} productos
+   402→   402→                        </p>
+   403→   403→                      </div>
+   404→   404→                      <Button
+   405→   405→                        variant="ghost"
+   406→   406→                        size="icon"
+   407→   407→                        className="h-7 w-7 text-red-600"
+   408→   408→                        onClick={() => handleDeleteCategory(c.id, c.name)}
+   409→   409→                      >
+   410→   410→                        <Trash2 className="w-3.5 h-3.5" />
+   411→   411→                      </Button>
+   412→   412→                    </div>
+   413→   413→                  ))
+   414→   414→                )}
+   415→   415→              </div>
+   416→   416→            </DialogContent>
+   417→   417→          </Dialog>
+   418→   418→
+   419→   419→          <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
+   420→   420→            <Plus className="w-4 h-4 mr-2" />
+   421→   421→            Nuevo producto
+   422→   422→          </Button>
+   423→   423→        </div>
+   424→   424→      </div>
+   425→   425→
+   426→   426→      {/* Filtros */}
+   427→   427→      <Card>
+   428→   428→        <CardContent className="p-3">
+   429→   429→          <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+   430→   430→            <div className="relative">
+   431→   431→              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   432→   432→              <Input
+   433→   433→                placeholder="Buscar por nombre, código o SKU..."
+   434→   434→                value={search}
+   435→   435→                onChange={(e) => setSearch(e.target.value)}
+   436→   436→                className="pl-9"
+   437→   437→              />
+   438→   438→            </div>
+   439→   439→            <Select value={filterCat} onValueChange={setFilterCat}>
+   440→   440→              <SelectTrigger>
+   441→   441→                <SelectValue placeholder="Todas las categorías" />
+   442→   442→              </SelectTrigger>
+   443→   443→              <SelectContent>
+   444→   444→                <SelectItem value="all">Todas las categorías</SelectItem>
+   445→   445→                {categories.map((c) => (
+   446→   446→                  <SelectItem key={c.id} value={c.id}>
+   447→   447→                    {c.name}
+   448→   448→                  </SelectItem>
+   449→   449→                ))}
+   450→   450→              </SelectContent>
+   451→   451→            </Select>
+   452→   452→            <Select value={filterStock} onValueChange={setFilterStock}>
+   453→   453→              <SelectTrigger>
+   454→   454→                <SelectValue />
+   455→   455→              </SelectTrigger>
+   456→   456→              <SelectContent>
+   457→   457→                <SelectItem value="all">Todo el stock</SelectItem>
+   458→   458→                <SelectItem value="ok">Stock OK</SelectItem>
+   459→   459→                <SelectItem value="low">Stock bajo</SelectItem>
+   460→   460→                <SelectItem value="out">Sin stock</SelectItem>
+   461→   461→              </SelectContent>
+   462→   462→            </Select>
+   463→   463→          </div>
+   464→   464→        </CardContent>
+   465→   465→      </Card>
+   466→   466→
+   467→   467→      {/* Tabla */}
+   468→   468→      <Card>
+   469→   469→        <CardContent className="p-0">
+   470→   470→          {loading ? (
+   471→   471→            <div className="p-8 text-center text-muted-foreground">
+   472→   472→              <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+   473→   473→              Cargando productos...
+   474→   474→            </div>
+   475→   475→          ) : filtered.length === 0 ? (
+   476→   476→            <div className="p-12 text-center">
+   477→   477→              <Package className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+   478→   478→              <p className="text-sm text-muted-foreground">
+   479→   479→                {search || filterCat !== "all" || filterStock !== "all"
+   480→   480→                  ? "No se encontraron productos con esos filtros"
+   481→   481→                  : "Aún no tenés productos. Creá el primero!"}
+   482→   482→              </p>
+   483→   483→            </div>
+   484→   484→          ) : (
+   485→   485→            <div className="overflow-x-auto">
+   486→   486→              <Table>
+   487→   487→                <TableHeader>
+   488→   488→                  <TableRow>
+   489→   489→                    <TableHead>Nombre</TableHead>
+   490→   490→                    <TableHead className="hidden md:table-cell">Categoría</TableHead>
+   491→   491→                    <TableHead className="text-right">Costo</TableHead>
+   492→   492→                    <TableHead className="text-right">Precio</TableHead>
+   493→   493→                    <TableHead className="text-right">Stock</TableHead>
+   494→   494→                    <TableHead className="text-center">Estado</TableHead>
+   495→   495→                    <TableHead className="text-right">Acciones</TableHead>
+   496→   496→                  </TableRow>
+   497→   497→                </TableHeader>
+   498→   498→                <TableBody>
+   499→   499→                  {filtered.map((p) => (
+   500→   500→                    <TableRow key={p.id} className={!p.active ? "opacity-50" : ""}>
+   501→   501→                      <TableCell>
+   502→   502→                        <div>
+   503→   503→                          <p className="font-medium">{p.name}</p>
+   504→   504→                          {(p.barcode || p.sku) && (
+   505→   505→                            <p className="text-xs text-muted-foreground">
+   506→   506→                              {p.barcode && `Cód: ${p.barcode}`}
+   507→   507→                              {p.barcode && p.sku && " · "}
+   508→   508→                              {p.sku && `SKU: ${p.sku}`}
+   509→   509→                            </p>
+   510→   510→                          )}
+   511→   511→                        </div>
+   512→   512→                      </TableCell>
+   513→   513→                      <TableCell className="hidden md:table-cell">
+   514→   514→                        {p.category ? (
+   515→   515→                          <Badge variant="outline">{p.category.name}</Badge>
+   516→   516→                        ) : (
+   517→   517→                          <span className="text-xs text-muted-foreground">—</span>
+   518→   518→                        )}
+   519→   519→                      </TableCell>
+   520→   520→                      <TableCell className="text-right text-muted-foreground">
+   521→   521→                        {formatCurrency(p.costPrice, symbol)}
+   522→   522→                      </TableCell>
+   523→   523→                      <TableCell className="text-right font-semibold">
+   524→   524→                        {formatCurrency(p.salePrice, symbol)}
+   525→   525→                      </TableCell>
+   526→   526→                      <TableCell className="text-right">
+   527→   527→                        <span
+   528→   528→                          className={
+   529→   529→                            p.stock <= 0
+   530→   530→                              ? "text-red-600 font-medium"
+   531→   531→                              : p.stock <= p.minStock
+   532→   532→                              ? "text-amber-600 font-medium"
+   533→   533→                              : "text-indigo-700"
+   534→   534→                          }
+   535→   535→                        >
+   536→   536→                          {p.stock} {p.unit === "KG" ? "kg" : "u"}
+   537→   537→                        </span>
+   538→   538→                      </TableCell>
+   539→   539→                      <TableCell className="text-center">
+   540→   540→                        {p.active ? (
+   541→   541→                          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
+   542→   542→                            Activo
+   543→   543→                          </Badge>
+   544→   544→                        ) : (
+   545→   545→                          <Badge variant="secondary">Inactivo</Badge>
+   546→   546→                        )}
+   547→   547→                      </TableCell>
+   548→   548→                      <TableCell className="text-right">
+   549→   549→                        <Button
+   550→   550→                          variant="ghost"
+   551→   551→                          size="icon"
+   552→   552→                          className="h-8 w-8"
+   553→   553→                          onClick={() => openEdit(p)}
+   554→   554→                        >
+   555→   555→                          <Pencil className="w-3.5 h-3.5" />
+   556→   556→                        </Button>
+   557→   557→                        <Button
+   558→   558→                          variant="ghost"
+   559→   559→                          size="icon"
+   560→   560→                          className="h-8 w-8 text-red-600"
+   561→   561→                          onClick={() => setDeleteId(p.id)}
+   562→   562→                        >
+   563→   563→                          <Trash2 className="w-3.5 h-3.5" />
+   564→   564→                        </Button>
+   565→   565→                      </TableCell>
+   566→   566→                    </TableRow>
+   567→   567→                  ))}
+   568→   568→                </TableBody>
+   569→   569→              </Table>
+   570→   570→            </div>
+   571→   571→          )}
+   572→   572→        </CardContent>
+   573→   573→      </Card>
+   574→   574→
+   575→   575→      {/* Form dialog */}
+   576→   576→      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+   577→   577→        <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[92vh] overflow-y-auto">
+   578→   578→          <DialogHeader>
+   579→   579→            <DialogTitle>{form.id ? "Editar producto" : "Nuevo producto"}</DialogTitle>
+   580→   580→            <DialogDescription>
+   581→   581→              {form.id
+   582→   582→                ? "Modificá los datos del producto. Si cambiás el stock, se registrará un ajuste."
+   583→   583→                : "Completá los datos del nuevo producto."}
+   584→   584→            </DialogDescription>
+   585→   585→          </DialogHeader>
+   586→   586→
+   587→   587→          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+   588→   588→            <div className="space-y-2 sm:col-span-2">
+   589→   589→              <Label htmlFor="name">Nombre *</Label>
+   590→   590→              <Input
+   591→   591→                id="name"
+   592→   592→                value={form.name}
+   593→   593→                onChange={(e) => setForm({ ...form, name: e.target.value })}
+   594→   594→              />
+   595→   595→            </div>
+   596→   596→            <div className="space-y-2 sm:col-span-2">
+   597→   597→              <div className="flex items-center justify-between">
+   598→   598→                <Label htmlFor="barcode">Código de barras</Label>
+   599→   599→                <span className="text-xs text-muted-foreground">
+   600→   600→                  Escaneá con lector o escribí y presioná Enter
+   601→   601→                </span>
+   602→   602→              </div>
+   603→   603→              <div className="flex gap-2">
+   604→   604→                <div className="relative flex-1">
+   605→   605→                  <ScanLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   606→   606→                  <Input
+   607→   607→                    id="barcode"
+   608→   608→                    placeholder="Ej: 7790895005231"
+   609→   609→                    value={form.barcode}
+   610→   610→                    onChange={(e) => {
+   611→   611→                      setForm({ ...form, barcode: e.target.value });
+   612→   612→                      if (lookupResult) resetLookup();
+   613→   613→                    }}
+   614→   614→                    onKeyDown={(e) => {
+   615→   615→                      if (e.key === "Enter" && !lookupLoading) {
+   616→   616→                        e.preventDefault();
+   617→   617→                        handleBarcodeLookup();
+   618→   618→                      }
+   619→   619→                    }}
+   620→   620→                    className="pl-9"
+   621→   621→                  />
+   622→   622→                </div>
+   623→   623→                <Button
+   624→   624→                  type="button"
+   625→   625→                  variant="secondary"
+   626→   626→                  onClick={handleBarcodeLookup}
+   627→   627→                  disabled={lookupLoading || !form.barcode}
+   628→   628→                  title="Buscar datos del producto por código"
+   629→   629→                >
+   630→   630→                  {lookupLoading ? (
+   631→   631→                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+   632→   632→                  ) : (
+   633→   633→                    <Search className="w-4 h-4 mr-2" />
+   634→   634→                  )}
+   635→   635→                  Buscar
+   636→   636→                </Button>
+   637→   637→              </div>
+   638→   638→              {/* Estado del lookup */}
+   639→   639→              {lookupResult?.status === "loading" && (
+   640→   640→                <p className="text-xs text-muted-foreground flex items-center gap-1">
+   641→   641→                  <Loader2 className="w-3 h-3 animate-spin" />
+   642→   642→                  Consultando base de datos de productos...
+   643→   643→                </p>
+   644→   644→              )}
+   645→   645→              {lookupResult?.status === "found" && (
+   646→   646→                <div className="flex items-start gap-3 p-3 rounded-md bg-emerald-50 border border-emerald-200">
+   647→   647→                  {lookupResult.imageUrl ? (
+   648→   648→                    // eslint-disable-next-line @next/next/no-img-element
+   649→   649→                    <img
+   650→   650→                      src={lookupResult.imageUrl}
+   651→   651→                      alt="Producto"
+   652→   652→                      className="w-14 h-14 rounded-md object-cover border bg-white"
+   653→   653→                      onError={(e) => {
+   654→   654→                        (e.currentTarget as HTMLImageElement).style.display = "none";
+   655→   655→                      }}
+   656→   656→                    />
+   657→   657→                  ) : (
+   658→   658→                    <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center">
+   659→   659→                      <ImageOff className="w-5 h-5 text-muted-foreground" />
+   660→   660→                    </div>
+   661→   661→                  )}
+   662→   662→                  <div className="flex-1 min-w-0">
+   663→   663→                    <p className="text-xs font-medium text-emerald-800 flex items-center gap-1">
+   664→   664→                      <CheckCircle2 className="w-3.5 h-3.5" />
+   665→   665→                      Encontrado en{" "}
+   666→   666→                      {lookupResult.source === "openfoodfacts"
+   667→   667→                        ? "Open Food Facts"
+   668→   668→                        : "UPC Item DB"}
+   669→   669→                    </p>
+   670→   670→                    <p className="text-xs text-emerald-700 mt-0.5">
+   671→   671→                      Se autocompletaron nombre y descripción. Revisá precios y stock.
+   672→   672→                    </p>
+   673→   673→                  </div>
+   674→   674→                </div>
+   675→   675→              )}
+   676→   676→              {lookupResult?.status === "notfound" && (
+   677→   677→                <p className="text-xs text-amber-600">
+   678→   678→                  No se encontró en bases públicas. Completá los datos manualmente.
+   679→   679→                </p>
+   680→   680→              )}
+   681→   681→              {lookupResult?.status === "error" && (
+   682→   682→                <p className="text-xs text-red-600">
+   683→   683→                  Error al consultar. Verificá tu conexión e intentá nuevamente.
+   684→   684→                </p>
+   685→   685→              )}
+   686→   686→            </div>
+   687→   687→            <div className="space-y-2">
+   688→   688→              <Label htmlFor="sku">SKU</Label>
+   689→   689→              <Input
+   690→   690→                id="sku"
+   691→   691→                value={form.sku}
+   692→   692→                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+   693→   693→              />
+   694→   694→            </div>
+   695→   695→            <div className="space-y-2">
+   696→   696→              <Label htmlFor="category">Categoría</Label>
+   697→   697→              <Select
+   698→   698→                value={form.categoryId || "none"}
+   699→   699→                onValueChange={(v) =>
+   700→   700→                  setForm({ ...form, categoryId: v === "none" ? null : v })
+   701→   701→                }
+   702→   702→              >
+   703→   703→                <SelectTrigger>
+   704→   704→                  <SelectValue placeholder="Sin categoría" />
+   705→   705→                </SelectTrigger>
+   706→   706→                <SelectContent>
+   707→   707→                  <SelectItem value="none">Sin categoría</SelectItem>
+   708→   708→                  {categories.map((c) => (
+   709→   709→                    <SelectItem key={c.id} value={c.id}>
+   710→   710→                      {c.name}
+   711→   711→                    </SelectItem>
+   712→   712→                  ))}
+   713→   713→                </SelectContent>
+   714→   714→              </Select>
+   715→   715→            </div>
+   716→   716→            <div className="space-y-2">
+   717→   717→              <Label htmlFor="unit">Unidad</Label>
+   718→   718→              <Select
+   719→   719→                value={form.unit}
+   720→   720→                onValueChange={(v) => setForm({ ...form, unit: v })}
+   721→   721→              >
+   722→   722→                <SelectTrigger>
+   723→   723→                  <SelectValue />
+   724→   724→                </SelectTrigger>
+   725→   725→                <SelectContent>
+   726→   726→                  {UNITS.map((u) => (
+   727→   727→                    <SelectItem key={u.value} value={u.value}>
+   728→   728→                      {u.label}
+   729→   729→                    </SelectItem>
+   730→   730→                  ))}
+   731→   731→                </SelectContent>
+   732→   732→              </Select>
+   733→   733→            </div>
+   734→   734→            <div className="space-y-2">
+   735→   735→              <Label htmlFor="costPrice">Precio de costo</Label>
+   736→   736→              <Input
+   737→   737→                id="costPrice"
+   738→   738→                type="number"
+   739→   739→                step="0.01"
+   740→   740→                value={form.costPrice}
+   741→   741→                onChange={(e) =>
+   742→   742→                  setForm({ ...form, costPrice: Number(e.target.value) })
+   743→   743→                }
+   744→   744→              />
+   745→   745→            </div>
+   746→   746→            <div className="space-y-2">
+   747→   747→              <Label htmlFor="salePrice">Precio de venta *</Label>
+   748→   748→              <Input
+   749→   749→                id="salePrice"
+   750→   750→                type="number"
+   751→   751→                step="0.01"
+   752→   752→                value={form.salePrice}
+   753→   753→                onChange={(e) =>
+   754→   754→                  setForm({ ...form, salePrice: Number(e.target.value) })
+   755→   755→                }
+   756→   756→              />
+   757→   757→              {form.costPrice > 0 && form.salePrice > 0 && (
+   758→   758→                <p className="text-xs text-muted-foreground">
+   759→   759→                  Margen:{" "}
+   760→   760→                  {(
+   761→   761→                    ((form.salePrice - form.costPrice) / form.costPrice) *
+   762→   762→                    100
+   763→   763→                  ).toFixed(1)}
+   764→   764→                  %
+   765→   765→                </p>
+   766→   766→              )}
+   767→   767→            </div>
+   768→   768→            <div className="space-y-2">
+   769→   769→              <Label htmlFor="stock">
+   770→   770→                {form.id ? "Stock (ajuste)" : "Stock inicial"}
+   771→   771→              </Label>
+   772→   772→              <Input
+   773→   773→                id="stock"
+   774→   774→                type="number"
+   775→   775→                step="0.01"
+   776→   776→                value={form.stock}
+   777→   777→                onChange={(e) =>
+   778→   778→                  setForm({ ...form, stock: Number(e.target.value) })
+   779→   779→                }
+   780→   780→              />
+   781→   781→            </div>
+   782→   782→            <div className="space-y-2">
+   783→   783→              <Label htmlFor="minStock">Stock mínimo</Label>
+   784→   784→              <Input
+   785→   785→                id="minStock"
+   786→   786→                type="number"
+   787→   787→                step="0.01"
+   788→   788→                value={form.minStock}
+   789→   789→                onChange={(e) =>
+   790→   790→                  setForm({ ...form, minStock: Number(e.target.value) })
+   791→   791→                }
+   792→   792→              />
+   793→   793→            </div>
+   794→   794→            {form.id && (
+   795→   795→              <div className="space-y-2 sm:col-span-2">
+   796→   796→                <Label htmlFor="adjustReason">Motivo del ajuste (opcional)</Label>
+   797→   797→                <Input
+   798→   798→                  id="adjustReason"
+   799→   799→                  placeholder="Ej: Recuento de inventario"
+   800→   800→                  value={form.adjustReason}
+   801→   801→                  onChange={(e) =>
+   802→   802→                    setForm({ ...form, adjustReason: e.target.value })
+   803→   803→                  }
+   804→   804→                />
+   805→   805→              </div>
+   806→   806→            )}
+   807→   807→            <div className="space-y-2 sm:col-span-2">
+   808→   808→              <Label htmlFor="description">Descripción</Label>
+   809→   809→              <Textarea
+   810→   810→                id="description"
+   811→   811→                value={form.description}
+   812→   812→                onChange={(e) =>
+   813→   813→                  setForm({ ...form, description: e.target.value })
+   814→   814→                }
+   815→   815→                rows={2}
+   816→   816→              />
+   817→   817→            </div>
+   818→   818→            <div className="flex items-center gap-2 sm:col-span-2">
+   819→   819→              <Switch
+   820→   820→                id="active"
+   821→   821→                checked={form.active}
+   822→   822→                onCheckedChange={(v) => setForm({ ...form, active: v })}
+   823→   823→              />
+   824→   824→              <Label htmlFor="active">Producto activo (visible en POS)</Label>
+   825→   825→            </div>
+   826→   826→
+   827→   827→            {/* Sección colapsable: datos adicionales */}
+   828→   828→            <div className="sm:col-span-2 border rounded-lg overflow-hidden">
+   829→   829→              <button
+   830→   830→                type="button"
+   831→   831→                onClick={() => setShowExtraFields((v) => !v)}
+   832→   832→                className="w-full flex items-center justify-between p-3 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+   833→   833→              >
+   834→   834→                <span className="flex items-center gap-2 text-sm font-medium">
+   835→   835→                  {showExtraFields ? (
+   836→   836→                    <ChevronDown className="w-4 h-4" />
+   837→   837→                  ) : (
+   838→   838→                    <ChevronRight className="w-4 h-4" />
+   839→   839→                  )}
+   840→   840→                  Datos adicionales del producto
+   841→   841→                </span>
+   842→   842→                <span className="text-xs text-muted-foreground">
+   843→   843→                  {(labelChips.length > 0 ||
+   844→   844→                    allergenChips.length > 0 ||
+   845→   845→                    form.brand ||
+   846→   846→                    form.ingredients) && (
+   847→   847→                    <Badge variant="secondary" className="ml-1">
+   848→   848→                      Autocompletado
+   849→   849→                    </Badge>
+   850→   850→                  )}
+   851→   851→                </span>
+   852→   852→              </button>
+   853→   853→              {showExtraFields && (
+   854→   854→                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 p-4">
+   855→   855→                  {/* Marca */}
+   856→   856→                  <div className="space-y-2">
+   857→   857→                    <Label htmlFor="brand">Marca</Label>
+   858→   858→                    <Input
+   859→   859→                      id="brand"
+   860→   860→                      placeholder="Ej: LIEBIG, Coca-Cola, Amanda"
+   861→   861→                      value={form.brand || ""}
+   862→   862→                      onChange={(e) =>
+   863→   863→                        setForm({ ...form, brand: e.target.value })
+   864→   864→                      }
+   865→   865→                    />
+   866→   866→                  </div>
+   867→   867→
+   868→   868→                  {/* Imagen (URL) */}
+   869→   869→                  <div className="space-y-2">
+   870→   870→                    <Label htmlFor="imageUrl">Imagen del producto (URL)</Label>
+   871→   871→                    <div className="flex gap-2">
+   872→   872→                      <Input
+   873→   873→                        id="imageUrl"
+   874→   874→                        placeholder="https://..."
+   875→   875→                        value={form.imageUrl || ""}
+   876→   876→                        onChange={(e) =>
+   877→   877→                          setForm({ ...form, imageUrl: e.target.value })
+   878→   878→                        }
+   879→   879→                      />
+   880→   880→                      {form.imageUrl && (
+   881→   881→                        // eslint-disable-next-line @next/next/no-img-element
+   882→   882→                        <img
+   883→   883→                          src={form.imageUrl}
+   884→   884→                          alt=""
+   885→   885→                          className="w-10 h-10 rounded border object-cover bg-white"
+   886→   886→                          onError={(e) => {
+   887→   887→                            (e.currentTarget as HTMLImageElement).style.display =
+   888→   888→                              "none";
+   889→   889→                          }}
+   890→   890→                        />
+   891→   891→                      )}
+   892→   892→                    </div>
+   893→   893→                  </div>
+   894→   894→
+   895→   895→                  {/* Etiquetas (chips editables) */}
+   896→   896→                  <div className="space-y-2 sm:col-span-2">
+   897→   897→                    <Label>Etiquetas</Label>
+   898→   898→                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-md border bg-background">
+   899→   899→                      {labelChips.length === 0 && (
+   900→   900→                        <span className="text-xs text-muted-foreground">
+   901→   901→                          Sin etiquetas. Ej: Sin TACC, Vegano, Orgánico...
+   902→   902→                        </span>
+   903→   903→                      )}
+   904→   904→                      {labelChips.map((label) => (
+   905→   905→                        <Badge
+   906→   906→                          key={label}
+   907→   907→                          variant="secondary"
+   908→   908→                          className="gap-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+   909→   909→                        >
+   910→   910→                          {label}
+   911→   911→                          <button
+   912→   912→                            type="button"
+   913→   913→                            onClick={() =>
+   914→   914→                              setLabelChips((prev) =>
+   915→   915→                                prev.filter((l) => l !== label)
+   916→   916→                              )
+   917→   917→                            }
+   918→   918→                            className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"
+   919→   919→                          >
+   920→   920→                            <X className="w-3 h-3" />
+   921→   921→                          </button>
+   922→   922→                        </Badge>
+   923→   923→                      ))}
+   924→   924→                    </div>
+   925→   925→                    <Input
+   926→   926→                      placeholder="Escribí una etiqueta y presioná Enter..."
+   927→   927→                      value={labelInput}
+   928→   928→                      onChange={(e) => setLabelInput(e.target.value)}
+   929→   929→                      onKeyDown={(e) => {
+   930→   930→                        if (e.key === "Enter" && labelInput.trim()) {
+   931→   931→                          e.preventDefault();
+   932→   932→                          const v = labelInput.trim();
+   933→   933→                          if (!labelChips.includes(v)) {
+   934→   934→                            setLabelChips((prev) => [...prev, v].slice(0, 15));
+   935→   935→                          }
+   936→   936→                          setLabelInput("");
+   937→   937→                        }
+   938→   938→                      }}
+   939→   939→                    />
+   940→   940→                  </div>
+   941→   941→
+   942→   942→                  {/* Alérgenos (chips editables con advertencia) */}
+   943→   943→                  <div className="space-y-2 sm:col-span-2">
+   944→   944→                    <Label className="flex items-center gap-1.5">
+   945→   945→                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+   946→   946→                      Alérgenos
+   947→   947→                    </Label>
+   948→   948→                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-md border bg-background">
+   949→   949→                      {allergenChips.length === 0 && (
+   950→   950→                        <span className="text-xs text-muted-foreground">
+   951→   951→                          Sin alérgenos declarados. Ej: Leche, Gluten, Soja...
+   952→   952→                        </span>
+   953→   953→                      )}
+   954→   954→                      {allergenChips.map((a) => (
+   955→   955→                        <Badge
+   956→   956→                          key={a}
+   957→   957→                          className="gap-1 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+   958→   958→                        >
+   959→   959→                          {a}
+   960→   960→                          <button
+   961→   961→                            type="button"
+   962→   962→                            onClick={() =>
+   963→   963→                              setAllergenChips((prev) =>
+   964→   964→                                prev.filter((x) => x !== a)
+   965→   965→                              )
+   966→   966→                            }
+   967→   967→                            className="ml-1 hover:bg-red-200 rounded-full p-0.5"
+   968→   968→                          >
+   969→   969→                            <X className="w-3 h-3" />
+   970→   970→                          </button>
+   971→   971→                        </Badge>
+   972→   972→                      ))}
+   973→   973→                    </div>
+   974→   974→                    <Input
+   975→   975→                      placeholder="Escribí un alérgeno y presioná Enter..."
+   976→   976→                      value={allergenInput}
+   977→   977→                      onChange={(e) => setAllergenInput(e.target.value)}
+   978→   978→                      onKeyDown={(e) => {
+   979→   979→                        if (e.key === "Enter" && allergenInput.trim()) {
+   980→   980→                          e.preventDefault();
+   981→   981→                          const v = allergenInput.trim();
+   982→   982→                          if (!allergenChips.includes(v)) {
+   983→   983→                            setAllergenChips((prev) =>
+   984→   984→                              [...prev, v].slice(0, 15)
+   985→   985→                            );
+   986→   986→                          }
+   987→   987→                          setAllergenInput("");
+   988→   988→                        }
+   989→   989→                      }}
+   990→   990→                    />
+   991→   991→                  </div>
+   992→   992→
+   993→   993→                  {/* Ingredientes */}
+   994→   994→                  <div className="space-y-2 sm:col-span-2">
+   995→   995→                    <Label htmlFor="ingredients">Ingredientes</Label>
+   996→   996→                    <Textarea
+   997→   997→                      id="ingredients"
+   998→   998→                      placeholder="Lista de ingredientes completa..."
+   999→   999→                      value={form.ingredients || ""}
+  1000→  1000→                      onChange={(e) =>
+  1001→  1001→                        setForm({ ...form, ingredients: e.target.value })
+  1002→  1002→                      }
+  1003→  1003→                      rows={3}
+  1004→  1004→                      className="text-xs"
+  1005→  1005→                    />
+  1006→  1006→                  </div>
+  1007→  1007→                </div>
+  1008→  1008→              )}
+  1009→  1009→            </div>
+  1010→  1010→          </div>
+  1011→  1011→
+  1012→  1012→          <DialogFooter>
+  1013→  1013→            <DialogClose asChild>
+  1014→  1014→              <Button variant="outline">Cancelar</Button>
+  1015→  1015→            </DialogClose>
+  1016→  1016→            <Button
+  1017→  1017→              onClick={handleSave}
+  1018→  1018→              disabled={saving}
+  1019→  1019→              className="bg-indigo-600 hover:bg-indigo-700"
+  1020→  1020→            >
+  1021→  1021→              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+  1022→  1022→              {form.id ? "Guardar cambios" : "Crear producto"}
+  1023→  1023→            </Button>
+  1024→  1024→          </DialogFooter>
+  1025→  1025→        </DialogContent>
+  1026→  1026→      </Dialog>
+  1027→  1027→
+  1028→  1028→      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+  1029→  1029→        <AlertDialogContent>
+  1030→  1030→          <AlertDialogHeader>
+  1031→  1031→            <AlertDialogTitle>¿Desactivar producto?</AlertDialogTitle>
+  1032→  1032→            <AlertDialogDescription>
+  1033→  1033→              El producto se marcará como inactivo y no aparecerá en el POS.
+  1034→  1034→              Las ventas históricas se conservan. Podés reactivarlo cuando quieras.
+  1035→  1035→            </AlertDialogDescription>
+  1036→  1036→          </AlertDialogHeader>
+  1037→  1037→          <AlertDialogFooter>
+  1038→  1038→            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+  1039→  1039→            <AlertDialogAction
+  1040→  1040→              onClick={handleDelete}
+  1041→  1041→              className="bg-red-600 hover:bg-red-700"
+  1042→  1042→            >
+  1043→  1043→              Desactivar
+  1044→  1044→            </AlertDialogAction>
+  1045→  1045→          </AlertDialogFooter>
+  1046→  1046→        </AlertDialogContent>
+  1047→  1047→      </AlertDialog>
+  1048→  1048→    </div>
+  1049→  1049→  );
+  1050→  1050→}
+  1051→  1051→

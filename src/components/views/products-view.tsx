@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, UNITS } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Product {
   id: string;
@@ -155,8 +156,12 @@ export function ProductsView() {
     setLookupLoading(true);
     setLookupResult({ status: "loading" });
     try {
-      const res = await fetch(`/api/products/lookup?barcode=${encodeURIComponent(code)}`);
-      const data = await res.json();
+      const { ok, data, error } = await safeFetchJSON<any>(
+        `/api/products/lookup?barcode=${encodeURIComponent(code)}`
+      );
+      if (!ok || !data) {
+        throw new Error(error || "No se pudo consultar la base de productos");
+      }
       if (data.found) {
         // Solo autocompletamos campos que el usuario aún no llenó.
         setForm((prev: any) => ({
@@ -215,13 +220,20 @@ export function ProductsView() {
 
   async function load() {
     setLoading(true);
-    const [p, c] = await Promise.all([
-      fetch("/api/products").then((r) => r.json()),
-      fetch("/api/categories").then((r) => r.json()),
-    ]);
-    setProducts(p);
-    setCategories(c);
-    setLoading(false);
+    try {
+      const [p, c] = await Promise.all([
+        safeFetchArray<Product>("/api/products"),
+        safeFetchArray<Category>("/api/categories"),
+      ]);
+      setProducts(p);
+      setCategories(c);
+    } catch {
+      toast.error("No se pudieron cargar los productos");
+      setProducts([]);
+      setCategories([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -286,18 +298,17 @@ export function ProductsView() {
         labels: labelChips.join(","),
         allergens: allergenChips.join(","),
       };
-      const res = await fetch("/api/products", {
+      const { ok, error } = await safeFetchJSON("/api/products", {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(form.id ? "Producto actualizado" : "Producto creado");
       setFormOpen(false);
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      const msg = e?.message || "No se pudo guardar el producto";
+      toast.error("Error al guardar el producto", { description: msg });
     } finally {
       setSaving(false);
     }
@@ -306,46 +317,47 @@ export function ProductsView() {
   async function handleDelete() {
     if (!deleteId) return;
     try {
-      const res = await fetch(`/api/products?id=${deleteId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(
+        `/api/products?id=${deleteId}`,
+        { method: "DELETE" }
+      );
+      if (!ok) throw new Error(error);
       toast.success("Producto desactivado");
       setDeleteId(null);
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar", { description: e.message });
     }
   }
 
   async function handleAddCategory() {
     if (!newCatName.trim()) return;
     try {
-      const res = await fetch("/api/categories", {
+      const { ok, error } = await safeFetchJSON("/api/categories", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCatName }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Categoría creada");
       setNewCatName("");
       setCatDialogOpen(false);
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al crear categoría", { description: e.message });
     }
   }
 
   async function handleDeleteCategory(id: string, name: string) {
     if (!confirm(`¿Eliminar la categoría "${name}"? Los productos quedarán sin categoría.`)) return;
     try {
-      const res = await fetch(`/api/categories?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(`/api/categories?id=${id}`, {
+        method: "DELETE",
+      });
+      if (!ok) throw new Error(error);
       toast.success("Categoría eliminada");
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar categoría", { description: e.message });
     }
   }
 

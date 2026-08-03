@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const to = url.searchParams.get("to");
   const status = url.searchParams.get("status");
   const branchId = url.searchParams.get("branchId");
-  const limit = Number(url.searchParams.get("limit") || 100);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 100), 1), 500);
 
   const where: Prisma.SaleWhereInput = { storeId };
   if (status) where.status = status;
@@ -26,20 +26,28 @@ export async function GET(req: NextRequest) {
     if (to) where.createdAt.lte = new Date(to);
   }
 
-  const sales = await db.sale.findMany({
-    where,
-    include: {
-      items: { include: { product: true } },
-      user: { select: { name: true } },
-      customer: { select: { name: true } },
-      paymentMethodRef: true,
-      branch: { select: { id: true, name: true, code: true } },
-      promotion: { select: { id: true, name: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
-  return NextResponse.json(sales);
+  try {
+    const sales = await db.sale.findMany({
+      where,
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true } },
+        customer: { select: { name: true } },
+        paymentMethodRef: true,
+        branch: { select: { id: true, name: true, code: true } },
+        promotion: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return NextResponse.json(sales);
+  } catch (e: any) {
+    console.error("[GET /api/sales] error:", e);
+    return NextResponse.json(
+      { error: "Error al obtener ventas" },
+      { status: 500 }
+    );
+  }
 }
 
 // POST: registrar nueva venta
@@ -49,7 +57,21 @@ export async function POST(req: NextRequest) {
   const u = session.user as any;
   const storeId = u.storeId;
 
-  const body = await req.json();
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Cuerpo de la petición inválido (JSON malformado)" },
+      { status: 400 }
+    );
+  }
+  if (!body || !Array.isArray(body.items) || body.items.length === 0) {
+    return NextResponse.json(
+      { error: "La venta debe incluir al menos un producto" },
+      { status: 400 }
+    );
+  }
   // body: {
   //   items: [{productId, quantity}],
   //   customerId?, discount?, discountReason?,
@@ -57,6 +79,7 @@ export async function POST(req: NextRequest) {
   //   branchId?, promotionId?, loyaltyPointsUsed?
   // }
 
+  try {
   // Validar stock y obtener precios actuales
   const productIds = body.items.map((i: any) => i.productId);
   const products = await db.product.findMany({
@@ -77,7 +100,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Producto no encontrado: ${item.productId}` }, { status: 400 });
     }
     const qty = Number(item.quantity);
-    if (qty <= 0) {
+    if (!Number.isFinite(qty) || qty <= 0) {
       return NextResponse.json({ error: `Cantidad inválida para ${prod.name}` }, { status: 400 });
     }
     const lineSub = prod.salePrice * qty;
@@ -349,4 +372,16 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(sale);
+  } catch (e: any) {
+    // Capturamos cualquier error que no haya sido manejado arriba (stock
+    // insuficiente, error de constraint, etc.) para que el cliente siempre
+    // reciba JSON en lugar de un HTML de error 500 que rompería con
+    // "Unexpected end of JSON input".
+    console.error("[POST /api/sales] error:", e);
+    const message =
+      e?.message?.startsWith("Stock insuficiente")
+        ? e.message
+        : "No se pudo registrar la venta. Verificá los datos e intentá nuevamente.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

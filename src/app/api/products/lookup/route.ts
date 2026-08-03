@@ -10,6 +10,9 @@ import { lookupProductByBarcode, isValidBarcode } from "@/lib/barcode-lookup";
  * y devuelve los datos del producto si lo encuentra.
  *
  * Requiere sesión activa (cualquier rol puede consultar — útil desde POS).
+ *
+ * Siempre devuelve JSON (incluso en errores) para que el cliente no
+ * rompa con "Unexpected end of JSON input".
  */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);

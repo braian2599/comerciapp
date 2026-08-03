@@ -1,0 +1,925 @@
+     1→// Prisma schema - Gestor de Ventas para Comercios
+     2→
+     3→generator client {
+     4→  provider = "prisma-client-js"
+     5→}
+     6→
+     7→datasource db {
+     8→  provider = "sqlite"
+     9→  url      = env("DATABASE_URL")
+    10→}
+    11→
+    12→// ===== TIENDA / COMERCIO =====
+    13→model Store {
+    14→  id            String   @id @default(cuid())
+    15→  name          String
+    16→  slug          String   @unique
+    17→  rubro         String   // TIENDA_BARRIO, MINIMARKET, VERDULERIA, CARNICERIA, PANADERIA, KIOSCO, FERRETERIA, OTRO
+    18→  currency      String   @default("ARS")
+    19→  currencySymbol String  @default("$")
+    20→  taxEnabled    Boolean  @default(false)
+    21→  taxRate       Float    @default(0) // porcentaje 0-100
+    22→  address       String?
+    23→  phone         String?
+    24→  logoUrl       String?
+    25→  lowStockThreshold Int  @default(5)
+    26→  active        Boolean  @default(true)
+    27→  createdAt     DateTime @default(now())
+    28→  updatedAt     DateTime @updatedAt
+    29→
+    30→  users         User[]
+    31→  categories    Category[]
+    32→  products      Product[]
+    33→  customers     Customer[]
+    34→  sales         Sale[]
+    35→  stockMovements StockMovement[]
+    36→  paymentMethods PaymentMethod[]
+    37→  cashRegisters CashRegister[]
+    38→  cashMovements CashMovement[]
+    39→  suppliers     Supplier[]
+    40→  purchaseOrders PurchaseOrder[]
+    41→  expenses      Expense[]
+    42→  customerPayments CustomerPayment[]
+    43→  invoices      Invoice[]
+    44→  taxConfig     TaxConfig?
+    45→  mercadoPagoConfig MercadoPagoConfig?
+    46→  mercadoPagoPayments MercadoPagoPayment[]
+    47→  branches      Branch[]
+    48→  promotions    Promotion[]
+    49→  refunds       Refund[]
+    50→  loyaltyProgram LoyaltyProgram?
+    51→  // Fase 4
+    52→  commissionRules CommissionRule[]
+    53→  commissions   Commission[]
+    54→  ecommerceConfig EcommerceConfig?
+    55→  ecommerceSyncLogs EcommerceSyncLog[]
+    56→  printTemplates PrintTemplate[]
+    57→  offlineSyncQueue OfflineSyncQueue[]
+    58→}
+    59→
+    60→// ===== USUARIO =====
+    61→model User {
+    62→  id           String   @id @default(cuid())
+    63→  email        String   @unique
+    64→  passwordHash String
+    65→  name         String
+    66→  role         String   @default("CAJERO") // ADMIN, VENDEDOR, CAJERO
+    67→  active       Boolean  @default(true)
+    68→  storeId      String
+    69→  createdAt    DateTime @default(now())
+    70→  updatedAt    DateTime @updatedAt
+    71→
+    72→  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+    73→  sales          Sale[]
+    74→  stockMovements StockMovement[]
+    75→  cashRegisters  CashRegister[]
+    76→  cashMovements  CashMovement[]
+    77→  purchaseOrders PurchaseOrder[]
+    78→  expenses       Expense[]
+    79→  customerPayments CustomerPayment[]
+    80→  invoices       Invoice[]
+    81→  refunds        Refund[]
+    82→  // Fase 4
+    83→  commissions    Commission[]
+    84→  commissionRules CommissionRule[]
+    85→}
+    86→
+    87→// ===== CATEGORÍA =====
+    88→model Category {
+    89→  id        String   @id @default(cuid())
+    90→  name      String
+    91→  storeId   String
+    92→  createdAt DateTime @default(now())
+    93→  updatedAt DateTime @updatedAt
+    94→
+    95→  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+    96→  products    Product[]
+    97→  promotions  Promotion[]
+    98→}
+    99→
+   100→// ===== PRODUCTO =====
+   101→model Product {
+   102→  id          String   @id @default(cuid())
+   103→  name        String
+   104→  description String?
+   105→  barcode     String?
+   106→  sku         String?
+   107→  categoryId  String?
+   108→  storeId     String
+   109→  costPrice   Float    @default(0)
+   110→  salePrice   Float    @default(0)
+   111→  stock       Float    @default(0)
+   112→  minStock    Float    @default(5)
+   113→  unit        String   @default("UNIDAD") // UNIDAD, KG, LITRO, METRO, PACK
+   114→  active      Boolean  @default(true)
+   115→  // Datos adicionales autocompletados desde Open Food Facts / UPC Item DB
+   116→  brand       String?  // Marca (ej: LIEBIG, Coca-Cola)
+   117→  labels      String?  // Etiquetas separadas por coma (ej: "Sin TACC,Sin aditivos,Vegano")
+   118→  ingredients String?  // Lista de ingredientes completa
+   119→  allergens   String?  // Alérgenos separados por coma (ej: "leche,gluten,soja")
+   120→  imageUrl    String?  // URL o path local de la imagen del producto
+   121→  // Fase 4: e-commerce sync
+   122→  ecommerceProductId String? // ID remoto en la plataforma (Tienda Nube, WooCommerce, etc.)
+   123→  ecommerceSyncedAt  DateTime?
+   124→  ecommerceStatus    String? // ACTIVE, DRAFT, OUT_OF_STOCK
+   125→  createdAt   DateTime @default(now())
+   126→  updatedAt   DateTime @updatedAt
+   127→
+   128→  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   129→  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+   130→  saleItems       SaleItem[]
+   131→  stockMovements  StockMovement[]
+   132→  purchaseItems   PurchaseOrderItem[]
+   133→  promotions      Promotion[]
+   134→  refundItems     RefundItem[]
+   135→}
+   136→
+   137→// ===== CLIENTE =====
+   138→model Customer {
+   139→  id        String   @id @default(cuid())
+   140→  name      String
+   141→  phone     String?
+   142→  email     String?
+   143→  address   String?
+   144→  notes     String?
+   145→  // Datos fiscales (AFIP)
+   146→  cuit      String?  // CUIT/CUIL del cliente (sin guiones)
+   147→  taxType   String?  // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
+   148→  storeId   String
+   149→  creditLimit Float  @default(0) // límite de cuenta corriente (0 = sin límite)
+   150→  // Fidelización
+   151→  loyaltyPoints   Float  @default(0) // saldo de puntos acumulados
+   152→  loyaltyTier     String @default("BRONCE") // BRONCE, PLATA, ORO, PLATINO
+   153→  totalSpent      Float  @default(0) // monto total histórico comprado
+   154→  totalSales      Int    @default(0) // cantidad de compras históricas
+   155→  createdAt DateTime @default(now())
+   156→  updatedAt DateTime @updatedAt
+   157→
+   158→  store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   159→  sales     Sale[]
+   160→  payments  CustomerPayment[]
+   161→  invoices  Invoice[]
+   162→  loyaltyPointsLog LoyaltyPoint[]
+   163→  refunds   Refund[]
+   164→}
+   165→
+   166→// ===== VENTA =====
+   167→model Sale {
+   168→  id              String   @id @default(cuid())
+   169→  storeId         String
+   170→  userId          String
+   171→  customerId      String?
+   172→  cashRegisterId  String?
+   173→  branchId        String?  // sucursal donde se realizó (null = principal)
+   174→  subtotal        Float
+   175→  discount        Float    @default(0)
+   176→  discountReason  String?  // motivo del descuento (PROMOCION, MANUAL, PUNTOS, etc.)
+   177→  tax             Float    @default(0)
+   178→  surcharge       Float    @default(0) // recargo por método de pago
+   179→  total           Float
+   180→  paymentMethod   String   @default("EFECTIVO") // nombre del método (snapshot)
+   181→  paymentMethodId String?
+   182→  // Promociones aplicadas (resumen)
+   183→  promotionId     String?  // promoción principal aplicada
+   184→  promotionDiscount Float  @default(0) // monto descontado por promociones automáticas
+   185→  // Fidelización
+   186→  loyaltyPointsEarned Float @default(0) // puntos ganados en esta venta
+   187→  loyaltyPointsUsed   Float @default(0) // puntos canjeados (descuento aplicado)
+   188→  // Cuenta corriente
+   189→  onCredit        Boolean  @default(false) // true = venta fiada
+   190→  amountPaid      Float    @default(0) // monto cobrado (total si es contado, 0 si es fiado completo)
+   191→  status          String   @default("COMPLETADA") // COMPLETADA, ANULADA
+   192→  notes           String?
+   193→  createdAt       DateTime @default(now())
+   194→  updatedAt       DateTime @updatedAt
+   195→
+   196→  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   197→  user            User            @relation(fields: [userId], references: [id])
+   198→  customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+   199→  paymentMethodRef PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+   200→  cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+   201→  branch          Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
+   202→  promotion       Promotion?      @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+   203→  items           SaleItem[]
+   204→  // Facturación y Mercado Pago
+   205→  invoice         Invoice?
+   206→  mercadoPagoPayment MercadoPagoPayment?
+   207→  refund          Refund?
+   208→  // Fase 4: Comisión asociada (1:1)
+   209→  commission      Commission?
+   210→
+   211→  @@index([storeId, createdAt])
+   212→  @@index([storeId, status])
+   213→  @@index([customerId, onCredit])
+   214→  @@index([branchId, createdAt])
+   215→}
+   216→
+   217→// ===== ITEM DE VENTA =====
+   218→model SaleItem {
+   219→  id         String @id @default(cuid())
+   220→  saleId     String
+   221→  productId  String
+   222→  quantity   Float
+   223→  unitPrice  Float
+   224→  costPrice  Float // snapshot del costo al momento de la venta
+   225→  subtotal   Float
+   226→
+   227→  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+   228→  product    Product @relation(fields: [productId], references: [id])
+   229→}
+   230→
+   231→// ===== MÉTODO DE PAGO =====
+   232→model PaymentMethod {
+   233→  id          String   @id @default(cuid())
+   234→  storeId     String
+   235→  name        String   // Efectivo, Tarjeta Crédito, etc.
+   236→  type        String   // EFECTIVO, TARJETA_CREDITO, TARJETA_DEBITO, TRANSFERENCIA, CUENTA, OTRO
+   237→  surcharge   Float    @default(0) // porcentaje de recargo (ej: 10 = +10%)
+   238→  active      Boolean  @default(true)
+   239→  isDefault   Boolean  @default(false)
+   240→  createdAt   DateTime @default(now())
+   241→  updatedAt   DateTime @updatedAt
+   242→
+   243→  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   244→  sales       Sale[]
+   245→
+   246→  @@index([storeId, active])
+   247→}
+   248→
+   249→// ===== MOVIMIENTOS DE STOCK =====
+   250→model StockMovement {
+   251→  id        String   @id @default(cuid())
+   252→  productId String
+   253→  storeId   String
+   254→  userId    String
+   255→  type      String   // ENTRADA, SALIDA, AJUSTE, VENTA, COMPRA
+   256→  quantity  Float    // positivo entrada, negativo salida
+   257→  reason    String?
+   258→  refType   String?  // Sale, PurchaseOrder, CashMovement (tipo de entidad origen)
+   259→  refId     String?  // id de la entidad origen
+   260→  createdAt DateTime @default(now())
+   261→
+   262→  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+   263→  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   264→  user      User     @relation(fields: [userId], references: [id])
+   265→
+   266→  @@index([storeId, createdAt])
+   267→  @@index([productId, createdAt])
+   268→}
+   269→
+   270→// ===== CAJA / ARQUEO =====
+   271→model CashRegister {
+   272→  id          String    @id @default(cuid())
+   273→  storeId     String
+   274→  userId      String    // usuario que abrió la caja
+   275→  branchId    String?   // sucursal donde opera la caja (null = principal)
+   276→  openingDate DateTime  @default(now())
+   277→  closingDate DateTime?
+   278→  openingBalance Float  @default(0) // monto inicial en efectivo
+   279→  closingBalance Float? // monto final declarado
+   280→  expectedBalance Float? // monto esperado según sistema
+   281→  difference  Float?    // closingBalance - expectedBalance
+   282→  status      String    @default("ABIERTA") // ABIERTA, CERRADA
+   283→  notes       String?
+   284→  createdAt   DateTime  @default(now())
+   285→  updatedAt   DateTime  @updatedAt
+   286→
+   287→  store      Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   288→  user       User           @relation(fields: [userId], references: [id])
+   289→  branch     Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+   290→  movements  CashMovement[]
+   291→  sales      Sale[]
+   292→  refunds    Refund[]
+   293→
+   294→  @@index([storeId, status])
+   295→  @@index([userId, openingDate])
+   296→  @@index([branchId, status])
+   297→}
+   298→
+   299→// Movimientos de efectivo dentro de una caja (ingresos/egresos manuales)
+   300→model CashMovement {
+   301→  id              String   @id @default(cuid())
+   302→  cashRegisterId  String
+   303→  storeId         String
+   304→  userId          String
+   305→  type            String   // INGRESO, EGRESO, VENTA, PAGO_CUENTA (sentido del efectivo)
+   306→  amount          Float    // siempre positivo; el sentido lo da type
+   307→  concept         String   // descripción: "Venta", "Cobro cuenta", "Gasto", etc.
+   308→  paymentMethod   String?  // EFECTIVO, TRANSFERENCIA (snapshot si aplica)
+   309→  refType         String?  // Sale, CustomerPayment, Expense
+   310→  refId           String?
+   311→  createdAt       DateTime @default(now())
+   312→
+   313→  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+   314→  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   315→  user         User         @relation(fields: [userId], references: [id])
+   316→
+   317→  @@index([cashRegisterId, createdAt])
+   318→  @@index([storeId, createdAt])
+   319→}
+   320→
+   321→// ===== PROVEEDORES =====
+   322→model Supplier {
+   323→  id        String   @id @default(cuid())
+   324→  name      String
+   325→  phone     String?
+   326→  email     String?
+   327→  address   String?
+   328→  contactName String?
+   329→  notes     String?
+   330→  storeId   String
+   331→  active    Boolean  @default(true)
+   332→  createdAt DateTime @default(now())
+   333→  updatedAt DateTime @updatedAt
+   334→
+   335→  store          Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   336→  purchaseOrders PurchaseOrder[]
+   337→
+   338→  @@index([storeId, active])
+   339→}
+   340→
+   341→// Orden de compra a proveedor
+   342→model PurchaseOrder {
+   343→  id            String    @id @default(cuid())
+   344→  storeId       String
+   345→  userId        String
+   346→  supplierId    String?
+   347→  supplierName  String    // snapshot por si se borra el proveedor
+   348→  orderNumber   String    // número legible: OC-0001
+   349→  status        String    @default("PENDIENTE") // PENDIENTE, RECIBIDA, ANULADA
+   350→  total         Float     @default(0)
+   351→  notes         String?
+   352→  orderedAt     DateTime  @default(now())
+   353→  receivedAt    DateTime?
+   354→  createdAt     DateTime  @default(now())
+   355→  updatedAt     DateTime  @updatedAt
+   356→
+   357→  store     Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   358→  user      User               @relation(fields: [userId], references: [id])
+   359→  supplier  Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+   360→  items     PurchaseOrderItem[]
+   361→
+   362→  @@index([storeId, orderedAt])
+   363→  @@index([storeId, status])
+   364→}
+   365→
+   366→model PurchaseOrderItem {
+   367→  id          String @id @default(cuid())
+   368→  purchaseOrderId String
+   369→  productId   String
+   370→  quantity    Float
+   371→  unitCost    Float  // costo unitario de compra
+   372→  subtotal    Float
+   373→
+   374→  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+   375→  product       Product       @relation(fields: [productId], references: [id])
+   376→}
+   377→
+   378→// ===== GASTOS / EGRESOS =====
+   379→model Expense {
+   380→  id         String   @id @default(cuid())
+   381→  storeId    String
+   382→  userId     String
+   383→  category   String   // ALQUILER, SERVICIOS, SUELDOS, INSUMOS, IMPUESTOS, TRANSPORTE, OTROS
+   384→  description String
+   385→  amount     Float
+   386→  paymentMethod String @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, TARJETA
+   387→  date       DateTime @default(now())
+   388→  createdAt  DateTime @default(now())
+   389→  updatedAt  DateTime @updatedAt
+   390→
+   391→  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   392→  user       User     @relation(fields: [userId], references: [id])
+   393→
+   394→  @@index([storeId, date])
+   395→  @@index([storeId, category])
+   396→}
+   397→
+   398→// ===== PAGOS DE CUENTAS CORRIENTES =====
+   399→// Registra cada pago que hace un cliente fiado para saldar su cuenta
+   400→model CustomerPayment {
+   401→  id         String   @id @default(cuid())
+   402→  storeId    String
+   403→  customerId String
+   404→  userId     String
+   405→  amount     Float    // monto pagado (positivo)
+   406→  paymentMethod String @default("EFECTIVO")
+   407→  cashRegisterId String?
+   408→  date       DateTime @default(now())
+   409→  notes      String?
+   410→  createdAt  DateTime @default(now())
+   411→
+   412→  store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   413→  customer     Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   414→  user         User           @relation(fields: [userId], references: [id])
+   415→
+   416→  @@index([storeId, date])
+   417→  @@index([customerId, date])
+   418→}
+   419→
+   420→// ===== CONFIGURACIÓN FISCAL (AFIP / ARCA) =====
+   421→// Datos del contribuyente necesarios para emitir facturas electrónicas
+   422→model TaxConfig {
+   423→  id              String   @id @default(cuid())
+   424→  storeId         String   @unique
+   425→  // Datos del contribuyente
+   426→  cuit            String   // CUIT del emisor (sin guiones)
+   427→  razonSocial     String   // Razón social
+   428→  direccionFiscal String?  // Domicilio fiscal
+   429→  inicioActividades DateTime?
+   430→  // Configuración AFIP
+   431→  puntoVenta      Int      @default(1) // punto de venta habilitado
+   432→  tipoFactura     String   @default("B") // tipo por defecto: A, B, C, M
+   433→  condicionFiscal String   @default("MONOTRIBUTO") // MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
+   434→  categoriaMonotributo String? // A, B, C, D, E, F, G, H (si aplica)
+   435→  // IVA
+   436→  ivaRate         Float    @default(21) // porcentaje de IVA (0, 10.5, 21, 27)
+   437→  // Certificados (.p12) - ruta al archivo cargado
+   438→  certPath        String?  // ruta al certificado en /upload
+   439→  privateKeyPath  String?  // ruta a la clave privada
+   440→  certPassword    String?  // contraseña del certificado (encriptado idealmente)
+   441→  // Modo AFIP: homologación (testing) o producción
+   442→  environment     String   @default("homologacion") // homologacion, produccion
+   443→  // Token de acceso AFIP (cache)
+   444→  authToken       String?  // TA.xml serializado
+   445→  authTokenExpires DateTime?
+   446→  // Numeración: último número de factura emitido por tipo
+   447→  lastInvoiceA    Int      @default(0)
+   448→  lastInvoiceB    Int      @default(0)
+   449→  lastInvoiceC    Int      @default(0)
+   450→  active          Boolean  @default(true)
+   451→  createdAt       DateTime @default(now())
+   452→  updatedAt       DateTime @updatedAt
+   453→
+   454→  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   455→  invoices        Invoice[]
+   456→}
+   457→
+   458→// ===== FACTURA ELECTRÓNICA =====
+   459→// Representa una factura electrónica emitida ante AFIP/ARCA
+   460→model Invoice {
+   461→  id              String   @id @default(cuid())
+   462→  storeId         String
+   463→  userId          String   // usuario que emitió
+   464→  saleId          String?  @unique // venta asociada (opcional: una factura puede existir sin venta)
+   465→  customerId      String?  // cliente (null = Consumidor Final)
+   466→  taxConfigId     String
+   467→  // Datos de la factura
+   468→  tipo            String   // A, B, C, M, E
+   469→  puntoVenta      Int
+   470→  numero          Int      // número de factura dentro del punto de venta
+   471→  numeroCompleto  String   // "0001-00000001" (legible)
+   472→  fechaEmision    DateTime @default(now())
+   473→  concepto        String   @default("PRODUCTOS") // PRODUCTOS, SERVICIOS, PRODUCTOS_Y_SERVICIOS
+   474→  // Totales
+   475→  netoGravado     Float    @default(0) // base imponible sin IVA
+   476→  ivaRate         Float    @default(0)
+   477→  ivaAmount       Float    @default(0) // monto de IVA
+   478→  noGravado       Float    @default(0) // importes no gravados
+   479→  exento          Float    @default(0) // importes exentos
+   480→  total           Float
+   481→  // Datos del cliente (snapshot)
+   482→  customerName    String   @default("Consumidor Final")
+   483→  customerCuit    String?  // CUIT del cliente (null si es CF)
+   484→  customerTaxType String   @default("CONSUMIDOR_FINAL")
+   485→  // Respuesta AFIP
+   486→  cae             String?  // Código de Autorización Electrónico
+   487→  caeVencimiento  DateTime? // fecha de vencimiento del CAE
+   488→  qrData          String?  // datos codificados para el QR AFIP (RG 4291)
+   489→  // Estado
+   490→  status          String   @default("EMITIDA") // EMITIDA, ANULADA, RECHAZADA, PENDIENTE
+   491→  observation     String?  // observaciones AFIP
+   492→  resultado       String?  // A (aprobado), R (rechazado), O (observado)
+   493→  // Anulación
+   494→  anulatedAt      DateTime?
+   495→  anulatedBy      String?
+   496→  createdAt       DateTime @default(now())
+   497→  updatedAt       DateTime @updatedAt
+   498→
+   499→  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   500→  user            User     @relation(fields: [userId], references: [id])
+   501→  sale            Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+   502→  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+   503→  taxConfig       TaxConfig @relation(fields: [taxConfigId], references: [id])
+   504→
+   505→  @@index([storeId, fechaEmision])
+   506→  @@index([storeId, tipo, numero])
+   507→  @@index([saleId])
+   508→  @@index([cae])
+   509→}
+   510→
+   511→// ===== CONFIGURACIÓN MERCADO PAGO =====
+   512→model MercadoPagoConfig {
+   513→  id              String   @id @default(cuid())
+   514→  storeId         String   @unique
+   515→  accessToken     String?  // token de acceso (producción)
+   516→  publicKey       String?  // clave pública
+   517→  // Para testing (sandbox)
+   518→  sandboxAccessToken String?
+   519→  sandboxPublicKey String?
+   520→  // Modo
+   521→  environment     String   @default("sandbox") // sandbox, produccion
+   522→  // Datos del comercio en MP
+   523→  userId          String?  // MP user id
+   524→  collectorId     String?  // collector id (para QR)
+   525→  // Configuración QR
+   526→  qrEnabled       Boolean  @default(true)
+   527→  defaultDescription String? // descripción por defecto en el QR
+   528→  active          Boolean  @default(true)
+   529→  createdAt       DateTime @default(now())
+   530→  updatedAt       DateTime @updatedAt
+   531→
+   532→  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   533→  payments        MercadoPagoPayment[]
+   534→}
+   535→
+   536→// ===== PAGOS MERCADO PAGO =====
+   537→// Registra cada intento/transacción de pago con Mercado Pago QR
+   538→model MercadoPagoPayment {
+   539→  id              String   @id @default(cuid())
+   540→  storeId         String
+   541→  saleId          String?  @unique // venta asociada
+   542→  configId        String
+   543→  // Datos de la transacción MP
+   544→  mpPaymentId     String?  // id del pago en MP (numérico como string)
+   545→  mpPreferenceId  String?  // id de la preferencia creada
+   546→  mpOrderId       String?  // id de la orden de MP
+   547→  // QR
+   548→  qrCode          String?  // código QR copia y pega (string)
+   549→  qrImageUrl      String?  // URL de la imagen del QR
+   550→  // Monto y estado
+   551→  amount          Float    // monto a cobrar
+   552→  status          String   @default("PENDIENTE") // PENDIENTE, APPROVED, REJECTED, CANCELLED, REFUNDED
+   553→  statusDetail    String?  // detalle del estado
+   554→  paymentMethod   String?  // metodo de pago usado en MP (credit_card, debit_card, qr, etc.)
+   555→  payerEmail      String?
+   556→  // Respuesta completa (JSON serializado)
+   557→  rawResponse     String?
+   558→  createdAt       DateTime @default(now())
+   559→  updatedAt       DateTime @updatedAt
+   560→  approvedAt      DateTime?
+   561→
+   562→  store           Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   563→  sale            Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
+   564→  config          MercadoPagoConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+   565→
+   566→  @@index([storeId, createdAt])
+   567→  @@index([saleId])
+   568→  @@index([mpPaymentId])
+   569→  @@index([status])
+   570→}
+   571→
+   572→// ===== SUCURSALES (Multi-sucursal) =====
+   573→// Permite a un comercio operar con múltiples puntos de venta físicos
+   574→model Branch {
+   575→  id          String   @id @default(cuid())
+   576→  storeId     String
+   577→  name        String   // nombre legible: "Sucursal Centro", "Sucursal Norte"
+   578→  code        String   // código corto: "CEN", "NOR", "SUR"
+   579→  address     String?
+   580→  phone       String?
+   581→  manager     String?  // nombre del encargado
+   582→  active      Boolean  @default(true)
+   583→  isMain      Boolean  @default(false) // true = sucursal principal
+   584→  createdAt   DateTime @default(now())
+   585→  updatedAt   DateTime @updatedAt
+   586→
+   587→  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   588→  sales       Sale[]
+   589→  cashRegisters CashRegister[]
+   590→  refunds     Refund[]
+   591→
+   592→  @@index([storeId, active])
+   593→}
+   594→
+   595→// ===== PROMOCIONES / DESCUENTOS =====
+   596→// Motor de promociones: porcentaje, monto fijo, 2x1, NxM, combos
+   597→model Promotion {
+   598→  id            String   @id @default(cuid())
+   599→  storeId       String
+   600→  name          String   // "2x1 en gaseosas", "Descuento 10% tarde"
+   601→  description   String?
+   602→  type          String   // PORCENTAJE, MONTO_FIJO, NXM (NxM), COMBO
+   603→  // Configuración principal
+   604→  value         Float    @default(0) // porcentaje (0-100) o monto fijo según type
+   605→  buyQuantity   Int      @default(0) // para NxM: cuántos paga el cliente
+   606→  getQuantity   Int      @default(0) // para NxM: cuántos se lleva
+   607→  // Aplicación
+   608→  scope         String   @default("CART") // CART (carrito), CATEGORY, PRODUCT
+   609→  categoryId    String?  // si scope=CATEGORY
+   610→  productId     String?  // si scope=PRODUCT
+   611→  minPurchase   Float    @default(0) // monto mínimo del carrito para activarse
+   612→  maxDiscount   Float?   // tope máximo de descuento (null = sin tope)
+   613→  // Vigencia
+   614→  startDate     DateTime @default(now())
+   615→  endDate       DateTime?
+   616→  daysOfWeek    String?  // "0,1,2,3,4,5,6" o null = todos los días (0=domingo)
+   617→  startHour     Int?     // hora de inicio (0-23) para promos por horario
+   618→  endHour       Int?     // hora de fin (0-23)
+   619→  // Estado
+   620→  active        Boolean  @default(true)
+   621→  priority      Int      @default(0) // mayor = se evalúa primero
+   622→  usageLimit    Int?     // límite total de usos (null = ilimitado)
+   623→  usageCount    Int      @default(0) // usos actuales
+   624→  perCustomerLimit Int?  // límite por cliente (null = ilimitado)
+   625→  createdAt     DateTime @default(now())
+   626→  updatedAt     DateTime @updatedAt
+   627→
+   628→  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   629→  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+   630→  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+   631→  sales         Sale[]
+   632→
+   633→  @@index([storeId, active])
+   634→  @@index([storeId, type])
+   635→}
+   636→
+   637→// ===== DEVOLUCIONES / NOTAS DE CRÉDITO =====
+   638→// Registra devoluciones totales o parciales sobre una venta
+   639→model Refund {
+   640→  id            String   @id @default(cuid())
+   641→  storeId       String
+   642→  saleId        String   @unique // una venta tiene una sola devolución (total o parcial)
+   643→  userId        String   // usuario que procesa la devolución
+   644→  customerId    String?  // cliente (snapshot)
+   645→  branchId      String?
+   646→  cashRegisterId String?
+   647→  refundNumber  String   // número legible: DEV-0001
+   648→  type          String   @default("PARCIAL") // PARCIAL, TOTAL
+   649→  // Montos
+   650→  subtotal      Float    @default(0)
+   651→  discount      Float    @default(0)
+   652→  tax           Float    @default(0)
+   653→  total         Float    @default(0) // monto negativo o positivo (siempre positivo para la devolución)
+   654→  // Método de devolución
+   655→  refundMethod  String   @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, CREDITO_CUENTA (saldo a cuenta corriente)
+   656→  // Razón
+   657→  reason        String?  // motivo: PRODUCTO_DEFECTUOSO, NO_CONFORME, ERROR_VENTA, OTRO
+   658→  notes         String?
+   659→  // Nota de crédito asociada (AFIP)
+   660→  invoiceId     String?  // si se emitió nota de crédito fiscal
+   661→  // Estado
+   662→  status        String   @default("COMPLETADA") // COMPLETADA, ANULADA
+   663→  createdAt     DateTime @default(now())
+   664→  updatedAt     DateTime @updatedAt
+   665→
+   666→  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   667→  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+   668→  user          User     @relation(fields: [userId], references: [id])
+   669→  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+   670→  branch        Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+   671→  cashRegister  CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+   672→  items         RefundItem[]
+   673→
+   674→  @@index([storeId, createdAt])
+   675→  @@index([saleId])
+   676→  @@index([customerId, createdAt])
+   677→}
+   678→
+   679→model RefundItem {
+   680→  id         String @id @default(cuid())
+   681→  refundId   String
+   682→  saleItemId String // item original de la venta
+   683→  productId  String
+   684→  quantity   Float  // cantidad devuelta (siempre positiva)
+   685→  unitPrice  Float  // precio unitario al que se vendió
+   686→  costPrice  Float  // costo snapshot
+   687→  subtotal   Float  // cantidad * unitPrice
+   688→
+   689→  refund     Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+   690→  product    Product @relation(fields: [productId], references: [id])
+   691→
+   692→  @@index([refundId])
+   693→}
+   694→
+   695→// ===== PROGRAMA DE FIDELIZACIÓN =====
+   696→// Configuración del programa de puntos de la tienda
+   697→model LoyaltyProgram {
+   698→  id                String   @id @default(cuid())
+   699→  storeId           String   @unique
+   700→  enabled           Boolean  @default(false)
+   701→  name              String   @default("Programa de Puntos")
+   702→  // Reglas de acumulación
+   703→  pointsPerWeight   Float    @default(1) // puntos por cada $1 comprado
+   704→  roundMode         String   @default("FLOOR") // FLOOR, CEIL, ROUND
+   705→  minPurchase       Float    @default(0) // monto mínimo para acumular
+   706→  // Reglas de canje
+   707→  pointsToCurrency  Float    @default(0.01) // valor de 1 punto en $ (ej: 100 pts = $1)
+   708→  minRedeemPoints   Float    @default(0) // mínimo de puntos para canjear
+   709→  maxRedeemPercent  Float    @default(100) // % máx del total canjeable con puntos
+   710→  // Niveles (tiers) por monto acumulado
+   711→  tierBronceMin     Float    @default(0)
+   712→  tierBronceBonus   Float    @default(0) // multiplicador de puntos
+   713→  tierPlataMin      Float    @default(50000) // monto acumulado
+   714→  tierPlataBonus    Float    @default(0.2) // +20% puntos
+   715→  tierOroMin        Float    @default(200000)
+   716→  tierOroBonus      Float    @default(0.5) // +50% puntos
+   717→  tierPlatinoMin    Float    @default(500000)
+   718→  tierPlatinoBonus  Float    @default(1) // +100% puntos
+   719→  createdAt         DateTime @default(now())
+   720→  updatedAt         DateTime @updatedAt
+   721→
+   722→  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   723→  pointsLog         LoyaltyPoint[]
+   724→}
+   725→
+   726→// Historial de puntos (entradas/salidas)
+   727→model LoyaltyPoint {
+   728→  id          String   @id @default(cuid())
+   729→  storeId     String
+   730→  customerId  String
+   731→  programId   String
+   732→  // Movimiento
+   733→  type        String   // EARN (ganado), REDEEM (canjeado), EXPIRE (vencido), ADJUST (manual)
+   734→  points      Float    // positivo si entrada, negativo si salida
+   735→  balance     Float    // saldo después del movimiento
+   736→  // Referencia
+   737→  refType     String?  // Sale, Refund, Manual
+   738→  refId       String?
+   739→  description String?
+   740→  createdAt   DateTime @default(now())
+   741→
+   742→  customer    Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   743→  program     LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+   744→
+   745→  @@index([storeId, createdAt])
+   746→  @@index([customerId, createdAt])
+   747→  @@index([refType, refId])
+   748→}
+   749→
+   750→// ===================================================================
+   751→// FASE 4 — Comisiones · Impresión térmica · E-commerce · PWA Offline
+   752→// ===================================================================
+   753→
+   754→// ===== REGLAS DE COMISIÓN =====
+   755→// Configura comisiones por vendedor con diferentes criterios
+   756→model CommissionRule {
+   757→  id          String   @id @default(cuid())
+   758→  storeId     String
+   759→  userId      String   // vendedor al que aplica la regla
+   760→  name        String   // nombre legible (ej: "Comisión mesanual")
+   761→  // Tipo de cálculo
+   762→  type        String   // PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO
+   763→  // Configuración principal
+   764→  rate        Float    @default(0) // porcentaje (0-100) o monto fijo según type
+   765→  // Escalonado (cuando type=ESCALONADO, JSON: [{"min":0,"max":50000,"rate":2},{"min":50000,"max":100000,"rate":3},...])
+   766→  tiers       String?
+   767→  // Filtros
+   768→  minSaleAmount Float  @default(0) // monto mínimo de venta para aplicar
+   769→  onlyPaid    Boolean  @default(true) // solo ventas cobradas (no fiado)
+   770→  // Vigencia
+   771→  startDate   DateTime @default(now())
+   772→  endDate     DateTime?
+   773→  active      Boolean  @default(true)
+   774→  createdAt   DateTime @default(now())
+   775→  updatedAt   DateTime @updatedAt
+   776→
+   777→  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   778→  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   779→  commissions Commission[]
+   780→
+   781→  @@index([storeId, active])
+   782→  @@index([userId, active])
+   783→}
+   784→
+   785→// ===== COMISIÓN (por venta) =====
+   786→// Registro de comisión calculada al cerrar una venta
+   787→model Commission {
+   788→  id           String   @id @default(cuid())
+   789→  storeId      String
+   790→  userId       String   // vendedor
+   791→  saleId       String   @unique // una venta = una comisión
+   792→  ruleId       String?  // regla aplicada (null = sin regla, comisión 0)
+   793→  // Cálculo
+   794→  saleTotal    Float    // total de la venta (snapshot)
+   795→  saleProfit   Float    @default(0) // ganancia bruta de la venta (snapshot)
+   796→  base         Float    // base sobre la que se calcula (venta o ganancia)
+   797→  rate         Float    // tasa aplicada (%)
+   798→  amount       Float    // monto de comisión calculado
+   799→  // Estado
+   800→  status       String   @default("PENDIENTE") // PENDIENTE, PAGADA, ANULADA
+   801→  paidAt       DateTime?
+   802→  notes        String?
+   803→  createdAt    DateTime @default(now())
+   804→  updatedAt    DateTime @updatedAt
+   805→
+   806→  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   807→  user         User     @relation(fields: [userId], references: [id])
+   808→  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+   809→  rule         CommissionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+   810→
+   811→  @@index([storeId, status])
+   812→  @@index([userId, status])
+   813→  @@index([saleId])
+   814→}
+   815→
+   816→// ===== CONFIGURACIÓN E-COMMERCE =====
+   817→// Integración con plataformas (Tienda Nube, WooCommerce, MercadoLibre, Shopify)
+   818→model EcommerceConfig {
+   819→  id              String   @id @default(cuid())
+   820→  storeId         String   @unique
+   821→  platform        String   @default("TIENDA_NUBE") // TIENDA_NUBE, WOOCOMMERCE, MERCADOLIBRE, SHOPIFY
+   822→  enabled         Boolean  @default(false)
+   823→  // Credenciales
+   824→  apiUrl          String?  // URL base de la API
+   825→  apiKey          String?  // token / API key
+   826→  apiSecret       String?  // secreto (encryptado en producción)
+   827→  accessToken     String?  // token de acceso OAuth2 (TiendaNube)
+   828→  storeExternalId String?  // ID de la tienda en la plataforma (ej: store_id TiendaNube)
+   829→  // Sincronización
+   830→  syncProducts    Boolean  @default(true) // sincronizar productos
+   831→  syncStock       Boolean  @default(true) // sincronizar stock
+   832→  syncPrices      Boolean  @default(true) // sincronizar precios
+   833→  syncOrders      Boolean  @default(true) // importar pedidos online
+   834→  autoFulfill     Boolean  @default(false) // marcar como enviado automáticamente
+   835→  // Webhook
+   836→  webhookSecret   String?  // secreto para validar webhooks
+   837→  lastSyncAt      DateTime?
+   838→  createdAt       DateTime @default(now())
+   839→  updatedAt       DateTime @updatedAt
+   840→
+   841→  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   842→  syncLogs        EcommerceSyncLog[]
+   843→}
+   844→
+   845→// Log de sincronización (auditoría)
+   846→model EcommerceSyncLog {
+   847→  id          String   @id @default(cuid())
+   848→  storeId     String
+   849→  configId    String
+   850→  direction   String   // OUTBOUND (local->plataforma), INBOUND (plataforma->local)
+   851→  entity      String   // PRODUCT, STOCK, PRICE, ORDER, CUSTOMER
+   852→  entityId    String?  // id local
+   853→  externalId  String?  // id remoto
+   854→  action      String   // CREATE, UPDATE, DELETE
+   855→  status      String   // SUCCESS, ERROR, PENDING
+   856→  message     String?  // detalle del error o éxito
+   857→  payload     String?  // JSON del payload enviado/recibido (truncado si muy grande)
+   858→  createdAt   DateTime @default(now())
+   859→
+   860→  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   861→  config      EcommerceConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+   862→
+   863→  @@index([storeId, createdAt])
+   864→  @@index([configId, createdAt])
+   865→  @@index([status])
+   866→}
+   867→
+   868→// ===== PLANTILLAS DE IMPRESIÓN =====
+   869→// Plantillas para impresoras térmicas (tickets, comandas)
+   870→model PrintTemplate {
+   871→  id          String   @id @default(cuid())
+   872→  storeId     String
+   873→  name        String   // nombre legible (ej: "Ticket 58mm", "Comanda cocina")
+   874→  type        String   @default("TICKET") // TICKET, COMANDA, CIERRE_Z, ETIQUETA
+   875→  // Configuración de impresora
+   876→  paperWidth  Int      @default(58) // ancho en mm (58 o 80)
+   877→  charset     String   @default("CP437") // CP437, CP850, UTF8
+   878→  cutPaper    Boolean  @default(true) // corte automático al final
+   879→  // Diseño (JSON: header, footer, mostrar logo, mostrar QR AFIP, etc.)
+   880→  config      String?
+   881→  // Contenido (plantilla con placeholders: {{store.name}}, {{sale.total}}, etc.)
+   882→  headerLines String?  // líneas de encabezado (separadas por \n)
+   883→  footerLines String?  // líneas de pie
+   884→  showLogo    Boolean  @default(false)
+   885→  showCustomer Boolean @default(false)
+   886→  showSeller  Boolean  @default(true)
+   887→  showPayment Boolean  @default(true)
+   888→  active      Boolean  @default(true)
+   889→  isDefault   Boolean  @default(false)
+   890→  createdAt   DateTime @default(now())
+   891→  updatedAt   DateTime @updatedAt
+   892→
+   893→  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   894→
+   895→  @@index([storeId, active])
+   896→}
+   897→
+   898→// ===== COLA DE SINCRONIZACIÓN OFFLINE (PWA) =====
+   899→// Operaciones realizadas offline que deben sincronizarse al volver online
+   900→model OfflineSyncQueue {
+   901→  id          String   @id @default(cuid())
+   902→  storeId     String
+   903→  userId      String?  // usuario que originó la operación
+   904→  // Operación
+   905→  entity      String   // SALE, CUSTOMER, PRODUCT, STOCK_MOVEMENT
+   906→  action      String   // CREATE, UPDATE, DELETE
+   907→  payload     String   // JSON del cuerpo de la petición
+   908→  endpoint    String   // path relativo (ej: /api/sales)
+   909→  method      String   @default("POST") // POST, PUT, DELETE
+   910→  // Estado
+   911→  status      String   @default("PENDING") // PENDING, SYNCED, FAILED, CONFLICT
+   912→  attempts    Int      @default(0)
+   913→  lastError   String?
+   914→  // IDs temporales para reconciliación
+   915→  tempId      String?  // ID generado offline (UUID)
+   916→  syncedId    String?  // ID real asignado por el servidor
+   917→  createdAt   DateTime @default(now())
+   918→  syncedAt    DateTime?
+   919→
+   920→  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+   921→
+   922→  @@index([storeId, status])
+   923→  @@index([entity, status])
+   924→}
+   925→

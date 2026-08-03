@@ -39,6 +39,7 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
 import { calculateMaxRedeemablePoints, pointsToCurrency } from "@/lib/loyalty";
+import { safeFetchJSON } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -143,30 +144,42 @@ export function PosView() {
   const isCajero = user?.role === "CAJERO";
 
   useEffect(() => {
+    // Carga inicial: usamos safeFetchJSON para no romper si algún endpoint
+    // devuelve un cuerpo vacío o HTML (típico de errores 500 no manejados).
     Promise.all([
-      fetch("/api/products").then((r) => r.json()),
-      fetch("/api/categories").then((r) => r.json()),
-      fetch("/api/customers").then((r) => r.json()),
-      fetch("/api/payment-methods").then((r) => r.json()),
-      fetch("/api/mercadopago/config").then((r) => r.json()),
-      fetch("/api/branches").then((r) => r.json()),
-      fetch("/api/loyalty").then((r) => r.json()),
-    ]).then(([p, c, cust, pm, mp, brs, loy]) => {
-      setProducts(p.filter((x: Product) => x.active));
-      setCategories(c);
-      setCustomers(cust);
-      const activePM = (pm as PaymentMethod[]).filter((m) => m.active);
-      setPaymentMethods(activePM);
-      const def = activePM.find((m) => m.isDefault) || activePM[0];
-      if (def) setPaymentMethodId(def.id);
-      setMpConfig(mp);
-      setBranches(brs || []);
-      // Seleccionar sucursal principal por defecto
-      const main = (brs as Branch[])?.find((b) => b.isMain && b.active);
-      if (main) setBranchId(main.id);
-      setLoyaltyProgram(loy);
-      setLoading(false);
-    });
+      safeFetchJSON<Product[]>("/api/products"),
+      safeFetchJSON<Category[]>("/api/categories"),
+      safeFetchJSON<Customer[]>("/api/customers"),
+      safeFetchJSON<PaymentMethod[]>("/api/payment-methods"),
+      safeFetchJSON<any>("/api/mercadopago/config"),
+      safeFetchJSON<Branch[]>("/api/branches"),
+      safeFetchJSON<any>("/api/loyalty"),
+    ])
+      .then(([pRes, cRes, custRes, pmRes, mpRes, brsRes, loyRes]) => {
+        const p = Array.isArray(pRes.data) ? pRes.data : [];
+        const c = Array.isArray(cRes.data) ? cRes.data : [];
+        const cust = Array.isArray(custRes.data) ? custRes.data : [];
+        const pm = Array.isArray(pmRes.data) ? pmRes.data : [];
+        const brs = Array.isArray(brsRes.data) ? brsRes.data : [];
+        setProducts(p.filter((x: Product) => x.active));
+        setCategories(c);
+        setCustomers(cust);
+        const activePM = pm.filter((m: PaymentMethod) => m.active);
+        setPaymentMethods(activePM);
+        const def = activePM.find((m) => m.isDefault) || activePM[0];
+        if (def) setPaymentMethodId(def.id);
+        setMpConfig(mpRes.data);
+        setBranches(brs);
+        // Seleccionar sucursal principal por defecto
+        const main = brs.find((b: Branch) => b.isMain && b.active);
+        if (main) setBranchId(main.id);
+        setLoyaltyProgram(loyRes.data);
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error("No se pudieron cargar los datos del POS");
+        setLoading(false);
+      });
   }, []);
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -346,20 +359,26 @@ export function PosView() {
   async function printThermalSale() {
     if (!lastSale?.id) return;
     try {
-      const res = await fetch("/api/print", {
+      const printRes = await safeFetchJSON<any>("/api/print", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "TICKET", saleId: lastSale.id }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!printRes.ok) throw new Error(printRes.error);
 
       // Descargar binario .bin que se puede enviar a impresora USB
-      const blob = await (await fetch("/api/print", {
+      const blobRes = await fetch("/api/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "TICKET", saleId: lastSale.id, returnFormat: "blob" }),
-      })).blob();
+        body: JSON.stringify({
+          type: "TICKET",
+          saleId: lastSale.id,
+          returnFormat: "blob",
+        }),
+      });
+      if (!blobRes.ok) {
+        throw new Error("No se pudo generar el archivo del ticket");
+      }
+      const blob = await blobRes.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -371,7 +390,7 @@ export function PosView() {
 
       toast.success("Ticket generado (archivo .bin)");
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al imprimir", { description: e.message });
     }
   }
 
@@ -390,9 +409,8 @@ export function PosView() {
     }
     setProcessing(true);
     try {
-      const res = await fetch("/api/sales", {
+      const saleRes = await safeFetchJSON<any>("/api/sales", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: cart.map((i) => ({
             productId: i.product.id,
@@ -409,8 +427,10 @@ export function PosView() {
           loyaltyPointsUsed: effectivePointsToRedeem || 0,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!saleRes.ok || !saleRes.data) {
+        throw new Error(saleRes.error || "No se pudo registrar la venta");
+      }
+      const data = saleRes.data;
       toast.success("Venta registrada!");
       setLastSale({
         ...data,
@@ -431,12 +451,22 @@ export function PosView() {
       clearCart();
       setAppliedPromotion(null);
       setPointsToRedeem(0);
-      // Refrescar stock
-      const refreshed = await fetch("/api/products").then((r) => r.json());
-      setProducts(refreshed.filter((x: Product) => x.active));
-      // Refrescar clientes (puntos actualizados)
-      const refreshedCust = await fetch("/api/customers").then((r) => r.json());
-      setCustomers(refreshedCust);
+      // Refrescar stock y clientes en paralelo, sin romper si fallan
+      // (la venta ya se registró, no queremos que el cajero vea un error
+      // acá y crea que la venta no se hizo).
+      try {
+        const [refreshedRes, refreshedCustRes] = await Promise.all([
+          safeFetchJSON<Product[]>("/api/products"),
+          safeFetchJSON<Customer[]>("/api/customers"),
+        ]);
+        const refreshed = Array.isArray(refreshedRes.data) ? refreshedRes.data : [];
+        setProducts(refreshed.filter((x: Product) => x.active));
+        if (Array.isArray(refreshedCustRes.data)) {
+          setCustomers(refreshedCustRes.data);
+        }
+      } catch {
+        // Silencioso: el refresh es best-effort.
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -959,44 +989,57 @@ export function PosView() {
                         setQrLoading(true);
                         try {
                           // 1. Crear la venta primero (sin cobrar todavía)
-                          const saleRes = await fetch("/api/sales", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              items: cart.map((i) => ({
-                                productId: i.product.id,
-                                quantity: i.qty,
-                              })),
-                              customerId: customerId || null,
-                              discount: manualDiscount,
-                              paymentMethodId,
-                              notes,
-                              taxRate: taxEnabled ? taxRate : 0,
-                              branchId: branchId || null,
-                              promotionId: appliedPromotion?.promotionId || null,
-                              promotionDiscount: appliedPromotion?.discountAmount || 0,
-                              loyaltyPointsUsed: effectivePointsToRedeem || 0,
-                            }),
-                          });
-                          const saleData = await saleRes.json();
-                          if (!saleRes.ok) throw new Error(saleData.error);
+                          const saleResponse = await safeFetchJSON<any>(
+                            "/api/sales",
+                            {
+                              method: "POST",
+                              body: JSON.stringify({
+                                items: cart.map((i) => ({
+                                  productId: i.product.id,
+                                  quantity: i.qty,
+                                })),
+                                customerId: customerId || null,
+                                discount: manualDiscount,
+                                paymentMethodId,
+                                notes,
+                                taxRate: taxEnabled ? taxRate : 0,
+                                branchId: branchId || null,
+                                promotionId: appliedPromotion?.promotionId || null,
+                                promotionDiscount: appliedPromotion?.discountAmount || 0,
+                                loyaltyPointsUsed: effectivePointsToRedeem || 0,
+                              }),
+                            }
+                          );
+                          if (!saleResponse.ok || !saleResponse.data) {
+                            throw new Error(
+                              saleResponse.error || "No se pudo crear la venta"
+                            );
+                          }
+                          const saleData = saleResponse.data;
 
                           // 2. Crear orden QR en Mercado Pago
-                          const qrRes = await fetch("/api/mercadopago/create-order", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              saleId: saleData.id,
-                              amount: total,
-                              description: `Compra ${store?.name || ""} #${saleData.id.slice(-6).toUpperCase()}`,
-                              externalReference: saleData.id,
-                            }),
-                          });
-                          const qrJson = await qrRes.json();
-                          if (!qrRes.ok) throw new Error(qrJson.error);
-                          setQrData({ ...qrJson, saleId: saleData.id });
+                          const qrResponse = await safeFetchJSON<any>(
+                            "/api/mercadopago/create-order",
+                            {
+                              method: "POST",
+                              body: JSON.stringify({
+                                saleId: saleData.id,
+                                amount: total,
+                                description: `Compra ${store?.name || ""} #${saleData.id.slice(-6).toUpperCase()}`,
+                                externalReference: saleData.id,
+                              }),
+                            }
+                          );
+                          if (!qrResponse.ok || !qrResponse.data) {
+                            throw new Error(
+                              qrResponse.error || "No se pudo generar el QR"
+                            );
+                          }
+                          setQrData({ ...qrResponse.data, saleId: saleData.id });
                         } catch (e: any) {
-                          toast.error(e.message);
+                          toast.error("Error al generar QR", {
+                            description: e.message,
+                          });
                         } finally {
                           setQrLoading(false);
                         }
@@ -1049,8 +1092,15 @@ export function PosView() {
                           onClick={async () => {
                             setQrPolling(true);
                             try {
-                              const res = await fetch(`/api/mercadopago/status?id=${qrData.paymentId}`);
-                              const data = await res.json();
+                              const statusRes = await safeFetchJSON<any>(
+                                `/api/mercadopago/status?id=${qrData.paymentId}`
+                              );
+                              if (!statusRes.ok || !statusRes.data) {
+                                throw new Error(
+                                  statusRes.error || "No se pudo consultar el estado del pago"
+                                );
+                              }
+                              const data = statusRes.data;
                               if (data.status === "APPROVED") {
                                 toast.success("Pago aprobado!");
                                 setLastSale({
@@ -1072,15 +1122,26 @@ export function PosView() {
                                 setReceiptOpen(true);
                                 clearCart();
                                 setQrData(null);
-                                const refreshed = await fetch("/api/products").then((r) => r.json());
-                                setProducts(refreshed.filter((x: Product) => x.active));
+                                try {
+                                  const refreshedRes = await safeFetchJSON<Product[]>(
+                                    "/api/products"
+                                  );
+                                  const refreshed = Array.isArray(refreshedRes.data)
+                                    ? refreshedRes.data
+                                    : [];
+                                  setProducts(refreshed.filter((x: Product) => x.active));
+                                } catch {
+                                  // best-effort
+                                }
                               } else if (data.status === "REJECTED" || data.status === "CANCELLED") {
                                 toast.error(`Pago ${data.status.toLowerCase()}`);
                               } else {
                                 toast.info(`Estado: ${data.status || "PENDIENTE"}`);
                               }
                             } catch (e: any) {
-                              toast.error(e.message);
+                              toast.error("Error al consultar el pago", {
+                                description: e.message,
+                              });
                             } finally {
                               setQrPolling(false);
                             }
