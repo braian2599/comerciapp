@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatDateTime } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Movement {
   id: string;
@@ -90,13 +91,20 @@ export function InventoryView() {
 
   async function load() {
     setLoading(true);
-    const [m, p] = await Promise.all([
-      fetch("/api/inventory?limit=100").then((r) => r.json()),
-      fetch("/api/products").then((r) => r.json()),
-    ]);
-    setMovements(m);
-    setProducts(p);
-    setLoading(false);
+    try {
+      const [m, p] = await Promise.all([
+        safeFetchArray<Movement>("/api/inventory?limit=100"),
+        safeFetchArray<Product>("/api/products"),
+      ]);
+      setMovements(m);
+      setProducts(p);
+    } catch {
+      toast.error("No se pudo cargar el inventario");
+      setMovements([]);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -118,19 +126,17 @@ export function InventoryView() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/inventory", {
+      const { ok, error } = await safeFetchJSON("/api/inventory", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(adjustForm),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Movimiento registrado");
       setAdjustOpen(false);
       setAdjustForm({ productId: "", type: "ENTRADA", quantity: 1, reason: "" });
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al registrar movimiento", { description: e.message });
     } finally {
       setSaving(false);
     }

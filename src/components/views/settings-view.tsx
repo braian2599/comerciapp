@@ -20,6 +20,7 @@ import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard, FileText, QrCod
 import { useAppStore } from "@/store/app-store";
 import { RUBROS, PAYMENT_METHOD_TYPES, paymentTypeLabel, paymentTypeIcon } from "@/lib/constants";
 import { Icon } from "@/lib/icons";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -131,17 +132,17 @@ export function SettingsView() {
 
   async function loadMethods() {
     setMethodsLoading(true);
-    const res = await fetch("/api/payment-methods");
-    const data = await res.json();
+    // Si la API devuelve 401 o un objeto { error }, safeFetchArray devuelve []
+    // en lugar de hacer que `methods` termine siendo un objeto y rompa .map.
+    const data = await safeFetchArray<PaymentMethod>("/api/payment-methods");
     setMethods(data);
     setMethodsLoading(false);
   }
 
   async function loadTaxConfig() {
-    const res = await fetch("/api/tax-config");
-    const data = await res.json();
+    const { data } = await safeFetchJSON<any>("/api/tax-config");
     setTaxConfig(data);
-    if (data) {
+    if (data && !Array.isArray(data) && typeof data === "object") {
       setTaxForm({
         cuit: data.cuit || "",
         razonSocial: data.razonSocial || "",
@@ -158,10 +159,9 @@ export function SettingsView() {
   }
 
   async function loadMpConfig() {
-    const res = await fetch("/api/mercadopago/config");
-    const data = await res.json();
+    const { data } = await safeFetchJSON<any>("/api/mercadopago/config");
     setMpConfig(data);
-    if (data) {
+    if (data && !Array.isArray(data) && typeof data === "object") {
       setMpForm({
         accessToken: data.accessToken && data.accessToken !== "***CONFIGURADO***" ? data.accessToken : "",
         publicKey: data.publicKey || "",
@@ -177,9 +177,8 @@ export function SettingsView() {
   }
 
   async function loadLoyaltyConfig() {
-    const res = await fetch("/api/loyalty");
-    const data = await res.json();
-    if (data) {
+    const { data } = await safeFetchJSON<any>("/api/loyalty");
+    if (data && !Array.isArray(data) && typeof data === "object") {
       setLoyaltyForm({
         enabled: data.enabled ?? false,
         name: data.name || "Programa de Puntos",
@@ -211,20 +210,18 @@ export function SettingsView() {
   async function handleSaveTax() {
     setTaxSaving(true);
     try {
-      const res = await fetch("/api/tax-config", {
+      const { ok, error } = await safeFetchJSON("/api/tax-config", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(taxForm),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error guardando configuración fiscal");
+      if (!ok) {
+        toast.error(error || "Error guardando configuración fiscal");
         return;
       }
       toast.success("Configuración fiscal guardada");
       loadTaxConfig();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar", { description: e.message });
     } finally {
       setTaxSaving(false);
     }
@@ -233,20 +230,18 @@ export function SettingsView() {
   async function handleSaveMp() {
     setMpSaving(true);
     try {
-      const res = await fetch("/api/mercadopago/config", {
+      const { ok, error } = await safeFetchJSON("/api/mercadopago/config", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mpForm),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error guardando configuración MP");
+      if (!ok) {
+        toast.error(error || "Error guardando configuración MP");
         return;
       }
       toast.success("Configuración de Mercado Pago guardada");
       loadMpConfig();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar", { description: e.message });
     } finally {
       setMpSaving(false);
     }
@@ -255,20 +250,18 @@ export function SettingsView() {
   async function handleSaveLoyalty() {
     setLoyaltySaving(true);
     try {
-      const res = await fetch("/api/loyalty", {
+      const { ok, error } = await safeFetchJSON("/api/loyalty", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loyaltyForm),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Error guardando configuración de fidelización");
+      if (!ok) {
+        toast.error(error || "Error guardando configuración de fidelización");
         return;
       }
       toast.success("Programa de fidelización guardado");
       loadLoyaltyConfig();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar", { description: e.message });
     } finally {
       setLoyaltySaving(false);
     }
@@ -311,18 +304,16 @@ export function SettingsView() {
     setMethodSaving(true);
     try {
       const method = methodForm.id ? "PUT" : "POST";
-      const res = await fetch("/api/payment-methods", {
+      const { ok, error } = await safeFetchJSON("/api/payment-methods", {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(methodForm),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(methodForm.id ? "Método actualizado" : "Método creado");
       setMethodDialogOpen(false);
       loadMethods();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar método", { description: e.message });
     } finally {
       setMethodSaving(false);
     }
@@ -331,17 +322,19 @@ export function SettingsView() {
   async function handleDeleteMethod(id: string, name: string) {
     if (!confirm(`¿Eliminar el método "${name}"?`)) return;
     try {
-      const res = await fetch(`/api/payment-methods?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      if (data.deactivated) {
+      const { ok, data, error } = await safeFetchJSON<any>(
+        `/api/payment-methods?id=${id}`,
+        { method: "DELETE" }
+      );
+      if (!ok) throw new Error(error);
+      if (data?.deactivated) {
         toast.success("Método desactivado (tiene ventas asociadas)");
       } else {
         toast.success("Método eliminado");
       }
       loadMethods();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al eliminar método", { description: e.message });
     }
   }
 
@@ -352,18 +345,16 @@ export function SettingsView() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/store", {
+      const { ok, error } = await safeFetchJSON("/api/store", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Configuración guardada");
       // Actualizar store
       setUserData(user, { ...store, ...form });
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al guardar", { description: e.message });
     } finally {
       setSaving(false);
     }
@@ -610,7 +601,7 @@ export function SettingsView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {methods.map((m) => (
+                  {Array.isArray(methods) && methods.map((m) => (
                     <TableRow key={m.id} className={!m.active ? "opacity-50" : ""}>
                       <TableCell className="font-medium">
                         <span className="inline-flex items-center gap-1.5">

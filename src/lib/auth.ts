@@ -4,6 +4,20 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
+// Validación temprana: si NEXTAUTH_SECRET no está definido, los JWT firmados
+// en una sesión previa no se pueden desencriptar al reiniciar el server,
+// provocando `JWEDecryptionFailed` en TODOS los requests y un cascade de
+// 401 que rompe toda la UI. Mejor fallar al arrancar con un mensaje claro.
+const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET;
+if (!NEXTAUTH_SECRET && process.env.NODE_ENV !== "production") {
+  console.warn(
+    "\n⚠️  NEXTAUTH_SECRET no está definido en .env.\n" +
+      "   Next-auth usará un secreto efímero que se invalida en cada reinicio\n" +
+      "   del server, cerrando todas las sesiones activas. Generá uno con:\n" +
+      "   openssl rand -base64 32\n"
+  );
+}
+
 export const authOptions: NextAuthOptions = {
   // Usamos solo JWT (sin sessions en BD) para SQLite simple
   adapter: undefined,
@@ -11,6 +25,7 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 60 * 60 * 24 * 7, // 7 días
   },
+  secret: NEXTAUTH_SECRET,
   providers: [
     CredentialsProvider({
       name: "Credenciales",

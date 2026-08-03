@@ -714,3 +714,45 @@ Stage Summary:
 - Fix de raíz: `prisma generate` + restauración del schema desde git.
 - Fix defensivo (para que no vuelva a pasar): creado `src/lib/fetch.ts` con `safeFetchJSON`/`safeFetchArray` y migrados los componentes críticos (ProductsView, POSView) y las rutas `/api/products`, `/api/categories`, `/api/sales` a usar los helpers + try-catch en todas las operaciones Prisma. Cualquier error del server ahora se devuelve como JSON `{ error: string }` y el cliente lo muestra con un toast claro.
 - Creados artefactos: `src/lib/fetch.ts`, `scripts/test-prisma-fields.ts`. Modificados: `src/app/api/products/route.ts`, `src/app/api/categories/route.ts`, `src/app/api/sales/route.ts`, `src/components/views/products-view.tsx`, `src/components/views/pos-view.tsx`.
+
+---
+Task ID: bugfix-nextauth-methods-crash
+Agent: main
+Task: Investigar y corregir error en `settings-view.tsx` línea 613 (`methods.map is not a function`) que rompía la UI de Configuración.
+
+Work Log:
+- Inspeccionado `dev.log`: encontrado error recurrente `JWEDecryptionFailed: decryption operation failed` en TODOS los requests a `/api/*`. Cada request devolvía 401 sin cuerpo JSON válido.
+- Causa raíz: `NEXTAUTH_SECRET` no estaba definido en `.env`. Sin secreto estable, Next-auth genera uno efímero en cada reinicio del server → las cookies de sesión previas no se pueden desencriptar → todos los requests autenticados devuelven 401 → el response `{error: "No auth"}` (un objeto, no un array) era asignado a `methods` state → `methods.map(...)` explotaba en runtime.
+- Generado secreto estable con `openssl rand -base64 32` y agregado a `.env`:
+    NEXTAUTH_SECRET=5fzginPuHQiP1I6JNujLd+TqWjdLqwWyvPUpv9AO4oU=
+    NEXTAUTH_URL=http://localhost:3000
+- Modificado `src/lib/auth.ts`:
+    - Leído `process.env.NEXTAUTH_SECRET` y pasado explícitamente a `authOptions.secret`
+    - Agregado warning en consola al arrancar si el secreto no está definido (en dev), explicando cómo generarlo
+- Hardening de `src/components/views/settings-view.tsx` (archivo del error reportado):
+    - Importado `safeFetchJSON`/`safeFetchArray` desde `@/lib/fetch`
+    - `loadMethods()`: ahora usa `safeFetchArray` → si la API devuelve 401 u otro error, `methods` queda como `[]` (no como objeto error)
+    - `loadTaxConfig()`, `loadMpConfig()`, `loadLoyaltyConfig()`: migradas a `safeFetchJSON` + validación `data && !Array.isArray(data) && typeof data === "object"` antes de setear el form
+    - `handleSaveTax`, `handleSaveMp`, `handleSaveLoyalty`, `handleSaveMethod`, `handleDeleteMethod`, `handleSave`: migradas a `safeFetchJSON` con mensajes de error más claros
+    - En el render de la tabla: cambiado `methods.map(...)` por `Array.isArray(methods) && methods.map(...)` como defensa final (si alguna otra ruta setea methods a algo que no es array, no crashea)
+- Hardening de otros views con el mismo patrón vulnerable `fetch + .json() + setState`:
+    - `src/components/app/app-shell.tsx`: `useEffect` que carga `/api/me` migrado a `safeFetchJSON`
+    - `src/components/views/dashboard-view.tsx`: `useEffect` que carga `/api/dashboard?days=N` migrado a `safeFetchJSON` con validación de objeto
+    - `src/components/views/sales-view.tsx`: `load()` y `handleAnnul()` migrados a `safeFetchArray`/`safeFetchJSON`
+    - `src/components/views/customers-view.tsx`: `load()` migrado a `safeFetchArray`/`safeFetchJSON` para customers y loyalty
+    - `src/components/views/inventory-view.tsx`: `load()` y `handleAdjust()` migrados a `safeFetchArray`/`safeFetchJSON`
+- Verificado `bun run build` pasa sin errores: "Compiled successfully in 16.3s".
+- Reiniciado dev server. Verificado con servidor de producción (`bun run start`) que:
+    - GET `/api/payment-methods` sin sesión devuelve `{"error":"No auth"}` con HTTP 401 (response JSON válida, no HTML de error)
+    - GET `/api/auth/session` devuelve `{}` (no crashea)
+    - GET `/` devuelve HTML del login correctamente
+    - El server se mantiene estable después de multiples requests
+
+Stage Summary:
+- Causa raíz del crash en `methods.map`: ausencia de `NEXTAUTH_SECRET` estable → cascade de 401 → seteo de objeto error en estado de array → crash en runtime.
+- Fix de raíz: `.env` con secreto estable + `authOptions.secret` explícito + warning en consola si falta.
+- Fix defensivo (capa 1): `safeFetchArray` devuelve `[]` si la API no devuelve un array, evitando que el estado quede en un objeto error.
+- Fix defensivo (capa 2): `Array.isArray(methods) && methods.map(...)` como guard final en el render, para que incluso si ambas capas anteriores fallan, el componente no crashee.
+- Migrados 5 views adicionales (app-shell, dashboard, sales, customers, inventory) al mismo patrón seguro, ya que eran igualmente vulnerables al cascade de 401.
+- Archivos modificados: `.env`, `src/lib/auth.ts`, `src/components/views/settings-view.tsx`, `src/components/app/app-shell.tsx`, `src/components/views/dashboard-view.tsx`, `src/components/views/sales-view.tsx`, `src/components/views/customers-view.tsx`, `src/components/views/inventory-view.tsx`.
+- Pendiente para otra sesión: migrar el resto de los views (`commissions-view`, `invoices-view`, `purchases-view`, `expenses-view`, `refunds-view`, `branches-view`, `reports-view`, `print-templates-view`, `ecommerce-view`, `cash-register-view`, `promotions-view`) al mismo patrón `safeFetchJSON`/`safeFetchArray`. Todos tienen el mismo bug latente.

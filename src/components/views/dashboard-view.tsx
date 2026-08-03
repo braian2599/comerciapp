@@ -31,6 +31,7 @@ import {
 } from "recharts";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency } from "@/lib/constants";
+import { safeFetchJSON } from "@/lib/fetch";
 
 interface DashboardData {
   totalVentas: number;
@@ -68,12 +69,14 @@ export function DashboardView() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/dashboard?days=${days}`)
-      .then((r) => r.json())
-      .then((d) => {
+    safeFetchJSON<DashboardData>(`/api/dashboard?days=${days}`)
+      .then(({ data }) => {
         if (cancelled) return;
-        setData(d);
-        setLoadedDays(days);
+        // Solo seteamos si data es un objeto válido (no null ni array ni string)
+        if (data && typeof data === "object" && !Array.isArray(data)) {
+          setData(data);
+          setLoadedDays(days);
+        }
       })
       .catch(() => {
         // dejar loading pero no crashear

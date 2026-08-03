@@ -66,6 +66,7 @@ import {
 import { rubroIcon } from "@/lib/constants";
 import { Icon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
+import { safeFetchJSON } from "@/lib/fetch";
 
 interface NavItem {
   key: ViewKey;
@@ -145,11 +146,10 @@ export function AppShell() {
   useEffect(() => {
     if (status !== "authenticated" || user) return;
     let cancelled = false;
-    fetch("/api/me")
-      .then((r) => r.json())
-      .then((data) => {
+    safeFetchJSON<any>("/api/me")
+      .then(({ data }) => {
         if (cancelled) return;
-        if (data.user) setUserData(data.user, data.store);
+        if (data?.user) setUserData(data.user, data.store);
         setFetchAttempted(true);
       })
       .catch(() => {

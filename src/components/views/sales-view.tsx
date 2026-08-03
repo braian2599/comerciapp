@@ -54,6 +54,7 @@ import {
   formatCurrency,
   formatDateTime,
 } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Sale {
   id: string;
@@ -89,13 +90,20 @@ export function SalesView() {
 
   async function load() {
     setLoading(true);
-    const [salesRes, pmRes] = await Promise.all([
-      fetch("/api/sales?limit=200").then((r) => r.json()),
-      fetch("/api/payment-methods").then((r) => r.json()),
-    ]);
-    setSales(salesRes);
-    setPaymentMethods(pmRes);
-    setLoading(false);
+    try {
+      const [salesData, pmData] = await Promise.all([
+        safeFetchArray<Sale>("/api/sales?limit=200"),
+        safeFetchArray<any>("/api/payment-methods"),
+      ]);
+      setSales(salesData);
+      setPaymentMethods(pmData);
+    } catch {
+      toast.error("No se pudieron cargar las ventas");
+      setSales([]);
+      setPaymentMethods([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -128,18 +136,16 @@ export function SalesView() {
     if (!annulTarget) return;
     setAnnulling(true);
     try {
-      const res = await fetch("/api/sales/annul", {
+      const { ok, error } = await safeFetchJSON("/api/sales/annul", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: annulTarget.id }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Venta anulada. Stock reintegrado.");
       setAnnulTarget(null);
       load();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("Error al anular venta", { description: e.message });
     } finally {
       setAnnulling(false);
     }

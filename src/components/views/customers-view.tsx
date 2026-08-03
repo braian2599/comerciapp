@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime, PAYMENT_METHOD_TYPES } from "@/lib/constants";
+import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
 interface Customer {
   id: string;
@@ -142,14 +143,20 @@ export function CustomersView() {
 
   async function load() {
     setLoading(true);
-    const [rCust, rLoy] = await Promise.all([
-      fetch("/api/customers"),
-      fetch("/api/loyalty"),
-    ]);
-    setCustomers(await rCust.json());
-    const loy = await rLoy.json();
-    setLoyaltyEnabled(!!loy?.enabled);
-    setLoading(false);
+    try {
+      const [custRes, loyRes] = await Promise.all([
+        safeFetchArray<Customer>("/api/customers"),
+        safeFetchJSON<any>("/api/loyalty"),
+      ]);
+      setCustomers(custRes);
+      const loy = loyRes.data;
+      setLoyaltyEnabled(!!loy?.enabled && typeof loy === "object" && !Array.isArray(loy));
+    } catch {
+      toast.error("No se pudieron cargar los clientes");
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
