@@ -207,11 +207,6 @@ export function AppShell() {
     }))
     .filter((c) => c.items.length > 0);
 
-  // Si la vista actual está dentro de "Más", resaltar el botón
-  const moreHasActive = moreCategories.some((c) =>
-    c.items.some((i) => i.key === currentView)
-  );
-
   function renderView() {
     switch (currentView) {
       case "dashboard":
@@ -327,49 +322,6 @@ export function AppShell() {
               </DropdownMenu>
             </div>
 
-            {/* Menú "Más" — desktop (solo items no frecuentes) */}
-            {moreCategories.length > 0 && (
-              <div className="hidden md:block">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "gap-1 px-2 h-9",
-                        moreHasActive && "bg-emerald-50 text-emerald-700"
-                      )}
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                      <span className="hidden lg:inline">Más</span>
-                      <ChevronDown className="w-3 h-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64 max-h-[70vh] overflow-y-auto">
-                    {moreCategories.map((cat) => (
-                      <Fragment key={cat.id}>
-                        <DropdownMenuLabel>{cat.label}</DropdownMenuLabel>
-                        {cat.items.map((item) => (
-                          <DropdownMenuItem
-                            key={item.key}
-                            onClick={() => setView(item.key)}
-                            className={cn(
-                              "gap-2 cursor-pointer",
-                              currentView === item.key && "bg-emerald-50 text-emerald-700"
-                            )}
-                          >
-                            {item.icon}
-                            {item.label}
-                          </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                      </Fragment>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
-
             {/* Indicador offline */}
             {!pwa.isOnline && (
               <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
@@ -464,10 +416,45 @@ export function AppShell() {
         </div>
       </header>
 
-      {/* Contenido principal — ancho completo, sin sidebar */}
-      <main className="flex-1 min-w-0 p-4 lg:p-6">
-        {renderView()}
-      </main>
+      {/* Contenido: sidebar (items no frecuentes) + main a ancho completo */}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar — desktop (md+), con scroll propio independiente del page scroll */}
+        {moreCategories.length > 0 && (
+          <aside className="hidden md:flex w-60 flex-col bg-white border-r border-emerald-100 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto shrink-0">
+            <nav className="flex-1 px-3 pb-4">
+              {moreCategories.map((cat) => (
+                <div key={cat.id} className="mb-1">
+                  <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {cat.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {cat.items.map((item) => (
+                      <button
+                        key={item.key}
+                        onClick={() => setView(item.key)}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                          currentView === item.key
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                        )}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+          </aside>
+        )}
+
+        {/* Main content */}
+        <main className="flex-1 min-w-0 p-4 lg:p-6 overflow-y-auto">
+          {renderView()}
+        </main>
+      </div>
     </div>
   );
 }

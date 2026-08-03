@@ -362,3 +362,32 @@ Stage Summary:
 - Mobile (<md): un solo botón menú con dropdown de TODAS las categorías (incluyendo frecuentes).
 - Responsive por rol: CAJERO ve 3 tabs (POS/Caja/Panel) y no ve "Más" (no tiene items adicionales); ADMIN ve 5 tabs + "Más" con 4 categorías.
 - Botón "Más" se resalta en emerald cuando la vista actual pertenece a ese menú.
+
+---
+Task ID: feat-hybrid-topnav-plus-sidebar
+Agent: main
+Task: Agregar sidebar con items "Más" + scroll propio independiente
+
+Work Log:
+- Eliminado el dropdown "Más" del header desktop (ya no se necesita, va a la sidebar).
+- Eliminada la variable `moreHasActive` (ya no se usa para resaltar botón).
+- Agregado layout híbrido: `<div className="flex flex-1 min-h-0">` conteniendo sidebar + main.
+- Sidebar nueva:
+  - Visible en `md+` (`hidden md:flex w-60`)
+  - Muestra `moreCategories` (items no frecuentes agrupados por categoría)
+  - Categorías siempre expandidas con label en uppercase tracking-wider
+  - Items con highlight emerald cuando están activos
+  - `sticky top-14` (debajo del header de ~56px = top-14)
+  - `h-[calc(100vh-3.5rem)]` (alto = viewport - header)
+  - `overflow-y-auto` (scroll propio independiente del page scroll)
+  - `shrink-0` (no se comprime cuando main content es ancho)
+- Main content ahora tiene `overflow-y-auto` para scroll independiente también.
+- Mobile (<md) sin cambios: botón menú con dropdown de TODAS las categorías.
+- `tsc --noEmit` limpio. `bun run lint` limpio. Dev server OK, sin Fast Refresh errors.
+
+Stage Summary:
+- Layout final: top bar (logo + tabs frecuentes + acciones) + sidebar (items "Más" con scroll propio) + main (overflow-y-auto).
+- Desktop (md+): tabs frecuentes arriba + sidebar 240px a la izquierda con items no frecuentes.
+- Mobile (<md): botón menú con todas las vistas categorizadas.
+- Cada área (sidebar, main) tiene su propio scroll — el page scroll del body no se activa.
+- CAJERO sin sidebar (no tiene items "Más"), solo ve los 3 tabs frecuentes.
