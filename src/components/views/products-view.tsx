@@ -59,7 +59,9 @@ import {
   ChevronRight,
   AlertTriangle,
   X,
+  Upload,
 } from "lucide-react";
+import { ImportDialog } from "@/components/import-dialog";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, UNITS } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
@@ -126,6 +128,7 @@ export function ProductsView() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
 
   // Lookup por código de barras
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -363,6 +366,33 @@ export function ProductsView() {
 
   return (
     <div className="space-y-4">
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        endpoint="/api/products/import"
+        templateHeaders={[
+          "name",
+          "barcode",
+          "sku",
+          "category",
+          "costPrice",
+          "salePrice",
+          "stock",
+          "minStock",
+          "unit",
+          "active",
+          "brand",
+          "description",
+          "labels",
+          "ingredients",
+          "allergens",
+          "imageUrl",
+        ]}
+        templateName="plantilla_productos.csv"
+        entityLabel="producto"
+        entityLabelPlural="productos"
+        onImported={load}
+      />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
@@ -428,6 +458,13 @@ export function ProductsView() {
             </DialogContent>
           </Dialog>
 
+          <Button
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
             <Plus className="w-4 h-4 mr-2" />
             Nuevo producto

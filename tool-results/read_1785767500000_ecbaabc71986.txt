@@ -1,0 +1,1063 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useMemo } from "react";
+     4→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+     5→import { Button } from "@/components/ui/button";
+     6→import { Input } from "@/components/ui/input";
+     7→import { Label } from "@/components/ui/label";
+     8→import { Badge } from "@/components/ui/badge";
+     9→import { Textarea } from "@/components/ui/textarea";
+    10→import { Switch } from "@/components/ui/switch";
+    11→import {
+    12→  Dialog,
+    13→  DialogContent,
+    14→  DialogDescription,
+    15→  DialogFooter,
+    16→  DialogHeader,
+    17→  DialogTitle,
+    18→  DialogTrigger,
+    19→  DialogClose,
+    20→} from "@/components/ui/dialog";
+    21→import {
+    22→  Select,
+    23→  SelectContent,
+    24→  SelectItem,
+    25→  SelectTrigger,
+    26→  SelectValue,
+    27→} from "@/components/ui/select";
+    28→import {
+    29→  Table,
+    30→  TableBody,
+    31→  TableCell,
+    32→  TableHead,
+    33→  TableHeader,
+    34→  TableRow,
+    35→} from "@/components/ui/table";
+    36→import {
+    37→  AlertDialog,
+    38→  AlertDialogAction,
+    39→  AlertDialogCancel,
+    40→  AlertDialogContent,
+    41→  AlertDialogDescription,
+    42→  AlertDialogFooter,
+    43→  AlertDialogHeader,
+    44→  AlertDialogTitle,
+    45→} from "@/components/ui/alert-dialog";
+    46→import { toast } from "sonner";
+    47→import {
+    48→  Plus,
+    49→  Search,
+    50→  Pencil,
+    51→  Trash2,
+    52→  Package,
+    53→  Loader2,
+    54→  Tag,
+    55→  ScanLine,
+    56→  CheckCircle2,
+    57→  ImageOff,
+    58→  ChevronDown,
+    59→  ChevronRight,
+    60→  AlertTriangle,
+    61→  X,
+    62→} from "lucide-react";
+    63→import { useAppStore } from "@/store/app-store";
+    64→import { formatCurrency, UNITS } from "@/lib/constants";
+    65→import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
+    66→
+    67→interface Product {
+    68→  id: string;
+    69→  name: string;
+    70→  description?: string;
+    71→  barcode?: string;
+    72→  sku?: string;
+    73→  categoryId?: string;
+    74→  category?: { id: string; name: string };
+    75→  costPrice: number;
+    76→  salePrice: number;
+    77→  stock: number;
+    78→  minStock: number;
+    79→  unit: string;
+    80→  active: boolean;
+    81→  brand?: string;
+    82→  labels?: string;
+    83→  ingredients?: string;
+    84→  allergens?: string;
+    85→  imageUrl?: string;
+    86→}
+    87→
+    88→interface Category {
+    89→  id: string;
+    90→  name: string;
+    91→  _count?: { products: number };
+    92→}
+    93→
+    94→const emptyForm = {
+    95→  id: "",
+    96→  name: "",
+    97→  description: "",
+    98→  barcode: "",
+    99→  sku: "",
+   100→  categoryId: "",
+   101→  costPrice: 0,
+   102→  salePrice: 0,
+   103→  stock: 0,
+   104→  minStock: 5,
+   105→  unit: "UNIDAD",
+   106→  active: true,
+   107→  brand: "",
+   108→  labels: "",
+   109→  ingredients: "",
+   110→  allergens: "",
+   111→  imageUrl: "",
+   112→};
+   113→
+   114→export function ProductsView() {
+   115→  const { store } = useAppStore();
+   116→  const [products, setProducts] = useState<Product[]>([]);
+   117→  const [categories, setCategories] = useState<Category[]>([]);
+   118→  const [loading, setLoading] = useState(true);
+   119→  const [search, setSearch] = useState("");
+   120→  const [filterCat, setFilterCat] = useState("all");
+   121→  const [filterStock, setFilterStock] = useState("all");
+   122→
+   123→  const [formOpen, setFormOpen] = useState(false);
+   124→  const [form, setForm] = useState<any>(emptyForm);
+   125→  const [saving, setSaving] = useState(false);
+   126→  const [deleteId, setDeleteId] = useState<string | null>(null);
+   127→  const [catDialogOpen, setCatDialogOpen] = useState(false);
+   128→  const [newCatName, setNewCatName] = useState("");
+   129→
+   130→  // Lookup por código de barras
+   131→  const [lookupLoading, setLookupLoading] = useState(false);
+   132→  const [lookupResult, setLookupResult] = useState<
+   133→    | {
+   134→        status: "idle" | "loading" | "found" | "notfound" | "error";
+   135→        source?: string;
+   136→        imageUrl?: string;
+   137→        labels?: string[];
+   138→        allergens?: string[];
+   139→      }
+   140→    | null
+   141→  >(null);
+   142→  // Sección colapsable de datos adicionales
+   143→  const [showExtraFields, setShowExtraFields] = useState(false);
+   144→  // Etiquetas y alérgenos editados como chips
+   145→  const [labelChips, setLabelChips] = useState<string[]>([]);
+   146→  const [allergenChips, setAllergenChips] = useState<string[]>([]);
+   147→  const [labelInput, setLabelInput] = useState("");
+   148→  const [allergenInput, setAllergenInput] = useState("");
+   149→
+   150→  async function handleBarcodeLookup() {
+   151→    const code = (form.barcode || "").trim();
+   152→    if (!code) {
+   153→      toast.error("Ingresá un código de barras primero");
+   154→      return;
+   155→    }
+   156→    setLookupLoading(true);
+   157→    setLookupResult({ status: "loading" });
+   158→    try {
+   159→      const { ok, data, error } = await safeFetchJSON<any>(
+   160→        `/api/products/lookup?barcode=${encodeURIComponent(code)}`
+   161→      );
+   162→      if (!ok || !data) {
+   163→        throw new Error(error || "No se pudo consultar la base de productos");
+   164→      }
+   165→      if (data.found) {
+   166→        // Solo autocompletamos campos que el usuario aún no llenó.
+   167→        setForm((prev: any) => ({
+   168→          ...prev,
+   169→          name: prev.name || data.name || "",
+   170→          description: prev.description || data.description || data.brand || "",
+   171→          barcode: prev.barcode || code,
+   172→          brand: prev.brand || data.brand || "",
+   173→          ingredients: prev.ingredients || data.ingredients || "",
+   174→          imageUrl: prev.imageUrl || data.imageUrl || "",
+   175→        }));
+   176→        // Merge de etiquetas y alérgenos (sin duplicar)
+   177→        if (Array.isArray(data.labels) && data.labels.length > 0) {
+   178→          setLabelChips((prev) =>
+   179→            Array.from(new Set([...prev, ...data.labels])).slice(0, 15)
+   180→          );
+   181→          setShowExtraFields(true);
+   182→        }
+   183→        if (Array.isArray(data.allergens) && data.allergens.length > 0) {
+   184→          setAllergenChips((prev) =>
+   185→            Array.from(new Set([...prev, ...data.allergens])).slice(0, 15)
+   186→          );
+   187→          setShowExtraFields(true);
+   188→        }
+   189→        setLookupResult({
+   190→          status: "found",
+   191→          source: data.source,
+   192→          imageUrl: data.imageUrl,
+   193→          labels: data.labels,
+   194→          allergens: data.allergens,
+   195→        });
+   196→        const sourceLabel =
+   197→          data.source === "openfoodfacts" ? "Open Food Facts" : "UPC Item DB";
+   198→        toast.success(`Producto encontrado en ${sourceLabel}`, {
+   199→          description: data.name,
+   200→        });
+   201→      } else {
+   202→        setLookupResult({ status: "notfound" });
+   203→        toast.info("No se encontró el código en las bases de datos públicas", {
+   204→          description: "Completá los datos manualmente",
+   205→        });
+   206→      }
+   207→    } catch (e: any) {
+   208→      setLookupResult({ status: "error" });
+   209→      toast.error("No se pudo consultar la base de productos");
+   210→    } finally {
+   211→      setLookupLoading(false);
+   212→    }
+   213→  }
+   214→
+   215→  function resetLookup() {
+   216→    setLookupResult(null);
+   217→  }
+   218→
+   219→  const symbol = store?.currencySymbol || "$";
+   220→
+   221→  async function load() {
+   222→    setLoading(true);
+   223→    try {
+   224→      const [p, c] = await Promise.all([
+   225→        safeFetchArray<Product>("/api/products"),
+   226→        safeFetchArray<Category>("/api/categories"),
+   227→      ]);
+   228→      setProducts(p);
+   229→      setCategories(c);
+   230→    } catch {
+   231→      toast.error("No se pudieron cargar los productos");
+   232→      setProducts([]);
+   233→      setCategories([]);
+   234→    } finally {
+   235→      setLoading(false);
+   236→    }
+   237→  }
+   238→
+   239→  useEffect(() => {
+   240→    load();
+   241→  }, []);
+   242→
+   243→  const filtered = useMemo(() => {
+   244→    return products.filter((p) => {
+   245→      const matchSearch =
+   246→        !search ||
+   247→        p.name.toLowerCase().includes(search.toLowerCase()) ||
+   248→        p.barcode?.includes(search) ||
+   249→        p.sku?.toLowerCase().includes(search.toLowerCase());
+   250→      const matchCat =
+   251→        filterCat === "all" || p.categoryId === filterCat;
+   252→      const matchStock =
+   253→        filterStock === "all" ||
+   254→        (filterStock === "low" && p.stock <= p.minStock) ||
+   255→        (filterStock === "out" && p.stock <= 0) ||
+   256→        (filterStock === "ok" && p.stock > p.minStock);
+   257→      return matchSearch && matchCat && matchStock;
+   258→    });
+   259→  }, [products, search, filterCat, filterStock]);
+   260→
+   261→  function openNew() {
+   262→    setForm({ ...emptyForm });
+   263→    resetLookup();
+   264→    setLabelChips([]);
+   265→    setAllergenChips([]);
+   266→    setShowExtraFields(false);
+   267→    setFormOpen(true);
+   268→  }
+   269→
+   270→  function openEdit(p: Product) {
+   271→    setForm({
+   272→      ...p,
+   273→      costPrice: p.costPrice,
+   274→      salePrice: p.salePrice,
+   275→      stock: p.stock,
+   276→      minStock: p.minStock,
+   277→      adjustReason: "",
+   278→    });
+   279→    resetLookup();
+   280→    setLabelChips(p.labels ? p.labels.split(",").map((s) => s.trim()).filter(Boolean) : []);
+   281→    setAllergenChips(p.allergens ? p.allergens.split(",").map((s) => s.trim()).filter(Boolean) : []);
+   282→    setShowExtraFields(
+   283→      !!(p.brand || p.ingredients || p.labels || p.allergens || p.imageUrl)
+   284→    );
+   285→    setFormOpen(true);
+   286→  }
+   287→
+   288→  async function handleSave() {
+   289→    if (!form.name || !form.salePrice) {
+   290→      toast.error("Nombre y precio de venta son obligatorios");
+   291→      return;
+   292→    }
+   293→    setSaving(true);
+   294→    try {
+   295→      const method = form.id ? "PUT" : "POST";
+   296→      const payload = {
+   297→        ...form,
+   298→        labels: labelChips.join(","),
+   299→        allergens: allergenChips.join(","),
+   300→      };
+   301→      const { ok, error } = await safeFetchJSON("/api/products", {
+   302→        method,
+   303→        body: JSON.stringify(payload),
+   304→      });
+   305→      if (!ok) throw new Error(error);
+   306→      toast.success(form.id ? "Producto actualizado" : "Producto creado");
+   307→      setFormOpen(false);
+   308→      load();
+   309→    } catch (e: any) {
+   310→      const msg = e?.message || "No se pudo guardar el producto";
+   311→      toast.error("Error al guardar el producto", { description: msg });
+   312→    } finally {
+   313→      setSaving(false);
+   314→    }
+   315→  }
+   316→
+   317→  async function handleDelete() {
+   318→    if (!deleteId) return;
+   319→    try {
+   320→      const { ok, error } = await safeFetchJSON(
+   321→        `/api/products?id=${deleteId}`,
+   322→        { method: "DELETE" }
+   323→      );
+   324→      if (!ok) throw new Error(error);
+   325→      toast.success("Producto desactivado");
+   326→      setDeleteId(null);
+   327→      load();
+   328→    } catch (e: any) {
+   329→      toast.error("Error al eliminar", { description: e.message });
+   330→    }
+   331→  }
+   332→
+   333→  async function handleAddCategory() {
+   334→    if (!newCatName.trim()) return;
+   335→    try {
+   336→      const { ok, error } = await safeFetchJSON("/api/categories", {
+   337→        method: "POST",
+   338→        body: JSON.stringify({ name: newCatName }),
+   339→      });
+   340→      if (!ok) throw new Error(error);
+   341→      toast.success("Categoría creada");
+   342→      setNewCatName("");
+   343→      setCatDialogOpen(false);
+   344→      load();
+   345→    } catch (e: any) {
+   346→      toast.error("Error al crear categoría", { description: e.message });
+   347→    }
+   348→  }
+   349→
+   350→  async function handleDeleteCategory(id: string, name: string) {
+   351→    if (!confirm(`¿Eliminar la categoría "${name}"? Los productos quedarán sin categoría.`)) return;
+   352→    try {
+   353→      const { ok, error } = await safeFetchJSON(`/api/categories?id=${id}`, {
+   354→        method: "DELETE",
+   355→      });
+   356→      if (!ok) throw new Error(error);
+   357→      toast.success("Categoría eliminada");
+   358→      load();
+   359→    } catch (e: any) {
+   360→      toast.error("Error al eliminar categoría", { description: e.message });
+   361→    }
+   362→  }
+   363→
+   364→  return (
+   365→    <div className="space-y-4">
+   366→      <div className="flex items-center justify-between flex-wrap gap-3">
+   367→        <div>
+   368→          <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
+   369→          <p className="text-sm text-muted-foreground">
+   370→            {products.length} productos · {categories.length} categorías
+   371→          </p>
+   372→        </div>
+   373→        <div className="flex gap-2">
+   374→          <Dialog open={catDialogOpen} onOpenChange={setCatDialogOpen}>
+   375→            <DialogTrigger asChild>
+   376→              <Button variant="outline">
+   377→                <Tag className="w-4 h-4 mr-2" />
+   378→                Categorías
+   379→              </Button>
+   380→            </DialogTrigger>
+   381→            <DialogContent>
+   382→              <DialogHeader>
+   383→                <DialogTitle>Gestionar categorías</DialogTitle>
+   384→                <DialogDescription>
+   385→                  Agregá o eliminá categorías para organizar tus productos
+   386→                </DialogDescription>
+   387→              </DialogHeader>
+   388→              <div className="flex gap-2">
+   389→                <Input
+   390→                  placeholder="Nueva categoría..."
+   391→                  value={newCatName}
+   392→                  onChange={(e) => setNewCatName(e.target.value)}
+   393→                  onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+   394→                />
+   395→                <Button onClick={handleAddCategory} className="bg-indigo-600 hover:bg-indigo-700">
+   396→                  <Plus className="w-4 h-4" />
+   397→                </Button>
+   398→              </div>
+   399→              <div className="max-h-60 overflow-y-auto space-y-1 mt-2">
+   400→                {categories.length === 0 ? (
+   401→                  <p className="text-sm text-muted-foreground text-center py-4">
+   402→                    Sin categorías
+   403→                  </p>
+   404→                ) : (
+   405→                  categories.map((c) => (
+   406→                    <div
+   407→                      key={c.id}
+   408→                      className="flex items-center justify-between p-2 rounded-md bg-muted/50"
+   409→                    >
+   410→                      <div>
+   411→                        <p className="text-sm font-medium">{c.name}</p>
+   412→                        <p className="text-xs text-muted-foreground">
+   413→                          {c._count?.products || 0} productos
+   414→                        </p>
+   415→                      </div>
+   416→                      <Button
+   417→                        variant="ghost"
+   418→                        size="icon"
+   419→                        className="h-7 w-7 text-red-600"
+   420→                        onClick={() => handleDeleteCategory(c.id, c.name)}
+   421→                      >
+   422→                        <Trash2 className="w-3.5 h-3.5" />
+   423→                      </Button>
+   424→                    </div>
+   425→                  ))
+   426→                )}
+   427→              </div>
+   428→            </DialogContent>
+   429→          </Dialog>
+   430→
+   431→          <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
+   432→            <Plus className="w-4 h-4 mr-2" />
+   433→            Nuevo producto
+   434→          </Button>
+   435→        </div>
+   436→      </div>
+   437→
+   438→      {/* Filtros */}
+   439→      <Card>
+   440→        <CardContent className="p-3">
+   441→          <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+   442→            <div className="relative">
+   443→              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   444→              <Input
+   445→                placeholder="Buscar por nombre, código o SKU..."
+   446→                value={search}
+   447→                onChange={(e) => setSearch(e.target.value)}
+   448→                className="pl-9"
+   449→              />
+   450→            </div>
+   451→            <Select value={filterCat} onValueChange={setFilterCat}>
+   452→              <SelectTrigger>
+   453→                <SelectValue placeholder="Todas las categorías" />
+   454→              </SelectTrigger>
+   455→              <SelectContent>
+   456→                <SelectItem value="all">Todas las categorías</SelectItem>
+   457→                {categories.map((c) => (
+   458→                  <SelectItem key={c.id} value={c.id}>
+   459→                    {c.name}
+   460→                  </SelectItem>
+   461→                ))}
+   462→              </SelectContent>
+   463→            </Select>
+   464→            <Select value={filterStock} onValueChange={setFilterStock}>
+   465→              <SelectTrigger>
+   466→                <SelectValue />
+   467→              </SelectTrigger>
+   468→              <SelectContent>
+   469→                <SelectItem value="all">Todo el stock</SelectItem>
+   470→                <SelectItem value="ok">Stock OK</SelectItem>
+   471→                <SelectItem value="low">Stock bajo</SelectItem>
+   472→                <SelectItem value="out">Sin stock</SelectItem>
+   473→              </SelectContent>
+   474→            </Select>
+   475→          </div>
+   476→        </CardContent>
+   477→      </Card>
+   478→
+   479→      {/* Tabla */}
+   480→      <Card>
+   481→        <CardContent className="p-0">
+   482→          {loading ? (
+   483→            <div className="p-8 text-center text-muted-foreground">
+   484→              <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+   485→              Cargando productos...
+   486→            </div>
+   487→          ) : filtered.length === 0 ? (
+   488→            <div className="p-12 text-center">
+   489→              <Package className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+   490→              <p className="text-sm text-muted-foreground">
+   491→                {search || filterCat !== "all" || filterStock !== "all"
+   492→                  ? "No se encontraron productos con esos filtros"
+   493→                  : "Aún no tenés productos. Creá el primero!"}
+   494→              </p>
+   495→            </div>
+   496→          ) : (
+   497→            <div className="overflow-x-auto">
+   498→              <Table>
+   499→                <TableHeader>
+   500→                  <TableRow>
+   501→                    <TableHead>Nombre</TableHead>
+   502→                    <TableHead className="hidden md:table-cell">Categoría</TableHead>
+   503→                    <TableHead className="text-right">Costo</TableHead>
+   504→                    <TableHead className="text-right">Precio</TableHead>
+   505→                    <TableHead className="text-right">Stock</TableHead>
+   506→                    <TableHead className="text-center">Estado</TableHead>
+   507→                    <TableHead className="text-right">Acciones</TableHead>
+   508→                  </TableRow>
+   509→                </TableHeader>
+   510→                <TableBody>
+   511→                  {filtered.map((p) => (
+   512→                    <TableRow key={p.id} className={!p.active ? "opacity-50" : ""}>
+   513→                      <TableCell>
+   514→                        <div>
+   515→                          <p className="font-medium">{p.name}</p>
+   516→                          {(p.barcode || p.sku) && (
+   517→                            <p className="text-xs text-muted-foreground">
+   518→                              {p.barcode && `Cód: ${p.barcode}`}
+   519→                              {p.barcode && p.sku && " · "}
+   520→                              {p.sku && `SKU: ${p.sku}`}
+   521→                            </p>
+   522→                          )}
+   523→                        </div>
+   524→                      </TableCell>
+   525→                      <TableCell className="hidden md:table-cell">
+   526→                        {p.category ? (
+   527→                          <Badge variant="outline">{p.category.name}</Badge>
+   528→                        ) : (
+   529→                          <span className="text-xs text-muted-foreground">—</span>
+   530→                        )}
+   531→                      </TableCell>
+   532→                      <TableCell className="text-right text-muted-foreground">
+   533→                        {formatCurrency(p.costPrice, symbol)}
+   534→                      </TableCell>
+   535→                      <TableCell className="text-right font-semibold">
+   536→                        {formatCurrency(p.salePrice, symbol)}
+   537→                      </TableCell>
+   538→                      <TableCell className="text-right">
+   539→                        <span
+   540→                          className={
+   541→                            p.stock <= 0
+   542→                              ? "text-red-600 font-medium"
+   543→                              : p.stock <= p.minStock
+   544→                              ? "text-amber-600 font-medium"
+   545→                              : "text-indigo-700"
+   546→                          }
+   547→                        >
+   548→                          {p.stock} {p.unit === "KG" ? "kg" : "u"}
+   549→                        </span>
+   550→                      </TableCell>
+   551→                      <TableCell className="text-center">
+   552→                        {p.active ? (
+   553→                          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
+   554→                            Activo
+   555→                          </Badge>
+   556→                        ) : (
+   557→                          <Badge variant="secondary">Inactivo</Badge>
+   558→                        )}
+   559→                      </TableCell>
+   560→                      <TableCell className="text-right">
+   561→                        <Button
+   562→                          variant="ghost"
+   563→                          size="icon"
+   564→                          className="h-8 w-8"
+   565→                          onClick={() => openEdit(p)}
+   566→                        >
+   567→                          <Pencil className="w-3.5 h-3.5" />
+   568→                        </Button>
+   569→                        <Button
+   570→                          variant="ghost"
+   571→                          size="icon"
+   572→                          className="h-8 w-8 text-red-600"
+   573→                          onClick={() => setDeleteId(p.id)}
+   574→                        >
+   575→                          <Trash2 className="w-3.5 h-3.5" />
+   576→                        </Button>
+   577→                      </TableCell>
+   578→                    </TableRow>
+   579→                  ))}
+   580→                </TableBody>
+   581→              </Table>
+   582→            </div>
+   583→          )}
+   584→        </CardContent>
+   585→      </Card>
+   586→
+   587→      {/* Form dialog */}
+   588→      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+   589→        <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[92vh] overflow-y-auto">
+   590→          <DialogHeader>
+   591→            <DialogTitle>{form.id ? "Editar producto" : "Nuevo producto"}</DialogTitle>
+   592→            <DialogDescription>
+   593→              {form.id
+   594→                ? "Modificá los datos del producto. Si cambiás el stock, se registrará un ajuste."
+   595→                : "Completá los datos del nuevo producto."}
+   596→            </DialogDescription>
+   597→          </DialogHeader>
+   598→
+   599→          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+   600→            <div className="space-y-2 sm:col-span-2">
+   601→              <Label htmlFor="name">Nombre *</Label>
+   602→              <Input
+   603→                id="name"
+   604→                value={form.name}
+   605→                onChange={(e) => setForm({ ...form, name: e.target.value })}
+   606→              />
+   607→            </div>
+   608→            <div className="space-y-2 sm:col-span-2">
+   609→              <div className="flex items-center justify-between">
+   610→                <Label htmlFor="barcode">Código de barras</Label>
+   611→                <span className="text-xs text-muted-foreground">
+   612→                  Escaneá con lector o escribí y presioná Enter
+   613→                </span>
+   614→              </div>
+   615→              <div className="flex gap-2">
+   616→                <div className="relative flex-1">
+   617→                  <ScanLine className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   618→                  <Input
+   619→                    id="barcode"
+   620→                    placeholder="Ej: 7790895005231"
+   621→                    value={form.barcode}
+   622→                    onChange={(e) => {
+   623→                      setForm({ ...form, barcode: e.target.value });
+   624→                      if (lookupResult) resetLookup();
+   625→                    }}
+   626→                    onKeyDown={(e) => {
+   627→                      if (e.key === "Enter" && !lookupLoading) {
+   628→                        e.preventDefault();
+   629→                        handleBarcodeLookup();
+   630→                      }
+   631→                    }}
+   632→                    className="pl-9"
+   633→                  />
+   634→                </div>
+   635→                <Button
+   636→                  type="button"
+   637→                  variant="secondary"
+   638→                  onClick={handleBarcodeLookup}
+   639→                  disabled={lookupLoading || !form.barcode}
+   640→                  title="Buscar datos del producto por código"
+   641→                >
+   642→                  {lookupLoading ? (
+   643→                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+   644→                  ) : (
+   645→                    <Search className="w-4 h-4 mr-2" />
+   646→                  )}
+   647→                  Buscar
+   648→                </Button>
+   649→              </div>
+   650→              {/* Estado del lookup */}
+   651→              {lookupResult?.status === "loading" && (
+   652→                <p className="text-xs text-muted-foreground flex items-center gap-1">
+   653→                  <Loader2 className="w-3 h-3 animate-spin" />
+   654→                  Consultando base de datos de productos...
+   655→                </p>
+   656→              )}
+   657→              {lookupResult?.status === "found" && (
+   658→                <div className="flex items-start gap-3 p-3 rounded-md bg-emerald-50 border border-emerald-200">
+   659→                  {lookupResult.imageUrl ? (
+   660→                    // eslint-disable-next-line @next/next/no-img-element
+   661→                    <img
+   662→                      src={lookupResult.imageUrl}
+   663→                      alt="Producto"
+   664→                      className="w-14 h-14 rounded-md object-cover border bg-white"
+   665→                      onError={(e) => {
+   666→                        (e.currentTarget as HTMLImageElement).style.display = "none";
+   667→                      }}
+   668→                    />
+   669→                  ) : (
+   670→                    <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center">
+   671→                      <ImageOff className="w-5 h-5 text-muted-foreground" />
+   672→                    </div>
+   673→                  )}
+   674→                  <div className="flex-1 min-w-0">
+   675→                    <p className="text-xs font-medium text-emerald-800 flex items-center gap-1">
+   676→                      <CheckCircle2 className="w-3.5 h-3.5" />
+   677→                      Encontrado en{" "}
+   678→                      {lookupResult.source === "openfoodfacts"
+   679→                        ? "Open Food Facts"
+   680→                        : "UPC Item DB"}
+   681→                    </p>
+   682→                    <p className="text-xs text-emerald-700 mt-0.5">
+   683→                      Se autocompletaron nombre y descripción. Revisá precios y stock.
+   684→                    </p>
+   685→                  </div>
+   686→                </div>
+   687→              )}
+   688→              {lookupResult?.status === "notfound" && (
+   689→                <p className="text-xs text-amber-600">
+   690→                  No se encontró en bases públicas. Completá los datos manualmente.
+   691→                </p>
+   692→              )}
+   693→              {lookupResult?.status === "error" && (
+   694→                <p className="text-xs text-red-600">
+   695→                  Error al consultar. Verificá tu conexión e intentá nuevamente.
+   696→                </p>
+   697→              )}
+   698→            </div>
+   699→            <div className="space-y-2">
+   700→              <Label htmlFor="sku">SKU</Label>
+   701→              <Input
+   702→                id="sku"
+   703→                value={form.sku}
+   704→                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+   705→              />
+   706→            </div>
+   707→            <div className="space-y-2">
+   708→              <Label htmlFor="category">Categoría</Label>
+   709→              <Select
+   710→                value={form.categoryId || "none"}
+   711→                onValueChange={(v) =>
+   712→                  setForm({ ...form, categoryId: v === "none" ? null : v })
+   713→                }
+   714→              >
+   715→                <SelectTrigger>
+   716→                  <SelectValue placeholder="Sin categoría" />
+   717→                </SelectTrigger>
+   718→                <SelectContent>
+   719→                  <SelectItem value="none">Sin categoría</SelectItem>
+   720→                  {categories.map((c) => (
+   721→                    <SelectItem key={c.id} value={c.id}>
+   722→                      {c.name}
+   723→                    </SelectItem>
+   724→                  ))}
+   725→                </SelectContent>
+   726→              </Select>
+   727→            </div>
+   728→            <div className="space-y-2">
+   729→              <Label htmlFor="unit">Unidad</Label>
+   730→              <Select
+   731→                value={form.unit}
+   732→                onValueChange={(v) => setForm({ ...form, unit: v })}
+   733→              >
+   734→                <SelectTrigger>
+   735→                  <SelectValue />
+   736→                </SelectTrigger>
+   737→                <SelectContent>
+   738→                  {UNITS.map((u) => (
+   739→                    <SelectItem key={u.value} value={u.value}>
+   740→                      {u.label}
+   741→                    </SelectItem>
+   742→                  ))}
+   743→                </SelectContent>
+   744→              </Select>
+   745→            </div>
+   746→            <div className="space-y-2">
+   747→              <Label htmlFor="costPrice">Precio de costo</Label>
+   748→              <Input
+   749→                id="costPrice"
+   750→                type="number"
+   751→                step="0.01"
+   752→                value={form.costPrice}
+   753→                onChange={(e) =>
+   754→                  setForm({ ...form, costPrice: Number(e.target.value) })
+   755→                }
+   756→              />
+   757→            </div>
+   758→            <div className="space-y-2">
+   759→              <Label htmlFor="salePrice">Precio de venta *</Label>
+   760→              <Input
+   761→                id="salePrice"
+   762→                type="number"
+   763→                step="0.01"
+   764→                value={form.salePrice}
+   765→                onChange={(e) =>
+   766→                  setForm({ ...form, salePrice: Number(e.target.value) })
+   767→                }
+   768→              />
+   769→              {form.costPrice > 0 && form.salePrice > 0 && (
+   770→                <p className="text-xs text-muted-foreground">
+   771→                  Margen:{" "}
+   772→                  {(
+   773→                    ((form.salePrice - form.costPrice) / form.costPrice) *
+   774→                    100
+   775→                  ).toFixed(1)}
+   776→                  %
+   777→                </p>
+   778→              )}
+   779→            </div>
+   780→            <div className="space-y-2">
+   781→              <Label htmlFor="stock">
+   782→                {form.id ? "Stock (ajuste)" : "Stock inicial"}
+   783→              </Label>
+   784→              <Input
+   785→                id="stock"
+   786→                type="number"
+   787→                step="0.01"
+   788→                value={form.stock}
+   789→                onChange={(e) =>
+   790→                  setForm({ ...form, stock: Number(e.target.value) })
+   791→                }
+   792→              />
+   793→            </div>
+   794→            <div className="space-y-2">
+   795→              <Label htmlFor="minStock">Stock mínimo</Label>
+   796→              <Input
+   797→                id="minStock"
+   798→                type="number"
+   799→                step="0.01"
+   800→                value={form.minStock}
+   801→                onChange={(e) =>
+   802→                  setForm({ ...form, minStock: Number(e.target.value) })
+   803→                }
+   804→              />
+   805→            </div>
+   806→            {form.id && (
+   807→              <div className="space-y-2 sm:col-span-2">
+   808→                <Label htmlFor="adjustReason">Motivo del ajuste (opcional)</Label>
+   809→                <Input
+   810→                  id="adjustReason"
+   811→                  placeholder="Ej: Recuento de inventario"
+   812→                  value={form.adjustReason}
+   813→                  onChange={(e) =>
+   814→                    setForm({ ...form, adjustReason: e.target.value })
+   815→                  }
+   816→                />
+   817→              </div>
+   818→            )}
+   819→            <div className="space-y-2 sm:col-span-2">
+   820→              <Label htmlFor="description">Descripción</Label>
+   821→              <Textarea
+   822→                id="description"
+   823→                value={form.description}
+   824→                onChange={(e) =>
+   825→                  setForm({ ...form, description: e.target.value })
+   826→                }
+   827→                rows={2}
+   828→              />
+   829→            </div>
+   830→            <div className="flex items-center gap-2 sm:col-span-2">
+   831→              <Switch
+   832→                id="active"
+   833→                checked={form.active}
+   834→                onCheckedChange={(v) => setForm({ ...form, active: v })}
+   835→              />
+   836→              <Label htmlFor="active">Producto activo (visible en POS)</Label>
+   837→            </div>
+   838→
+   839→            {/* Sección colapsable: datos adicionales */}
+   840→            <div className="sm:col-span-2 border rounded-lg overflow-hidden">
+   841→              <button
+   842→                type="button"
+   843→                onClick={() => setShowExtraFields((v) => !v)}
+   844→                className="w-full flex items-center justify-between p-3 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+   845→              >
+   846→                <span className="flex items-center gap-2 text-sm font-medium">
+   847→                  {showExtraFields ? (
+   848→                    <ChevronDown className="w-4 h-4" />
+   849→                  ) : (
+   850→                    <ChevronRight className="w-4 h-4" />
+   851→                  )}
+   852→                  Datos adicionales del producto
+   853→                </span>
+   854→                <span className="text-xs text-muted-foreground">
+   855→                  {(labelChips.length > 0 ||
+   856→                    allergenChips.length > 0 ||
+   857→                    form.brand ||
+   858→                    form.ingredients) && (
+   859→                    <Badge variant="secondary" className="ml-1">
+   860→                      Autocompletado
+   861→                    </Badge>
+   862→                  )}
+   863→                </span>
+   864→              </button>
+   865→              {showExtraFields && (
+   866→                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 p-4">
+   867→                  {/* Marca */}
+   868→                  <div className="space-y-2">
+   869→                    <Label htmlFor="brand">Marca</Label>
+   870→                    <Input
+   871→                      id="brand"
+   872→                      placeholder="Ej: LIEBIG, Coca-Cola, Amanda"
+   873→                      value={form.brand || ""}
+   874→                      onChange={(e) =>
+   875→                        setForm({ ...form, brand: e.target.value })
+   876→                      }
+   877→                    />
+   878→                  </div>
+   879→
+   880→                  {/* Imagen (URL) */}
+   881→                  <div className="space-y-2">
+   882→                    <Label htmlFor="imageUrl">Imagen del producto (URL)</Label>
+   883→                    <div className="flex gap-2">
+   884→                      <Input
+   885→                        id="imageUrl"
+   886→                        placeholder="https://..."
+   887→                        value={form.imageUrl || ""}
+   888→                        onChange={(e) =>
+   889→                          setForm({ ...form, imageUrl: e.target.value })
+   890→                        }
+   891→                      />
+   892→                      {form.imageUrl && (
+   893→                        // eslint-disable-next-line @next/next/no-img-element
+   894→                        <img
+   895→                          src={form.imageUrl}
+   896→                          alt=""
+   897→                          className="w-10 h-10 rounded border object-cover bg-white"
+   898→                          onError={(e) => {
+   899→                            (e.currentTarget as HTMLImageElement).style.display =
+   900→                              "none";
+   901→                          }}
+   902→                        />
+   903→                      )}
+   904→                    </div>
+   905→                  </div>
+   906→
+   907→                  {/* Etiquetas (chips editables) */}
+   908→                  <div className="space-y-2 sm:col-span-2">
+   909→                    <Label>Etiquetas</Label>
+   910→                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-md border bg-background">
+   911→                      {labelChips.length === 0 && (
+   912→                        <span className="text-xs text-muted-foreground">
+   913→                          Sin etiquetas. Ej: Sin TACC, Vegano, Orgánico...
+   914→                        </span>
+   915→                      )}
+   916→                      {labelChips.map((label) => (
+   917→                        <Badge
+   918→                          key={label}
+   919→                          variant="secondary"
+   920→                          className="gap-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+   921→                        >
+   922→                          {label}
+   923→                          <button
+   924→                            type="button"
+   925→                            onClick={() =>
+   926→                              setLabelChips((prev) =>
+   927→                                prev.filter((l) => l !== label)
+   928→                              )
+   929→                            }
+   930→                            className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"
+   931→                          >
+   932→                            <X className="w-3 h-3" />
+   933→                          </button>
+   934→                        </Badge>
+   935→                      ))}
+   936→                    </div>
+   937→                    <Input
+   938→                      placeholder="Escribí una etiqueta y presioná Enter..."
+   939→                      value={labelInput}
+   940→                      onChange={(e) => setLabelInput(e.target.value)}
+   941→                      onKeyDown={(e) => {
+   942→                        if (e.key === "Enter" && labelInput.trim()) {
+   943→                          e.preventDefault();
+   944→                          const v = labelInput.trim();
+   945→                          if (!labelChips.includes(v)) {
+   946→                            setLabelChips((prev) => [...prev, v].slice(0, 15));
+   947→                          }
+   948→                          setLabelInput("");
+   949→                        }
+   950→                      }}
+   951→                    />
+   952→                  </div>
+   953→
+   954→                  {/* Alérgenos (chips editables con advertencia) */}
+   955→                  <div className="space-y-2 sm:col-span-2">
+   956→                    <Label className="flex items-center gap-1.5">
+   957→                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+   958→                      Alérgenos
+   959→                    </Label>
+   960→                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-md border bg-background">
+   961→                      {allergenChips.length === 0 && (
+   962→                        <span className="text-xs text-muted-foreground">
+   963→                          Sin alérgenos declarados. Ej: Leche, Gluten, Soja...
+   964→                        </span>
+   965→                      )}
+   966→                      {allergenChips.map((a) => (
+   967→                        <Badge
+   968→                          key={a}
+   969→                          className="gap-1 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+   970→                        >
+   971→                          {a}
+   972→                          <button
+   973→                            type="button"
+   974→                            onClick={() =>
+   975→                              setAllergenChips((prev) =>
+   976→                                prev.filter((x) => x !== a)
+   977→                              )
+   978→                            }
+   979→                            className="ml-1 hover:bg-red-200 rounded-full p-0.5"
+   980→                          >
+   981→                            <X className="w-3 h-3" />
+   982→                          </button>
+   983→                        </Badge>
+   984→                      ))}
+   985→                    </div>
+   986→                    <Input
+   987→                      placeholder="Escribí un alérgeno y presioná Enter..."
+   988→                      value={allergenInput}
+   989→                      onChange={(e) => setAllergenInput(e.target.value)}
+   990→                      onKeyDown={(e) => {
+   991→                        if (e.key === "Enter" && allergenInput.trim()) {
+   992→                          e.preventDefault();
+   993→                          const v = allergenInput.trim();
+   994→                          if (!allergenChips.includes(v)) {
+   995→                            setAllergenChips((prev) =>
+   996→                              [...prev, v].slice(0, 15)
+   997→                            );
+   998→                          }
+   999→                          setAllergenInput("");
+  1000→                        }
+  1001→                      }}
+  1002→                    />
+  1003→                  </div>
+  1004→
+  1005→                  {/* Ingredientes */}
+  1006→                  <div className="space-y-2 sm:col-span-2">
+  1007→                    <Label htmlFor="ingredients">Ingredientes</Label>
+  1008→                    <Textarea
+  1009→                      id="ingredients"
+  1010→                      placeholder="Lista de ingredientes completa..."
+  1011→                      value={form.ingredients || ""}
+  1012→                      onChange={(e) =>
+  1013→                        setForm({ ...form, ingredients: e.target.value })
+  1014→                      }
+  1015→                      rows={3}
+  1016→                      className="text-xs"
+  1017→                    />
+  1018→                  </div>
+  1019→                </div>
+  1020→              )}
+  1021→            </div>
+  1022→          </div>
+  1023→
+  1024→          <DialogFooter>
+  1025→            <DialogClose asChild>
+  1026→              <Button variant="outline">Cancelar</Button>
+  1027→            </DialogClose>
+  1028→            <Button
+  1029→              onClick={handleSave}
+  1030→              disabled={saving}
+  1031→              className="bg-indigo-600 hover:bg-indigo-700"
+  1032→            >
+  1033→              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+  1034→              {form.id ? "Guardar cambios" : "Crear producto"}
+  1035→            </Button>
+  1036→          </DialogFooter>
+  1037→        </DialogContent>
+  1038→      </Dialog>
+  1039→
+  1040→      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+  1041→        <AlertDialogContent>
+  1042→          <AlertDialogHeader>
+  1043→            <AlertDialogTitle>¿Desactivar producto?</AlertDialogTitle>
+  1044→            <AlertDialogDescription>
+  1045→              El producto se marcará como inactivo y no aparecerá en el POS.
+  1046→              Las ventas históricas se conservan. Podés reactivarlo cuando quieras.
+  1047→            </AlertDialogDescription>
+  1048→          </AlertDialogHeader>
+  1049→          <AlertDialogFooter>
+  1050→            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+  1051→            <AlertDialogAction
+  1052→              onClick={handleDelete}
+  1053→              className="bg-red-600 hover:bg-red-700"
+  1054→            >
+  1055→              Desactivar
+  1056→            </AlertDialogAction>
+  1057→          </AlertDialogFooter>
+  1058→        </AlertDialogContent>
+  1059→      </AlertDialog>
+  1060→    </div>
+  1061→  );
+  1062→}
+  1063→

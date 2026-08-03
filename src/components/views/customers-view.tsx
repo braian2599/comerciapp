@@ -58,7 +58,9 @@ import {
   Star,
   Award,
   Gift,
+  Upload,
 } from "lucide-react";
+import { ImportDialog } from "@/components/import-dialog";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime, PAYMENT_METHOD_TYPES } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
@@ -119,6 +121,7 @@ export function CustomersView() {
   const [form, setForm] = useState<any>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   // Cuenta corriente
   const [accountOpen, setAccountOpen] = useState(false);
@@ -324,6 +327,25 @@ export function CustomersView() {
 
   return (
     <div className="space-y-4">
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        endpoint="/api/customers/import"
+        templateHeaders={[
+          "name",
+          "phone",
+          "email",
+          "address",
+          "cuit",
+          "taxType",
+          "creditLimit",
+          "notes",
+        ]}
+        templateName="plantilla_clientes.csv"
+        entityLabel="cliente"
+        entityLabelPlural="clientes"
+        onImported={load}
+      />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
@@ -334,10 +356,19 @@ export function CustomersView() {
             </span>
           </p>
         </div>
-        <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo cliente
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
+          <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo cliente
+          </Button>
+        </div>
       </div>
 
       <Card>
