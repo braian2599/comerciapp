@@ -44,6 +44,10 @@ model Store {
   taxConfig     TaxConfig?
   mercadoPagoConfig MercadoPagoConfig?
   mercadoPagoPayments MercadoPagoPayment[]
+  branches      Branch[]
+  promotions    Promotion[]
+  refunds       Refund[]
+  loyaltyProgram LoyaltyProgram?
 }
 
 // ===== USUARIO =====
@@ -67,6 +71,7 @@ model User {
   expenses       Expense[]
   customerPayments CustomerPayment[]
   invoices       Invoice[]
+  refunds        Refund[]
 }
 
 // ===== CATEGORÍA =====
@@ -77,8 +82,9 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  products  Product[]
+  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products    Product[]
+  promotions  Promotion[]
 }
 
 // ===== PRODUCTO =====
@@ -104,6 +110,8 @@ model Product {
   saleItems       SaleItem[]
   stockMovements  StockMovement[]
   purchaseItems   PurchaseOrderItem[]
+  promotions      Promotion[]
+  refundItems     RefundItem[]
 }
 
 // ===== CLIENTE =====
@@ -119,6 +127,11 @@ model Customer {
   taxType   String?  // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
   storeId   String
   creditLimit Float  @default(0) // límite de cuenta corriente (0 = sin límite)
+  // Fidelización
+  loyaltyPoints   Float  @default(0) // saldo de puntos acumulados
+  loyaltyTier     String @default("BRONCE") // BRONCE, PLATA, ORO, PLATINO
+  totalSpent      Float  @default(0) // monto total histórico comprado
+  totalSales      Int    @default(0) // cantidad de compras históricas
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -126,6 +139,8 @@ model Customer {
   sales     Sale[]
   payments  CustomerPayment[]
   invoices  Invoice[]
+  loyaltyPointsLog LoyaltyPoint[]
+  refunds   Refund[]
 }
 
 // ===== VENTA =====
@@ -135,13 +150,21 @@ model Sale {
   userId          String
   customerId      String?
   cashRegisterId  String?
+  branchId        String?  // sucursal donde se realizó (null = principal)
   subtotal        Float
   discount        Float    @default(0)
+  discountReason  String?  // motivo del descuento (PROMOCION, MANUAL, PUNTOS, etc.)
   tax             Float    @default(0)
   surcharge       Float    @default(0) // recargo por método de pago
   total           Float
   paymentMethod   String   @default("EFECTIVO") // nombre del método (snapshot)
   paymentMethodId String?
+  // Promociones aplicadas (resumen)
+  promotionId     String?  // promoción principal aplicada
+  promotionDiscount Float  @default(0) // monto descontado por promociones automáticas
+  // Fidelización
+  loyaltyPointsEarned Float @default(0) // puntos ganados en esta venta
+  loyaltyPointsUsed   Float @default(0) // puntos canjeados (descuento aplicado)
   // Cuenta corriente
   onCredit        Boolean  @default(false) // true = venta fiada
   amountPaid      Float    @default(0) // monto cobrado (total si es contado, 0 si es fiado completo)
@@ -155,14 +178,18 @@ model Sale {
   customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   paymentMethodRef PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+  branch          Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  promotion       Promotion?      @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   items           SaleItem[]
   // Facturación y Mercado Pago
   invoice         Invoice?
   mercadoPagoPayment MercadoPagoPayment?
+  refund          Refund?
 
   @@index([storeId, createdAt])
   @@index([storeId, status])
   @@index([customerId, onCredit])
+  @@index([branchId, createdAt])
 }
 
 // ===== ITEM DE VENTA =====
@@ -223,6 +250,7 @@ model CashRegister {
   id          String    @id @default(cuid())
   storeId     String
   userId      String    // usuario que abrió la caja
+  branchId    String?   // sucursal donde opera la caja (null = principal)
   openingDate DateTime  @default(now())
   closingDate DateTime?
   openingBalance Float  @default(0) // monto inicial en efectivo
@@ -236,11 +264,14 @@ model CashRegister {
 
   store      Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   user       User           @relation(fields: [userId], references: [id])
+  branch     Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
   movements  CashMovement[]
   sales      Sale[]
+  refunds    Refund[]
 
   @@index([storeId, status])
   @@index([userId, openingDate])
+  @@index([branchId, status])
 }
 
 // Movimientos de efectivo dentro de una caja (ingresos/egresos manuales)
@@ -514,4 +545,182 @@ model MercadoPagoPayment {
   @@index([saleId])
   @@index([mpPaymentId])
   @@index([status])
+}
+
+// ===== SUCURSALES (Multi-sucursal) =====
+// Permite a un comercio operar con múltiples puntos de venta físicos
+model Branch {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String   // nombre legible: "Sucursal Centro", "Sucursal Norte"
+  code        String   // código corto: "CEN", "NOR", "SUR"
+  address     String?
+  phone       String?
+  manager     String?  // nombre del encargado
+  active      Boolean  @default(true)
+  isMain      Boolean  @default(false) // true = sucursal principal
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+  cashRegisters CashRegister[]
+  refunds     Refund[]
+
+  @@index([storeId, active])
+}
+
+// ===== PROMOCIONES / DESCUENTOS =====
+// Motor de promociones: porcentaje, monto fijo, 2x1, NxM, combos
+model Promotion {
+  id            String   @id @default(cuid())
+  storeId       String
+  name          String   // "2x1 en gaseosas", "Descuento 10% tarde"
+  description   String?
+  type          String   // PORCENTAJE, MONTO_FIJO, NXM (NxM), COMBO
+  // Configuración principal
+  value         Float    @default(0) // porcentaje (0-100) o monto fijo según type
+  buyQuantity   Int      @default(0) // para NxM: cuántos paga el cliente
+  getQuantity   Int      @default(0) // para NxM: cuántos se lleva
+  // Aplicación
+  scope         String   @default("CART") // CART (carrito), CATEGORY, PRODUCT
+  categoryId    String?  // si scope=CATEGORY
+  productId     String?  // si scope=PRODUCT
+  minPurchase   Float    @default(0) // monto mínimo del carrito para activarse
+  maxDiscount   Float?   // tope máximo de descuento (null = sin tope)
+  // Vigencia
+  startDate     DateTime @default(now())
+  endDate       DateTime?
+  daysOfWeek    String?  // "0,1,2,3,4,5,6" o null = todos los días (0=domingo)
+  startHour     Int?     // hora de inicio (0-23) para promos por horario
+  endHour       Int?     // hora de fin (0-23)
+  // Estado
+  active        Boolean  @default(true)
+  priority      Int      @default(0) // mayor = se evalúa primero
+  usageLimit    Int?     // límite total de usos (null = ilimitado)
+  usageCount    Int      @default(0) // usos actuales
+  perCustomerLimit Int?  // límite por cliente (null = ilimitado)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sales         Sale[]
+
+  @@index([storeId, active])
+  @@index([storeId, type])
+}
+
+// ===== DEVOLUCIONES / NOTAS DE CRÉDITO =====
+// Registra devoluciones totales o parciales sobre una venta
+model Refund {
+  id            String   @id @default(cuid())
+  storeId       String
+  saleId        String   @unique // una venta tiene una sola devolución (total o parcial)
+  userId        String   // usuario que procesa la devolución
+  customerId    String?  // cliente (snapshot)
+  branchId      String?
+  cashRegisterId String?
+  refundNumber  String   // número legible: DEV-0001
+  type          String   @default("PARCIAL") // PARCIAL, TOTAL
+  // Montos
+  subtotal      Float    @default(0)
+  discount      Float    @default(0)
+  tax           Float    @default(0)
+  total         Float    @default(0) // monto negativo o positivo (siempre positivo para la devolución)
+  // Método de devolución
+  refundMethod  String   @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, CREDITO_CUENTA (saldo a cuenta corriente)
+  // Razón
+  reason        String?  // motivo: PRODUCTO_DEFECTUOSO, NO_CONFORME, ERROR_VENTA, OTRO
+  notes         String?
+  // Nota de crédito asociada (AFIP)
+  invoiceId     String?  // si se emitió nota de crédito fiscal
+  // Estado
+  status        String   @default("COMPLETADA") // COMPLETADA, ANULADA
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id])
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  branch        Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  cashRegister  CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+  items         RefundItem[]
+
+  @@index([storeId, createdAt])
+  @@index([saleId])
+  @@index([customerId, createdAt])
+}
+
+model RefundItem {
+  id         String @id @default(cuid())
+  refundId   String
+  saleItemId String // item original de la venta
+  productId  String
+  quantity   Float  // cantidad devuelta (siempre positiva)
+  unitPrice  Float  // precio unitario al que se vendió
+  costPrice  Float  // costo snapshot
+  subtotal   Float  // cantidad * unitPrice
+
+  refund     Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  product    Product @relation(fields: [productId], references: [id])
+
+  @@index([refundId])
+}
+
+// ===== PROGRAMA DE FIDELIZACIÓN =====
+// Configuración del programa de puntos de la tienda
+model LoyaltyProgram {
+  id                String   @id @default(cuid())
+  storeId           String   @unique
+  enabled           Boolean  @default(false)
+  name              String   @default("Programa de Puntos")
+  // Reglas de acumulación
+  pointsPerWeight   Float    @default(1) // puntos por cada $1 comprado
+  roundMode         String   @default("FLOOR") // FLOOR, CEIL, ROUND
+  minPurchase       Float    @default(0) // monto mínimo para acumular
+  // Reglas de canje
+  pointsToCurrency  Float    @default(0.01) // valor de 1 punto en $ (ej: 100 pts = $1)
+  minRedeemPoints   Float    @default(0) // mínimo de puntos para canjear
+  maxRedeemPercent  Float    @default(100) // % máx del total canjeable con puntos
+  // Niveles (tiers) por monto acumulado
+  tierBronceMin     Float    @default(0)
+  tierBronceBonus   Float    @default(0) // multiplicador de puntos
+  tierPlataMin      Float    @default(50000) // monto acumulado
+  tierPlataBonus    Float    @default(0.2) // +20% puntos
+  tierOroMin        Float    @default(200000)
+  tierOroBonus      Float    @default(0.5) // +50% puntos
+  tierPlatinoMin    Float    @default(500000)
+  tierPlatinoBonus  Float    @default(1) // +100% puntos
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  pointsLog         LoyaltyPoint[]
+}
+
+// Historial de puntos (entradas/salidas)
+model LoyaltyPoint {
+  id          String   @id @default(cuid())
+  storeId     String
+  customerId  String
+  programId   String
+  // Movimiento
+  type        String   // EARN (ganado), REDEEM (canjeado), EXPIRE (vencido), ADJUST (manual)
+  points      Float    // positivo si entrada, negativo si salida
+  balance     Float    // saldo después del movimiento
+  // Referencia
+  refType     String?  // Sale, Refund, Manual
+  refId       String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  customer    Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  program     LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([refType, refId])
 }

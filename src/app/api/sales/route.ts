@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { calculatePointsEarned, determineTier, pointsToCurrency, calculateMaxRedeemablePoints } from "@/lib/loyalty";
 
 // GET: lista de ventas (con filtros)
 export async function GET(req: NextRequest) {
@@ -13,10 +14,12 @@ export async function GET(req: NextRequest) {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   const status = url.searchParams.get("status");
+  const branchId = url.searchParams.get("branchId");
   const limit = Number(url.searchParams.get("limit") || 100);
 
   const where: Prisma.SaleWhereInput = { storeId };
   if (status) where.status = status;
+  if (branchId) where.branchId = branchId;
   if (from || to) {
     where.createdAt = {};
     if (from) where.createdAt.gte = new Date(from);
@@ -30,6 +33,8 @@ export async function GET(req: NextRequest) {
       user: { select: { name: true } },
       customer: { select: { name: true } },
       paymentMethodRef: true,
+      branch: { select: { id: true, name: true, code: true } },
+      promotion: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -45,7 +50,12 @@ export async function POST(req: NextRequest) {
   const storeId = u.storeId;
 
   const body = await req.json();
-  // body: { items: [{productId, quantity}], customerId?, discount?, paymentMethodId, notes?, taxRate? }
+  // body: {
+  //   items: [{productId, quantity}],
+  //   customerId?, discount?, discountReason?,
+  //   paymentMethodId, notes?, taxRate?,
+  //   branchId?, promotionId?, loyaltyPointsUsed?
+  // }
 
   // Validar stock y obtener precios actuales
   const productIds = body.items.map((i: any) => i.productId);
@@ -81,8 +91,62 @@ export async function POST(req: NextRequest) {
     subtotal += lineSub;
   }
 
-  const discount = Number(body.discount) || 0;
-  const taxable = subtotal - discount;
+  // Promoción (validar si fue indicada)
+  let promotionId: string | null = null;
+  let promotionDiscount = 0;
+  if (body.promotionId) {
+    const promo = await db.promotion.findFirst({
+      where: { id: body.promotionId, storeId, active: true },
+    });
+    if (promo) {
+      promotionId = promo.id;
+      // El monto de la promoción viene pre-calculado desde el POS
+      promotionDiscount = Number(body.promotionDiscount) || 0;
+    }
+  }
+
+  // Descuento total = manual + promoción + puntos
+  const manualDiscount = Number(body.discount) || 0;
+  const totalDiscount = manualDiscount + promotionDiscount;
+
+  // Puntos de fidelización canjeados (descuento extra)
+  let loyaltyPointsUsed = 0;
+  let loyaltyCurrencyDiscount = 0;
+  let program: any = null;
+  let customer: any = null;
+  if (body.customerId && body.loyaltyPointsUsed && body.loyaltyPointsUsed > 0) {
+    program = await db.loyaltyProgram.findUnique({ where: { storeId } });
+    if (program && program.enabled) {
+      customer = await db.customer.findFirst({
+        where: { id: body.customerId, storeId },
+      });
+      if (customer) {
+        loyaltyPointsUsed = Math.min(
+          Number(body.loyaltyPointsUsed),
+          customer.loyaltyPoints
+        );
+        // Validar que no exceda el % máximo del total
+        const maxPts = calculateMaxRedeemablePoints(
+          customer.loyaltyPoints,
+          subtotal - totalDiscount,
+          {
+            ...program,
+            enabled: true,
+            roundMode: program.roundMode as any,
+          }
+        );
+        loyaltyPointsUsed = Math.min(loyaltyPointsUsed, maxPts);
+        loyaltyCurrencyDiscount = pointsToCurrency(loyaltyPointsUsed, {
+          ...program,
+          enabled: true,
+          roundMode: program.roundMode as any,
+        });
+      }
+    }
+  }
+
+  const effectiveDiscount = totalDiscount + loyaltyCurrencyDiscount;
+  const taxable = Math.max(0, subtotal - effectiveDiscount);
   const taxRate = Number(body.taxRate) || 0;
   const tax = taxable * (taxRate / 100);
   // Recargo del método de pago (se aplica sobre (subtotal - descuento + impuesto))
@@ -101,6 +165,30 @@ export async function POST(req: NextRequest) {
     where: { storeId, status: "ABIERTA" },
   });
 
+  // Validar branchId si viene
+  let branchId: string | null = null;
+  if (body.branchId) {
+    const branch = await db.branch.findFirst({
+      where: { id: body.branchId, storeId, active: true },
+    });
+    if (branch) branchId = branch.id;
+  }
+
+  // Calcular puntos a ganar (si hay customer y programa)
+  let loyaltyPointsEarned = 0;
+  if (customer && program && program.enabled) {
+    const tier = determineTier(customer.totalSpent, {
+      ...program,
+      enabled: true,
+      roundMode: program.roundMode as any,
+    }) as any;
+    loyaltyPointsEarned = calculatePointsEarned(total, tier, {
+      ...program,
+      enabled: true,
+      roundMode: program.roundMode as any,
+    });
+  }
+
   // Crear venta en transacción
   const sale = await db.$transaction(async (tx) => {
     const newSale = await tx.sale.create({
@@ -109,13 +197,21 @@ export async function POST(req: NextRequest) {
         userId: u.id,
         customerId: body.customerId || null,
         cashRegisterId: openRegister?.id || null,
+        branchId,
         subtotal,
-        discount,
+        discount: effectiveDiscount,
+        discountReason: loyaltyPointsUsed > 0
+          ? (promotionId ? "PROMOCION+PUNTOS" : "PUNTOS")
+          : (promotionId ? "PROMOCION" : (manualDiscount > 0 ? "MANUAL" : null)),
         tax,
         surcharge,
         total,
         paymentMethod: method?.name || "EFECTIVO",
         paymentMethodId: method?.id || null,
+        promotionId,
+        promotionDiscount,
+        loyaltyPointsEarned,
+        loyaltyPointsUsed,
         onCredit,
         amountPaid,
         status: "COMPLETADA",
@@ -162,6 +258,73 @@ export async function POST(req: NextRequest) {
           refType: "Sale",
           refId: newSale.id,
         },
+      });
+    }
+
+    // Actualizar cliente (puntos, total gastado, contador de ventas)
+    if (customer) {
+      const newBalance = customer.loyaltyPoints - loyaltyPointsUsed + loyaltyPointsEarned;
+      const newTotalSpent = customer.totalSpent + total;
+      const newTotalSales = customer.totalSales + 1;
+
+      // Recalcular tier
+      const tierProgram = program;
+      const newTier = tierProgram ? determineTier(newTotalSpent, {
+        ...tierProgram,
+        enabled: true,
+        roundMode: tierProgram.roundMode as any,
+      }) : "BRONCE";
+
+      await tx.customer.update({
+        where: { id: customer.id },
+        data: {
+          loyaltyPoints: newBalance,
+          totalSpent: newTotalSpent,
+          totalSales: newTotalSales,
+          loyaltyTier: newTier,
+        },
+      });
+
+      // Registrar movimientos de puntos en el log
+      if (program) {
+        if (loyaltyPointsUsed > 0) {
+          await tx.loyaltyPoint.create({
+            data: {
+              storeId,
+              customerId: customer.id,
+              programId: program.id,
+              type: "REDEEM",
+              points: -loyaltyPointsUsed,
+              balance: customer.loyaltyPoints - loyaltyPointsUsed,
+              description: `Canje en venta ${newSale.id.slice(-6)}`,
+              refType: "Sale",
+              refId: newSale.id,
+            },
+          });
+        }
+        if (loyaltyPointsEarned > 0) {
+          await tx.loyaltyPoint.create({
+            data: {
+              storeId,
+              customerId: customer.id,
+              programId: program.id,
+              type: "EARN",
+              points: loyaltyPointsEarned,
+              balance: customer.loyaltyPoints - loyaltyPointsUsed + loyaltyPointsEarned,
+              description: `Compra por $${total.toFixed(2)} - Venta ${newSale.id.slice(-6)}`,
+              refType: "Sale",
+              refId: newSale.id,
+            },
+          });
+        }
+      }
+    }
+
+    // Incrementar contador de uso de la promoción
+    if (promotionId) {
+      await tx.promotion.update({
+        where: { id: promotionId },
+        data: { usageCount: { increment: 1 } },
       });
     }
 

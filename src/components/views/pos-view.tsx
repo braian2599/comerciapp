@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
+import { calculateMaxRedeemablePoints, pointsToCurrency } from "@/lib/loyalty";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,25 @@ interface Customer {
   id: string;
   name: string;
   phone?: string;
+  loyaltyPoints?: number;
+  loyaltyTier?: string;
+  totalSpent?: number;
+}
+
+interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  isMain: boolean;
+  active: boolean;
+}
+
+interface AppliedPromotion {
+  promotionId: string;
+  promotionName: string;
+  type: string;
+  discountAmount: number;
+  description: string;
 }
 
 interface PaymentMethod {
@@ -84,6 +104,9 @@ export function PosView() {
   const [categories, setCategories] = useState<any[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchId, setBranchId] = useState<string>("");
+  const [loyaltyProgram, setLoyaltyProgram] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
@@ -102,6 +125,11 @@ export function PosView() {
   const [qrData, setQrData] = useState<any>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrPolling, setQrPolling] = useState(false);
+  // Promociones
+  const [appliedPromotion, setAppliedPromotion] = useState<AppliedPromotion | null>(null);
+  const [availablePromotions, setAvailablePromotions] = useState<AppliedPromotion[]>([]);
+  // Puntos de fidelización
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
   const symbol = store?.currencySymbol || "$";
   const taxEnabled = store?.taxEnabled;
@@ -115,7 +143,9 @@ export function PosView() {
       fetch("/api/customers").then((r) => r.json()),
       fetch("/api/payment-methods").then((r) => r.json()),
       fetch("/api/mercadopago/config").then((r) => r.json()),
-    ]).then(([p, c, cust, pm, mp]) => {
+      fetch("/api/branches").then((r) => r.json()),
+      fetch("/api/loyalty").then((r) => r.json()),
+    ]).then(([p, c, cust, pm, mp, brs, loy]) => {
       setProducts(p.filter((x: Product) => x.active));
       setCategories(c);
       setCustomers(cust);
@@ -124,9 +154,16 @@ export function PosView() {
       const def = activePM.find((m) => m.isDefault) || activePM[0];
       if (def) setPaymentMethodId(def.id);
       setMpConfig(mp);
+      setBranches(brs || []);
+      // Seleccionar sucursal principal por defecto
+      const main = (brs as Branch[])?.find((b) => b.isMain && b.active);
+      if (main) setBranchId(main.id);
+      setLoyaltyProgram(loy);
       setLoading(false);
     });
   }, []);
+
+  const selectedCustomer = customers.find((c) => c.id === customerId);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -222,13 +259,83 @@ export function PosView() {
   }
 
   const subtotal = cart.reduce((s, i) => s + i.product.salePrice * i.qty, 0);
-  const discountAmount = Math.min(discount, subtotal);
-  const taxable = subtotal - discountAmount;
+
+  // Promoción aplicada (descuento automático)
+  const promotionDiscount = appliedPromotion?.discountAmount || 0;
+  // Puntos a canjear (validar máximo permitido)
+  const maxRedeemablePoints =
+    selectedCustomer && loyaltyProgram?.enabled
+      ? calculateMaxRedeemablePoints(
+          selectedCustomer.loyaltyPoints || 0,
+          subtotal - promotionDiscount,
+          {
+            ...loyaltyProgram,
+            enabled: true,
+            roundMode: loyaltyProgram.roundMode as any,
+          }
+        )
+      : 0;
+  const effectivePointsToRedeem = Math.min(pointsToRedeem, maxRedeemablePoints);
+  const pointsCurrencyDiscount =
+    effectivePointsToRedeem > 0 && loyaltyProgram?.enabled
+      ? pointsToCurrency(effectivePointsToRedeem, {
+          ...loyaltyProgram,
+          enabled: true,
+          roundMode: loyaltyProgram.roundMode as any,
+        })
+      : 0;
+
+  const manualDiscount = Math.min(discount, subtotal);
+  const totalDiscount = manualDiscount + promotionDiscount + pointsCurrencyDiscount;
+  const taxable = Math.max(0, subtotal - totalDiscount);
   const taxAmount = taxEnabled ? taxable * (taxRate / 100) : 0;
   const selectedMethod = paymentMethods.find((m) => m.id === paymentMethodId);
   const surchargeRate = selectedMethod?.surcharge || 0;
   const surchargeAmount = (taxable + taxAmount) * (surchargeRate / 100);
   const total = taxable + taxAmount + surchargeAmount;
+
+  // Evaluar promociones disponibles (al cambiar carrito)
+  useEffect(() => {
+    if (cart.length === 0) {
+      setAvailablePromotions([]);
+      setAppliedPromotion(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/promotions/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: cart.map((i) => ({
+          productId: i.product.id,
+          categoryId: i.product.categoryId || null,
+          name: i.product.name,
+          quantity: i.qty,
+          unitPrice: i.product.salePrice,
+        })),
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setAvailablePromotions(data.applicable || []);
+        // Auto-aplicar la mejor
+        if (data.best && !appliedPromotion) {
+          setAppliedPromotion(data.best);
+        } else if (!data.best) {
+          setAppliedPromotion(null);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [cart]);
+
+  // Resetear puntos a canjear si cambia el cliente
+  useEffect(() => {
+    setPointsToRedeem(0);
+  }, [customerId]);
 
   async function processSale() {
     if (cart.length === 0) {
@@ -254,10 +361,14 @@ export function PosView() {
             quantity: i.qty,
           })),
           customerId: customerId || null,
-          discount: discountAmount,
+          discount: manualDiscount,
           paymentMethodId,
           notes,
           taxRate: taxEnabled ? taxRate : 0,
+          branchId: branchId || null,
+          promotionId: appliedPromotion?.promotionId || null,
+          promotionDiscount: appliedPromotion?.discountAmount || 0,
+          loyaltyPointsUsed: effectivePointsToRedeem || 0,
         }),
       });
       const data = await res.json();
@@ -268,18 +379,26 @@ export function PosView() {
         items: cart,
         customer: customers.find((c) => c.id === customerId),
         paymentMethod: selectedMethod,
-        discount: discountAmount,
+        discount: totalDiscount,
         tax: taxAmount,
         surcharge: surchargeAmount,
         total,
         subtotal,
+        appliedPromotion,
+        pointsUsed: effectivePointsToRedeem,
+        pointsEarned: data.loyaltyPointsEarned || 0,
       });
       setCheckoutOpen(false);
       setReceiptOpen(true);
       clearCart();
+      setAppliedPromotion(null);
+      setPointsToRedeem(0);
       // Refrescar stock
       const refreshed = await fetch("/api/products").then((r) => r.json());
       setProducts(refreshed.filter((x: Product) => x.active));
+      // Refrescar clientes (puntos actualizados)
+      const refreshedCust = await fetch("/api/customers").then((r) => r.json());
+      setCustomers(refreshedCust);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -289,11 +408,32 @@ export function PosView() {
 
   return (
     <div className="space-y-4 h-full">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Punto de Venta</h1>
-        <p className="text-sm text-muted-foreground">
-          Buscá productos, agregalos al carrito y registrá la venta
-        </p>
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Punto de Venta</h1>
+          <p className="text-sm text-muted-foreground">
+            Buscá productos, agregalos al carrito y registrá la venta
+          </p>
+        </div>
+        {branches.length > 1 && (
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">Sucursal:</Label>
+            <Select value={branchId} onValueChange={setBranchId}>
+              <SelectTrigger className="w-48 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {branches
+                  .filter((b) => b.active)
+                  .map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.isMain ? "★ " : ""}{b.name} ({b.code})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -468,8 +608,41 @@ export function PosView() {
                     <span className="text-muted-foreground">Subtotal</span>
                     <span>{formatCurrency(subtotal, symbol)}</span>
                   </div>
+                  {/* Promociones disponibles */}
+                  {availablePromotions.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Promociones</p>
+                      <div className="flex flex-wrap gap-1">
+                        {availablePromotions.map((p) => (
+                          <button
+                            key={p.promotionId}
+                            onClick={() =>
+                              setAppliedPromotion(
+                                appliedPromotion?.promotionId === p.promotionId
+                                  ? null
+                                  : p
+                              )
+                            }
+                            className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+                              appliedPromotion?.promotionId === p.promotionId
+                                ? "bg-emerald-600 text-white border-emerald-600"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            }`}
+                          >
+                            {p.promotionName} · −{formatCurrency(p.discountAmount, symbol)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {promotionDiscount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-700">
+                      <span>Promo aplicada</span>
+                      <span>−{formatCurrency(promotionDiscount, symbol)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm items-center">
-                    <span className="text-muted-foreground">Descuento</span>
+                    <span className="text-muted-foreground">Descuento manual</span>
                     <Input
                       type="number"
                       value={discount || ""}
@@ -478,6 +651,49 @@ export function PosView() {
                       className="h-7 w-24 text-right"
                     />
                   </div>
+                  {/* Puntos de fidelización */}
+                  {loyaltyProgram?.enabled && selectedCustomer && (
+                    <div className="rounded-md border border-purple-200 bg-purple-50 p-2 space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-purple-700">
+                          Puntos disponibles ({selectedCustomer.loyaltyTier || "BRONCE"})
+                        </span>
+                        <span className="font-medium text-purple-800">
+                          {Math.floor(selectedCustomer.loyaltyPoints || 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={maxRedeemablePoints}
+                          value={pointsToRedeem || ""}
+                          onChange={(e) =>
+                            setPointsToRedeem(
+                              Math.min(
+                                maxRedeemablePoints,
+                                Math.max(0, Number(e.target.value) || 0)
+                              )
+                            )
+                          }
+                          placeholder="0"
+                          className="h-7 w-24 text-right"
+                        />
+                        <span className="text-xs text-purple-700">
+                          = −{formatCurrency(pointsCurrencyDiscount, symbol)}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 ml-auto"
+                          onClick={() => setPointsToRedeem(maxRedeemablePoints)}
+                        >
+                          Máx
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   {taxEnabled && taxRate > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">
@@ -641,10 +857,14 @@ export function PosView() {
                                 quantity: i.qty,
                               })),
                               customerId: customerId || null,
-                              discount: discountAmount,
+                              discount: manualDiscount,
                               paymentMethodId,
                               notes,
                               taxRate: taxEnabled ? taxRate : 0,
+                              branchId: branchId || null,
+                              promotionId: appliedPromotion?.promotionId || null,
+                              promotionDiscount: appliedPromotion?.discountAmount || 0,
+                              loyaltyPointsUsed: effectivePointsToRedeem || 0,
                             }),
                           });
                           const saleData = await saleRes.json();
@@ -728,11 +948,13 @@ export function PosView() {
                                   items: cart,
                                   customer: customers.find((c) => c.id === customerId),
                                   paymentMethod: { name: "Mercado Pago QR" },
-                                  discount: discountAmount,
+                                  discount: totalDiscount,
                                   tax: taxAmount,
                                   surcharge: surchargeAmount,
                                   total,
                                   subtotal,
+                                  appliedPromotion,
+                                  pointsUsed: effectivePointsToRedeem,
                                 });
                                 setQrDialogOpen(false);
                                 setCheckoutOpen(false);
@@ -793,10 +1015,10 @@ export function PosView() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatCurrency(subtotal, symbol)}</span>
               </div>
-              {discountAmount > 0 && (
+              {totalDiscount > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Descuento</span>
-                  <span>-{formatCurrency(discountAmount, symbol)}</span>
+                  <span>-{formatCurrency(totalDiscount, symbol)}</span>
                 </div>
               )}
               {taxAmount > 0 && (

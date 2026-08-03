@@ -55,6 +55,9 @@ import {
   ReceiptText,
   ArrowDownCircle,
   ArrowUpCircle,
+  Star,
+  Award,
+  Gift,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime, PAYMENT_METHOD_TYPES } from "@/lib/constants";
@@ -69,6 +72,10 @@ interface Customer {
   creditLimit?: number;
   saldo?: number;
   _count?: { sales: number };
+  loyaltyPoints?: number;
+  loyaltyTier?: string;
+  totalSpent?: number;
+  totalSales?: number;
 }
 
 interface LedgerItem {
@@ -122,11 +129,26 @@ export function CustomersView() {
   const [payNotes, setPayNotes] = useState("");
   const [paySaving, setPaySaving] = useState(false);
 
+  // Fidelización - puntos
+  const [pointsOpen, setPointsOpen] = useState(false);
+  const [pointsData, setPointsData] = useState<any | null>(null);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [adjustPoints, setAdjustPoints] = useState(0);
+  const [adjustNotes, setAdjustNotes] = useState("");
+  const [adjustSaving, setAdjustSaving] = useState(false);
+
+  // Programa de fidelización (cargado una vez)
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/customers");
-    const data = await res.json();
-    setCustomers(data);
+    const [rCust, rLoy] = await Promise.all([
+      fetch("/api/customers"),
+      fetch("/api/loyalty"),
+    ]);
+    setCustomers(await rCust.json());
+    const loy = await rLoy.json();
+    setLoyaltyEnabled(!!loy?.enabled);
     setLoading(false);
   }
 
@@ -170,6 +192,53 @@ export function CustomersView() {
       toast.error("Error al cargar cuenta");
     } finally {
       setAccountLoading(false);
+    }
+  }
+
+  async function openPoints(c: Customer) {
+    setPointsOpen(true);
+    setPointsLoading(true);
+    setPointsData(null);
+    setAdjustPoints(0);
+    setAdjustNotes("");
+    try {
+      const res = await fetch(`/api/loyalty/points?customerId=${c.id}`);
+      const data = await res.json();
+      setPointsData(data);
+    } catch {
+      toast.error("Error al cargar puntos");
+    } finally {
+      setPointsLoading(false);
+    }
+  }
+
+  async function handleAdjustPoints() {
+    if (!pointsData?.customer?.id) return;
+    if (adjustPoints === 0) {
+      toast.error("Indica puntos (positivo o negativo)");
+      return;
+    }
+    setAdjustSaving(true);
+    try {
+      const res = await fetch("/api/loyalty/points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: pointsData.customer.id,
+          points: adjustPoints,
+          description: adjustNotes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success("Puntos ajustados");
+      // Recargar
+      await openPoints(pointsData.customer);
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setAdjustSaving(false);
     }
   }
 
@@ -302,6 +371,9 @@ export function CustomersView() {
                     <TableHead>Nombre</TableHead>
                     <TableHead className="hidden sm:table-cell">Contacto</TableHead>
                     <TableHead className="text-center">Compras</TableHead>
+                    {loyaltyEnabled && (
+                      <TableHead className="text-center">Puntos / Tier</TableHead>
+                    )}
                     <TableHead className="text-right">Saldo cta.</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -341,6 +413,30 @@ export function CustomersView() {
                         <TableCell className="text-center">
                           <Badge variant="outline">{c._count?.sales || 0}</Badge>
                         </TableCell>
+                        {loyaltyEnabled && (
+                          <TableCell className="text-center">
+                            {c.loyaltyTier && (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  c.loyaltyTier === "PLATINO"
+                                    ? "bg-gray-100 text-gray-800"
+                                    : c.loyaltyTier === "ORO"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : c.loyaltyTier === "PLATA"
+                                    ? "bg-slate-100 text-slate-700"
+                                    : "bg-amber-50 text-amber-800"
+                                }
+                              >
+                                <Star className="w-3 h-3 mr-1" />
+                                {c.loyaltyTier}
+                              </Badge>
+                            )}
+                            <p className="text-xs mt-0.5">
+                              {Math.floor(c.loyaltyPoints || 0)} pts
+                            </p>
+                          </TableCell>
+                        )}
                         <TableCell className="text-right">
                           {saldo > 0 ? (
                             <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
@@ -360,6 +456,17 @@ export function CustomersView() {
                             <Wallet className="w-3.5 h-3.5 mr-1" />
                             Cuenta
                           </Button>
+                          {loyaltyEnabled && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => openPoints(c)}
+                            >
+                              <Award className="w-3.5 h-3.5 mr-1" />
+                              Puntos
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -673,6 +780,158 @@ export function CustomersView() {
               {form.id ? "Guardar" : "Crear cliente"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo puntos de fidelización */}
+      <Dialog open={pointsOpen} onOpenChange={setPointsOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-emerald-600" />
+              Puntos de fidelización
+            </DialogTitle>
+            <DialogDescription>
+              {pointsData?.customer?.name}
+              {pointsData?.customer?.phone && ` · ${pointsData.customer.phone}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pointsLoading ? (
+            <div className="py-12 text-center">
+              <Loader2 className="w-6 h-6 animate-spin inline text-emerald-600" />
+            </div>
+          ) : pointsData ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Card className="bg-emerald-50 border-emerald-200">
+                  <CardContent className="p-3">
+                    <p className="text-xs text-emerald-700">Puntos actuales</p>
+                    <p className="text-xl font-bold text-emerald-800">
+                      {Math.floor(pointsData.customer.loyaltyPoints || 0)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Tier</p>
+                    <p className="text-xl font-bold">
+                      {pointsData.customer.loyaltyTier || "BRONCE"}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Compras</p>
+                    <p className="text-xl font-bold">
+                      {pointsData.customer.totalSales || 0}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <p className="text-xs text-muted-foreground">Total gastado</p>
+                    <p className="text-base font-bold">
+                      {formatCurrency(pointsData.customer.totalSpent || 0, symbol)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Ajuste manual */}
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-sm font-medium">Ajuste manual de puntos</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={adjustPoints}
+                    onChange={(e) => setAdjustPoints(Number(e.target.value))}
+                    placeholder="Ej: 100 o -50"
+                    className="w-32"
+                  />
+                  <Input
+                    value={adjustNotes}
+                    onChange={(e) => setAdjustNotes(e.target.value)}
+                    placeholder="Motivo (opcional)"
+                  />
+                  <Button
+                    onClick={handleAdjustPoints}
+                    disabled={adjustSaving || adjustPoints === 0}
+                  >
+                    {adjustSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Aplicar"
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Usa valores negativos para restar puntos.
+                </p>
+              </div>
+
+              {/* Historial */}
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-32">Fecha</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead className="text-right">Puntos</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pointsData.pointsLog.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                          Sin movimientos
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pointsData.pointsLog.map((p: any) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="text-xs">
+                            {formatDateTime(p.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                p.type === "EARN"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : p.type === "REDEEM"
+                                  ? "bg-orange-50 text-orange-700 border-orange-200"
+                                  : p.type === "EXPIRE"
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : "bg-blue-50 text-blue-700 border-blue-200"
+                              }
+                            >
+                              {p.type === "EARN" && <Gift className="w-3 h-3 mr-1" />}
+                              {p.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">{p.description}</TableCell>
+                          <TableCell
+                            className={`text-right font-medium ${
+                              p.points > 0 ? "text-emerald-700" : "text-red-700"
+                            }`}
+                          >
+                            {p.points > 0 ? "+" : ""}
+                            {p.points}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {Math.floor(p.balance)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

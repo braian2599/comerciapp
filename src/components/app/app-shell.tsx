@@ -14,6 +14,9 @@ import { ExpensesView } from "@/components/views/expenses-view";
 import { CashRegisterView } from "@/components/views/cash-register-view";
 import { InvoicesView } from "@/components/views/invoices-view";
 import { ReportsView } from "@/components/views/reports-view";
+import { RefundsView } from "@/components/views/refunds-view";
+import { PromotionsView } from "@/components/views/promotions-view";
+import { BranchesView } from "@/components/views/branches-view";
 import { SettingsView } from "@/components/views/settings-view";
 import { AuthScreen } from "@/components/app/auth-screen";
 import { Button } from "@/components/ui/button";
@@ -43,6 +46,9 @@ import {
   Store,
   Menu,
   X,
+  RotateCcw,
+  Tag,
+  Building2,
 } from "lucide-react";
 import { rubroIcon } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -61,9 +67,12 @@ const NAV_ITEMS: NavItem[] = [
   { key: "products", label: "Productos", icon: <Package className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "sales", label: "Ventas", icon: <Receipt className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "invoices", label: "Facturación", icon: <FileText className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+  { key: "refunds", label: "Devoluciones", icon: <RotateCcw className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "purchases", label: "Compras", icon: <Truck className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "inventory", label: "Inventario", icon: <Warehouse className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+  { key: "promotions", label: "Promociones", icon: <Tag className="w-4 h-4" />, roles: ["ADMIN"] },
+  { key: "branches", label: "Sucursales", icon: <Building2 className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "expenses", label: "Gastos", icon: <TrendingDown className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "reports", label: "Reportes", icon: <BarChart3 className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "settings", label: "Configuración", icon: <Settings className="w-4 h-4" />, roles: ["ADMIN"] },
@@ -131,6 +140,12 @@ export function AppShell() {
         return <SalesView />;
       case "invoices":
         return <InvoicesView />;
+      case "refunds":
+        return <RefundsView />;
+      case "promotions":
+        return <PromotionsView />;
+      case "branches":
+        return <BranchesView />;
       case "customers":
         return <CustomersView />;
       case "purchases":
@@ -227,8 +242,8 @@ export function AppShell() {
             ))}
           </nav>
           <div className="p-3 border-t border-emerald-100 text-xs text-muted-foreground">
-            <p>ComerciApp v2.0</p>
-            <p>Fase 2: Facturación + MP + Reportes</p>
+            <p>ComerciApp v3.0</p>
+            <p>Fase 3: Devoluciones + Promos + Sucursales + Fidelización</p>
           </div>
         </aside>
 

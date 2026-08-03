@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard, FileText, QrCode } from "lucide-react";
+import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard, FileText, QrCode, Award } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { RUBROS, PAYMENT_METHOD_TYPES, paymentTypeLabel, paymentTypeIcon } from "@/lib/constants";
 import {
@@ -106,6 +106,27 @@ export function SettingsView() {
   });
   const [mpSaving, setMpSaving] = useState(false);
 
+  // Fidelización
+  const [loyaltyForm, setLoyaltyForm] = useState<any>({
+    enabled: false,
+    name: "Programa de Puntos",
+    pointsPerWeight: 1,
+    roundMode: "FLOOR",
+    minPurchase: 0,
+    pointsToCurrency: 0.01,
+    minRedeemPoints: 0,
+    maxRedeemPercent: 100,
+    tierBronceMin: 0,
+    tierBronceBonus: 0,
+    tierPlataMin: 50000,
+    tierPlataBonus: 0.2,
+    tierOroMin: 200000,
+    tierOroBonus: 0.5,
+    tierPlatinoMin: 500000,
+    tierPlatinoBonus: 1,
+  });
+  const [loyaltySaving, setLoyaltySaving] = useState(false);
+
   async function loadMethods() {
     setMethodsLoading(true);
     const res = await fetch("/api/payment-methods");
@@ -153,10 +174,36 @@ export function SettingsView() {
     }
   }
 
+  async function loadLoyaltyConfig() {
+    const res = await fetch("/api/loyalty");
+    const data = await res.json();
+    if (data) {
+      setLoyaltyForm({
+        enabled: data.enabled ?? false,
+        name: data.name || "Programa de Puntos",
+        pointsPerWeight: data.pointsPerWeight ?? 1,
+        roundMode: data.roundMode || "FLOOR",
+        minPurchase: data.minPurchase ?? 0,
+        pointsToCurrency: data.pointsToCurrency ?? 0.01,
+        minRedeemPoints: data.minRedeemPoints ?? 0,
+        maxRedeemPercent: data.maxRedeemPercent ?? 100,
+        tierBronceMin: data.tierBronceMin ?? 0,
+        tierBronceBonus: data.tierBronceBonus ?? 0,
+        tierPlataMin: data.tierPlataMin ?? 50000,
+        tierPlataBonus: data.tierPlataBonus ?? 0.2,
+        tierOroMin: data.tierOroMin ?? 200000,
+        tierOroBonus: data.tierOroBonus ?? 0.5,
+        tierPlatinoMin: data.tierPlatinoMin ?? 500000,
+        tierPlatinoBonus: data.tierPlatinoBonus ?? 1,
+      });
+    }
+  }
+
   useEffect(() => {
     loadMethods();
     loadTaxConfig();
     loadMpConfig();
+    loadLoyaltyConfig();
   }, []);
 
   async function handleSaveTax() {
@@ -200,6 +247,28 @@ export function SettingsView() {
       toast.error(e.message);
     } finally {
       setMpSaving(false);
+    }
+  }
+
+  async function handleSaveLoyalty() {
+    setLoyaltySaving(true);
+    try {
+      const res = await fetch("/api/loyalty", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loyaltyForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Error guardando configuración de fidelización");
+        return;
+      }
+      toast.success("Programa de fidelización guardado");
+      loadLoyaltyConfig();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLoyaltySaving(false);
     }
   }
 
@@ -1009,6 +1078,189 @@ export function SettingsView() {
             <Button onClick={handleSaveMp} disabled={mpSaving} className="bg-cyan-600 hover:bg-cyan-700">
               {mpSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
               Guardar configuración MP
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fidelización / Programa de puntos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Award className="w-4 h-4 text-purple-600" />
+            Programa de Fidelización (Puntos)
+          </CardTitle>
+          <CardDescription>
+            Configura el programa de puntos para premiar a tus clientes frecuentes.
+            Los clientes acumulan puntos con cada compra y pueden canjearlos por descuentos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm">Habilitar programa</Label>
+              <p className="text-xs text-muted-foreground">
+                Activa el sistema de puntos en el POS y clientes
+              </p>
+            </div>
+            <Switch
+              checked={loyaltyForm.enabled}
+              onCheckedChange={(v) => setLoyaltyForm({ ...loyaltyForm, enabled: v })}
+            />
+          </div>
+
+          <div>
+            <Label className="text-sm">Nombre del programa</Label>
+            <Input
+              value={loyaltyForm.name}
+              onChange={(e) => setLoyaltyForm({ ...loyaltyForm, name: e.target.value })}
+              placeholder="Programa de Puntos"
+            />
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-sm font-medium mb-2">Acumulación de puntos</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Puntos por $1</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={loyaltyForm.pointsPerWeight}
+                  onChange={(e) => setLoyaltyForm({ ...loyaltyForm, pointsPerWeight: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Compra mínima ($)</Label>
+                <Input
+                  type="number"
+                  value={loyaltyForm.minPurchase}
+                  onChange={(e) => setLoyaltyForm({ ...loyaltyForm, minPurchase: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Redondeo</Label>
+                <Select
+                  value={loyaltyForm.roundMode}
+                  onValueChange={(v) => setLoyaltyForm({ ...loyaltyForm, roundMode: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FLOOR">Hacia abajo</SelectItem>
+                    <SelectItem value="CEIL">Hacia arriba</SelectItem>
+                    <SelectItem value="ROUND">Más cercano</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Ejemplo: con 1 punto/$1, una compra de $1000 genera 1000 puntos.
+            </p>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-sm font-medium mb-2">Canje de puntos</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Valor de 1 punto ($)</Label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  value={loyaltyForm.pointsToCurrency}
+                  onChange={(e) => setLoyaltyForm({ ...loyaltyForm, pointsToCurrency: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Mín. puntos para canjear</Label>
+                <Input
+                  type="number"
+                  value={loyaltyForm.minRedeemPoints}
+                  onChange={(e) => setLoyaltyForm({ ...loyaltyForm, minRedeemPoints: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">% máx. del total canjeable</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={loyaltyForm.maxRedeemPercent}
+                  onChange={(e) => setLoyaltyForm({ ...loyaltyForm, maxRedeemPercent: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Ejemplo: con 0.01 valor, 1000 puntos = $10 de descuento.
+            </p>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-sm font-medium mb-2">Niveles (tiers) y bonus</p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Los clientes suben de nivel según el monto acumulado. Cada nivel da un
+              multiplicador de puntos.
+            </p>
+            <div className="space-y-2">
+              {[
+                { key: "Bronce", tierKey: "tierBronce", color: "bg-amber-50 border-amber-200 text-amber-800" },
+                { key: "Plata", tierKey: "tierPlata", color: "bg-slate-50 border-slate-200 text-slate-800" },
+                { key: "Oro", tierKey: "tierOro", color: "bg-yellow-50 border-yellow-200 text-yellow-800" },
+                { key: "Platino", tierKey: "tierPlatino", color: "bg-gray-100 border-gray-300 text-gray-800" },
+              ].map((t) => (
+                <div
+                  key={t.tierKey}
+                  className={`grid grid-cols-2 gap-3 p-3 rounded-lg border ${t.color}`}
+                >
+                  <div className="flex items-center gap-2 col-span-2">
+                    <Badge variant="outline" className={t.color}>{t.key}</Badge>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Monto acumulado mínimo ($)</Label>
+                    <Input
+                      type="number"
+                      value={loyaltyForm[`${t.tierKey}Min`]}
+                      onChange={(e) =>
+                        setLoyaltyForm({
+                          ...loyaltyForm,
+                          [`${t.tierKey}Min`]: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Bonus (multiplicador)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={loyaltyForm[`${t.tierKey}Bonus`]}
+                      onChange={(e) =>
+                        setLoyaltyForm({
+                          ...loyaltyForm,
+                          [`${t.tierKey}Bonus`]: Number(e.target.value),
+                        })
+                      }
+                    />
+                    <p className="text-xs mt-0.5">
+                      Ej: 0.2 = +20% puntos
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSaveLoyalty} disabled={loyaltySaving} className="bg-purple-600 hover:bg-purple-700">
+              {loyaltySaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              Guardar programa de fidelización
             </Button>
           </div>
         </CardContent>
