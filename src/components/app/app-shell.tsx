@@ -17,9 +17,15 @@ import { ReportsView } from "@/components/views/reports-view";
 import { RefundsView } from "@/components/views/refunds-view";
 import { PromotionsView } from "@/components/views/promotions-view";
 import { BranchesView } from "@/components/views/branches-view";
+import { CommissionsView } from "@/components/views/commissions-view";
+import { PrintTemplatesView } from "@/components/views/print-templates-view";
+import { EcommerceView } from "@/components/views/ecommerce-view";
 import { SettingsView } from "@/components/views/settings-view";
+import { usePWA, usePWAInstall } from "@/hooks/use-pwa";
+import { toast } from "sonner";
 import { AuthScreen } from "@/components/app/auth-screen";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -49,6 +55,13 @@ import {
   RotateCcw,
   Tag,
   Building2,
+  Coins,
+  Printer,
+  Globe,
+  WifiOff,
+  RefreshCw,
+  Download,
+  CheckCircle2,
 } from "lucide-react";
 import { rubroIcon } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -71,8 +84,11 @@ const NAV_ITEMS: NavItem[] = [
   { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "purchases", label: "Compras", icon: <Truck className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "inventory", label: "Inventario", icon: <Warehouse className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+  { key: "commissions", label: "Comisiones", icon: <Coins className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "promotions", label: "Promociones", icon: <Tag className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "branches", label: "Sucursales", icon: <Building2 className="w-4 h-4" />, roles: ["ADMIN"] },
+  { key: "ecommerce", label: "E-commerce", icon: <Globe className="w-4 h-4" />, roles: ["ADMIN"] },
+  { key: "print-templates", label: "Impresión", icon: <Printer className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "expenses", label: "Gastos", icon: <TrendingDown className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "reports", label: "Reportes", icon: <BarChart3 className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "settings", label: "Configuración", icon: <Settings className="w-4 h-4" />, roles: ["ADMIN"] },
@@ -83,6 +99,8 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { currentView, setView, user, store, setUserData } = useAppStore();
   const [fetchAttempted, setFetchAttempted] = useState(false);
+  const pwa = usePWA();
+  const { canInstall, promptInstall } = usePWAInstall();
 
   useEffect(() => {
     if (status !== "authenticated" || user) return;
@@ -146,6 +164,12 @@ export function AppShell() {
         return <PromotionsView />;
       case "branches":
         return <BranchesView />;
+      case "commissions":
+        return <CommissionsView />;
+      case "print-templates":
+        return <PrintTemplatesView />;
+      case "ecommerce":
+        return <EcommerceView />;
       case "customers":
         return <CustomersView />;
       case "purchases":
@@ -191,6 +215,54 @@ export function AppShell() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Indicador offline + ops pendientes */}
+            {!pwa.isOnline && (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                <WifiOff className="w-3 h-3 mr-1" />
+                Sin conexión
+              </Badge>
+            )}
+            {pwa.pendingOperations > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const r = await pwa.triggerSync();
+                  if (r.remaining === 0) {
+                    toast.success("Sincronización completada");
+                  } else {
+                    toast.info(`Quedan ${r.remaining} operación(es) pendientes`);
+                  }
+                }}
+                className="h-8 gap-1"
+                title={`${pwa.pendingOperations} operación(es) pendientes de sincronizar`}
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span className="text-xs">{pwa.pendingOperations}</span>
+              </Button>
+            )}
+            {canInstall && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => promptInstall()}
+                className="h-8 gap-1"
+                title="Instalar ComerciApp como aplicación"
+              >
+                <Download className="w-3 h-3" />
+                <span className="hidden sm:inline text-xs">Instalar</span>
+              </Button>
+            )}
+            {pwa.updateAvailable && (
+              <Button
+                size="sm"
+                onClick={pwa.applyUpdate}
+                className="h-8 gap-1 bg-blue-600 hover:bg-blue-700"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                <span className="hidden sm:inline text-xs">Actualizar</span>
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 px-2">
@@ -241,9 +313,12 @@ export function AppShell() {
               </button>
             ))}
           </nav>
-          <div className="p-3 border-t border-emerald-100 text-xs text-muted-foreground">
-            <p>ComerciApp v3.0</p>
-            <p>Fase 3: Devoluciones + Promos + Sucursales + Fidelización</p>
+          <div className="p-3 border-t border-emerald-100 text-xs text-muted-foreground space-y-1">
+            <p>ComerciApp v4.0</p>
+            <p>Fase 4: PWA + Impresión + E-commerce + Comisiones</p>
+            {pwa.swVersion && (
+              <p className="text-[10px] opacity-70">SW: {pwa.swVersion}</p>
+            )}
           </div>
         </aside>
 

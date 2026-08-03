@@ -132,3 +132,95 @@ Stage Summary:
 - Multi-sucursal: CRUD completo. Ventas y cajas asocian branchId. Selector en POS si hay >1 sucursal.
 - Fidelización: programa configurable con 4 tiers (Bronce/Plata/Oro/Platino) y bonus. Acumulación automática en ventas, canje manual desde POS, ajuste manual desde Clientes. Historial completo de movimientos.
 - Sistema actualizado a versión v3.0.
+
+---
+Task ID: fase-4
+Agent: main
+Task: Implementar Fase 4 del roadmap de ComerciApp — PWA Offline, Impresión Térmica, E-commerce Sync y Comisiones
+
+Work Log:
+- Verificado estado previo: Fases 1, 2 y 3 completas (v3.0). Schema con 25 modelos.
+- Actualizado `prisma/schema.prisma` con 6 modelos nuevos: `CommissionRule`, `Commission`, `EcommerceConfig`, `EcommerceSyncLog`, `PrintTemplate`, `OfflineSyncQueue`. Agregados campos en `Product` (`ecommerceProductId`, `ecommerceSyncedAt`, `ecommerceStatus`), en `Sale` (relación `commission`), en `Store` (relaciones nuevas), en `User` (relaciones `commissions`, `commissionRules`). Migración `prisma db push` + `prisma generate` exitosa.
+- Creada librería `src/lib/commissions.ts`:
+  - Tipos: CommissionType (PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO), CommissionStatus, CommissionTier.
+  - `evaluateCommissionRule`: evalúa regla contra una venta (vigencia, monto mínimo, onlyPaid, tipo de cálculo).
+  - `parseTiers`/`serializeTiers`/`findTier`: manejo de tramos escalonados.
+  - `createCommissionForSale`: busca regla activa para el vendedor y crea comisión automáticamente al cerrar venta.
+  - `getCommissionSummary`: totales por vendedor (pendiente, pagado, count).
+  - Helpers de presentación: `commissionTypeLabel`, `commissionStatusLabel`, `commissionStatusColor`.
+- Creada librería `src/lib/printer.ts` (ESC/POS):
+  - Comandos ESC/POS completos: INIT, FEED, CUT, ALIGN (left/center/right), BOLD, DOUBLE, UNDERLINE, BEEP, OPEN_DRAWER.
+  - Clase `EscPosBuilder` con métodos encadenable (text, line, feed, cut, separator, twoColumns, itemLine).
+  - `buildSaleTicket`: genera ticket de venta completo (header tienda, datos venta, items, totales, factura AFIP, footer).
+  - `buildCommandTicket`: genera comanda para cocina/barra/postres.
+  - `buildZCloseTicket`: genera cierre Z con totales por método de pago.
+  - Soporte de plantillas con placeholders (`{{store.name}}`, `{{sale.total}}`, etc.).
+  - Funciones de salida: `toArrayBuffer`, `toBase64`, `ticketToBlobUrl`, `printViaWebUSB`, `printViaLocalServer` (WebSocket a servidor local en puerto 8787).
+- Creada librería `src/lib/ecommerce.ts`:
+  - 4 adaptadores: TiendaNube (completo), WooCommerce (completo), MercadoLibre (parcial: stock/price/orders), Shopify (placeholder).
+  - Operaciones OUTBOUND: `syncProductsOutbound`, `syncStockOutbound`, actualización de precios.
+  - Operaciones INBOUND: `syncOrdersInbound` (importa pedidos pagados como ventas locales, crea clientes y productos si no existen).
+  - `handleEcommerceWebhook`: procesa webhooks entrantes (order/paid, product/updated).
+  - Helper `logSync` en `src/lib/ecommerce-sync-logger.ts` para auditoría.
+- Implementado PWA Offline completo:
+  - `public/manifest.json`: manifest con nombre, iconos 192/512, shortcuts (POS, Caja, Panel), colores, idioma es-AR.
+  - `public/sw.js`: Service Worker con precaching del shell, network-first para navegación, stale-while-revalidate para assets y APIs cacheables, manejo de mutaciones offline con IndexedDB, Background Sync, push notifications placeholder.
+  - `public/offline.html`: página de fallback offline con estilos emerald.
+  - `public/icon-192.png` e `icon-512.png`: generados con sharp (logo emerald).
+  - `src/hooks/use-pwa.ts`: hook React `usePWA` (isOnline, isInstalled, isStandalone, swVersion, updateAvailable, pendingOperations, registerSW, triggerSync, applyUpdate, enqueueOperation) + `usePWAInstall` (beforeinstallprompt).
+  - Actualizado `src/app/layout.tsx`: metadata con manifest, appleWebApp, icons múltiples, viewport con themeColor.
+- APIs creadas (todas con auth y multi-tenant):
+  - `/api/commissions` (GET listado con filtros + summary, PATCH batch: PAY/ANNUL/REOPEN)
+  - `/api/commissions/rules` (GET/POST/PUT/DELETE - CRUD completo de reglas, soft-delete si tiene comisiones)
+  - `/api/print` (POST: genera ticket TICKET/COMANDA/CIERRE_Z en base64 o blob)
+  - `/api/print-templates` (GET/POST/PUT/DELETE - CRUD de plantillas de impresión)
+  - `/api/ecommerce/config` (GET crea config por defecto si no existe, PUT actualiza)
+  - `/api/ecommerce/test` (POST: prueba conexión a la plataforma)
+  - `/api/ecommerce/sync` (POST: ejecuta sync OUTBOUND/INBOUND por entidad, GET: lista logs)
+  - `/api/ecommerce/webhook` (POST: recibe webhooks con validación de secret)
+  - `/api/offline-queue` (GET lista, POST registra, DELETE limpia syncados >7 días)
+  - `/api/store/users` (GET lista usuarios de la tienda para selectors)
+- Modificado `src/app/api/sales/route.ts`: al crear venta, calcula profit y llama a `createCommissionForSale` (auditoría: registra comisión en 0 si no hay regla para el vendedor).
+- Vistas creadas:
+  - `src/components/views/commissions-view.tsx`: tabs Reglas/Comisiones generadas. Stats (total, pendiente, pagado, count). Tabla de reglas (nombre, vendedor, tipo, config, mín venta, solo pagadas, vigencia, estado, acciones). Tabla de comisiones con filtros (status, vendedor, fechas), checkbox para batch actions (PAY/ANNUL/REOPEN). Resumen por vendedor. Modal de crear/editar regla con 4 tipos (incluyendo tiers dinámicos para ESCALONADO).
+  - `src/components/views/print-templates-view.tsx`: listado de plantillas con tabla (nombre, tipo, papel, charset, corte, mostrar, estado, acciones). Modal de alta/edición con 4 tipos, 2 anchos (58/80), 3 charsets, header/footer con placeholders, switches de mostrar (vendedor/cliente/pago/logo), activa, default. Botón "marcar como default".
+  - `src/components/views/ecommerce-view.tsx`: configuración de plataforma (4 plataformas), credenciales dinámicas según plataforma, webhook secret, switch habilitado, botones Guardar/Probar conexión. Opciones de sync (productos/stock/precios/pedidos/auto-fulfill). Botones de sincronización manual. Tabla de logs con estado, dirección, entidad, IDs.
+- Modificado `src/components/views/pos-view.tsx`:
+  - Agregada función `printThermalSale` que llama a `/api/print` con `returnFormat: "blob"` y descarga archivo `.bin` con comandos ESC/POS.
+  - SheetFooter del receipt: agregado botón "Térmica" junto al botón "Imprimir" existente.
+- Modificado `src/components/views/sales-view.tsx`: SheetFooter del detalle con botón "Térmica" para descargar ticket ESC/POS.
+- Actualizado `src/store/app-store.ts`: agregados `commissions`, `print-templates`, `ecommerce` a ViewKey.
+- Actualizado `src/components/app/app-shell.tsx`:
+  - Importadas 3 nuevas vistas (CommissionsView, PrintTemplatesView, EcommerceView) + hook `usePWA` + `usePWAInstall`.
+  - Agregados iconos (Coins, Printer, Globe, WifiOff, RefreshCw, Download, CheckCircle2).
+  - 3 items de navegación nuevos: Comisiones (ADMIN), E-commerce (ADMIN), Impresión (ADMIN) - ubicados entre Sucursales y Gastos.
+  - Header: indicador offline (badge amarillo), botón de operaciones pendientes con contador, botón "Instalar" (PWA), botón "Actualizar" cuando hay nueva versión del SW.
+  - Sidebar footer: versión actualizada a v4.0 + "Fase 4: PWA + Impresión + E-commerce + Comisiones" + SW version.
+  - Casos de renderización para las 3 nuevas vistas.
+- Verificación:
+  - `bun run lint` sin errores (excluidos scripts/ y tests/).
+  - `npx tsc --noEmit` sin errores en src/.
+  - `bun run build` exitoso.
+  - `bun run db:push` exitoso.
+  - Dev server corriendo en :3000.
+- Verificación E2E con Agent Browser:
+  - Login exitoso con tienda demo.
+  - Sidebar muestra 3 nuevos items (Comisiones, E-commerce, Impresión) + versión v4.0 + SW version.
+  - Botón "Instalar" visible en header (PWA instalable).
+  - Vista Comisiones: cargó, creó regla "Comisión vendedor demo 2%" para María (Vendedora) con tipo PORCENTAJE_VENTA, vigencia desde hoy, activa. Aparece en tabla.
+  - Tab "Comisiones generadas": tras crear una venta via API, aparece la comisión registrada (en 0 porque José Admin no tiene regla, pero la auditoría funciona).
+  - Vista E-commerce: cargó con configuración por defecto, todas las opciones de sync visibles, botones de prueba conexión y sincronización manual.
+  - Vista Impresión: cargó, creó plantilla "Ticket estándar 58mm" marcada como default, aparece en tabla con badge "Por defecto".
+  - Generación de ticket térmico via API: 422 bytes de comandos ESC/POS usando la plantilla default, contenido correcto (header tienda, items, totales, pago, footer, comando de corte).
+  - Service Worker registrado correctamente en `http://localhost:3000/sw.js`.
+  - Manifest vinculado correctamente.
+
+Stage Summary:
+- Fase 4 implementada completamente con 4 módulos nuevos: PWA Offline, Impresión Térmica ESC/POS, E-commerce Sync y Comisiones.
+- 6 modelos Prisma nuevos, 9 APIs nuevas, 3 vistas nuevas, 2 vistas modificadas (POS, Ventas), 1 hook nuevo (use-pwa).
+- Schema migrado correctamente, lint sin errores, build exitoso, verificación E2E con Agent Browser OK.
+- PWA: manifest + service worker + IndexedDB para cola offline + página offline + iconos 192/512. Background Sync para reprocesar mutaciones al volver online. Hook con detección de online/offline, ops pendientes, update del SW, botón instalar.
+- Impresión térmica: librería ESC/POS completa con 3 generadores (ticket venta, comanda, cierre Z). Soporta plantillas configurables (58/80mm, charset, header/footer con placeholders). Salida como base64 o blob .bin. Hooks para WebUSB y servidor local WebSocket.
+- E-commerce: 4 adaptadores (TiendaNube, WooCommerce, MercadoLibre, Shopify). Sync OUTBOUND de productos/stock/precios, INBOUND de pedidos (crea clientes y productos si no existen). Webhook handler con validación de secret. Log de auditoría por operación.
+- Comisiones: 4 tipos de regla (PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO con tramos). Generación automática al cerrar venta. Estados PENDIENTE/PAGADA/ANULADA. Batch actions para marcar pagadas/anular. Resumen por vendedor.
+- Sistema actualizado a versión v4.0.

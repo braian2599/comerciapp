@@ -435,7 +435,37 @@ export function SalesView() {
               )}
             </div>
           )}
-          <SheetFooter>
+          <SheetFooter className="flex-row gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={async () => {
+                if (!selected) return;
+                try {
+                  const res = await fetch("/api/print", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: "TICKET", saleId: selected.id, returnFormat: "blob" }),
+                  });
+                  if (!res.ok) throw new Error("Error al generar ticket");
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `ticket-${selected.id.slice(-6)}.bin`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  toast.success("Ticket térmico generado");
+                } catch (e: any) {
+                  toast.error(e.message);
+                }
+              }}
+            >
+              <Receipt className="w-4 h-4 mr-2" />
+              Térmica
+            </Button>
             <Button variant="outline" onClick={() => setSelected(null)}>
               Cerrar
             </Button>

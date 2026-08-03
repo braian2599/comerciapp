@@ -337,6 +337,38 @@ export function PosView() {
     setPointsToRedeem(0);
   }, [customerId]);
 
+  async function printThermalSale() {
+    if (!lastSale?.id) return;
+    try {
+      const res = await fetch("/api/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "TICKET", saleId: lastSale.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Descargar binario .bin que se puede enviar a impresora USB
+      const blob = await (await fetch("/api/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "TICKET", saleId: lastSale.id, returnFormat: "blob" }),
+      })).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ticket-${lastSale.id.slice(-6)}.bin`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success("Ticket generado (archivo .bin)");
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  }
+
   async function processSale() {
     if (cart.length === 0) {
       toast.error("El carrito está vacío");
@@ -1157,17 +1189,28 @@ export function PosView() {
             </div>
           )}
 
-          <SheetFooter className="flex-row gap-2">
+          <SheetFooter className="flex-col gap-2">
+            <div className="flex gap-2 w-full">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => window.print()}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={printThermalSale}
+                title="Genera un archivo .bin con comandos ESC/POS para impresora térmica"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Térmica
+              </Button>
+            </div>
             <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => window.print()}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Imprimir
-            </Button>
-            <Button
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
               onClick={() => setReceiptOpen(false)}
             >
               Nueva venta

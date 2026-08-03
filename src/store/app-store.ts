@@ -17,6 +17,9 @@ export type ViewKey =
   | "refunds"
   | "promotions"
   | "branches"
+  | "commissions"
+  | "print-templates"
+  | "ecommerce"
   | "settings";
 
 interface AppState {

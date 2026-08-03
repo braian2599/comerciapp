@@ -48,6 +48,13 @@ model Store {
   promotions    Promotion[]
   refunds       Refund[]
   loyaltyProgram LoyaltyProgram?
+  // Fase 4
+  commissionRules CommissionRule[]
+  commissions   Commission[]
+  ecommerceConfig EcommerceConfig?
+  ecommerceSyncLogs EcommerceSyncLog[]
+  printTemplates PrintTemplate[]
+  offlineSyncQueue OfflineSyncQueue[]
 }
 
 // ===== USUARIO =====
@@ -72,6 +79,9 @@ model User {
   customerPayments CustomerPayment[]
   invoices       Invoice[]
   refunds        Refund[]
+  // Fase 4
+  commissions    Commission[]
+  commissionRules CommissionRule[]
 }
 
 // ===== CATEGORÍA =====
@@ -102,6 +112,10 @@ model Product {
   minStock    Float    @default(5)
   unit        String   @default("UNIDAD") // UNIDAD, KG, LITRO, METRO, PACK
   active      Boolean  @default(true)
+  // Fase 4: e-commerce sync
+  ecommerceProductId String? // ID remoto en la plataforma (Tienda Nube, WooCommerce, etc.)
+  ecommerceSyncedAt  DateTime?
+  ecommerceStatus    String? // ACTIVE, DRAFT, OUT_OF_STOCK
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -185,6 +199,8 @@ model Sale {
   invoice         Invoice?
   mercadoPagoPayment MercadoPagoPayment?
   refund          Refund?
+  // Fase 4: Comisión asociada (1:1)
+  commission      Commission?
 
   @@index([storeId, createdAt])
   @@index([storeId, status])
@@ -723,4 +739,180 @@ model LoyaltyPoint {
   @@index([storeId, createdAt])
   @@index([customerId, createdAt])
   @@index([refType, refId])
+}
+
+// ===================================================================
+// FASE 4 — Comisiones · Impresión térmica · E-commerce · PWA Offline
+// ===================================================================
+
+// ===== REGLAS DE COMISIÓN =====
+// Configura comisiones por vendedor con diferentes criterios
+model CommissionRule {
+  id          String   @id @default(cuid())
+  storeId     String
+  userId      String   // vendedor al que aplica la regla
+  name        String   // nombre legible (ej: "Comisión mesanual")
+  // Tipo de cálculo
+  type        String   // PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO
+  // Configuración principal
+  rate        Float    @default(0) // porcentaje (0-100) o monto fijo según type
+  // Escalonado (cuando type=ESCALONADO, JSON: [{"min":0,"max":50000,"rate":2},{"min":50000,"max":100000,"rate":3},...])
+  tiers       String?
+  // Filtros
+  minSaleAmount Float  @default(0) // monto mínimo de venta para aplicar
+  onlyPaid    Boolean  @default(true) // solo ventas cobradas (no fiado)
+  // Vigencia
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commissions Commission[]
+
+  @@index([storeId, active])
+  @@index([userId, active])
+}
+
+// ===== COMISIÓN (por venta) =====
+// Registro de comisión calculada al cerrar una venta
+model Commission {
+  id           String   @id @default(cuid())
+  storeId      String
+  userId       String   // vendedor
+  saleId       String   @unique // una venta = una comisión
+  ruleId       String?  // regla aplicada (null = sin regla, comisión 0)
+  // Cálculo
+  saleTotal    Float    // total de la venta (snapshot)
+  saleProfit   Float    @default(0) // ganancia bruta de la venta (snapshot)
+  base         Float    // base sobre la que se calcula (venta o ganancia)
+  rate         Float    // tasa aplicada (%)
+  amount       Float    // monto de comisión calculado
+  // Estado
+  status       String   @default("PENDIENTE") // PENDIENTE, PAGADA, ANULADA
+  paidAt       DateTime?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id])
+  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  rule         CommissionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, status])
+  @@index([userId, status])
+  @@index([saleId])
+}
+
+// ===== CONFIGURACIÓN E-COMMERCE =====
+// Integración con plataformas (Tienda Nube, WooCommerce, MercadoLibre, Shopify)
+model EcommerceConfig {
+  id              String   @id @default(cuid())
+  storeId         String   @unique
+  platform        String   @default("TIENDA_NUBE") // TIENDA_NUBE, WOOCOMMERCE, MERCADOLIBRE, SHOPIFY
+  enabled         Boolean  @default(false)
+  // Credenciales
+  apiUrl          String?  // URL base de la API
+  apiKey          String?  // token / API key
+  apiSecret       String?  // secreto (encryptado en producción)
+  accessToken     String?  // token de acceso OAuth2 (TiendaNube)
+  storeExternalId String?  // ID de la tienda en la plataforma (ej: store_id TiendaNube)
+  // Sincronización
+  syncProducts    Boolean  @default(true) // sincronizar productos
+  syncStock       Boolean  @default(true) // sincronizar stock
+  syncPrices      Boolean  @default(true) // sincronizar precios
+  syncOrders      Boolean  @default(true) // importar pedidos online
+  autoFulfill     Boolean  @default(false) // marcar como enviado automáticamente
+  // Webhook
+  webhookSecret   String?  // secreto para validar webhooks
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  syncLogs        EcommerceSyncLog[]
+}
+
+// Log de sincronización (auditoría)
+model EcommerceSyncLog {
+  id          String   @id @default(cuid())
+  storeId     String
+  configId    String
+  direction   String   // OUTBOUND (local->plataforma), INBOUND (plataforma->local)
+  entity      String   // PRODUCT, STOCK, PRICE, ORDER, CUSTOMER
+  entityId    String?  // id local
+  externalId  String?  // id remoto
+  action      String   // CREATE, UPDATE, DELETE
+  status      String   // SUCCESS, ERROR, PENDING
+  message     String?  // detalle del error o éxito
+  payload     String?  // JSON del payload enviado/recibido (truncado si muy grande)
+  createdAt   DateTime @default(now())
+
+  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  config      EcommerceConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+  @@index([configId, createdAt])
+  @@index([status])
+}
+
+// ===== PLANTILLAS DE IMPRESIÓN =====
+// Plantillas para impresoras térmicas (tickets, comandas)
+model PrintTemplate {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String   // nombre legible (ej: "Ticket 58mm", "Comanda cocina")
+  type        String   @default("TICKET") // TICKET, COMANDA, CIERRE_Z, ETIQUETA
+  // Configuración de impresora
+  paperWidth  Int      @default(58) // ancho en mm (58 o 80)
+  charset     String   @default("CP437") // CP437, CP850, UTF8
+  cutPaper    Boolean  @default(true) // corte automático al final
+  // Diseño (JSON: header, footer, mostrar logo, mostrar QR AFIP, etc.)
+  config      String?
+  // Contenido (plantilla con placeholders: {{store.name}}, {{sale.total}}, etc.)
+  headerLines String?  // líneas de encabezado (separadas por \n)
+  footerLines String?  // líneas de pie
+  showLogo    Boolean  @default(false)
+  showCustomer Boolean @default(false)
+  showSeller  Boolean  @default(true)
+  showPayment Boolean  @default(true)
+  active      Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, active])
+}
+
+// ===== COLA DE SINCRONIZACIÓN OFFLINE (PWA) =====
+// Operaciones realizadas offline que deben sincronizarse al volver online
+model OfflineSyncQueue {
+  id          String   @id @default(cuid())
+  storeId     String
+  userId      String?  // usuario que originó la operación
+  // Operación
+  entity      String   // SALE, CUSTOMER, PRODUCT, STOCK_MOVEMENT
+  action      String   // CREATE, UPDATE, DELETE
+  payload     String   // JSON del cuerpo de la petición
+  endpoint    String   // path relativo (ej: /api/sales)
+  method      String   @default("POST") // POST, PUT, DELETE
+  // Estado
+  status      String   @default("PENDING") // PENDING, SYNCED, FAILED, CONFLICT
+  attempts    Int      @default(0)
+  lastError   String?
+  // IDs temporales para reconciliación
+  tempId      String?  // ID generado offline (UUID)
+  syncedId    String?  // ID real asignado por el servidor
+  createdAt   DateTime @default(now())
+  syncedAt    DateTime?
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+  @@index([entity, status])
 }

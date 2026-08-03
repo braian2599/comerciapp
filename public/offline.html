@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ComerciApp · Sin conexión</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: #f8faf9;
+      color: #064e3b;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .container {
+      max-width: 480px;
+      text-align: center;
+      background: white;
+      padding: 3rem 2rem;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(5, 150, 105, 0.08);
+      border: 1px solid #d1fae5;
+    }
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 1.5rem;
+      background: #ecfdf5;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #059669;
+    }
+    .icon svg { width: 40px; height: 40px; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #064e3b; }
+    p { color: #047857; line-height: 1.5; margin-bottom: 1rem; font-size: 0.95rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: #059669;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      margin-top: 0.5rem;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .btn:hover { background: #047857; }
+    .hint {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #ecfdf5;
+      font-size: 0.825rem;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h-4m4 0v.01M7 16h.01" />
+      </svg>
+    </div>
+    <span class="badge">MODO OFFLINE</span>
+    <h1>Sin conexión a internet</h1>
+    <p>ComerciApp sigue funcionando offline. Tus ventas se guardarán localmente y se sincronizarán automáticamente cuando vuelvas a estar online.</p>
+    <button class="btn" onclick="location.reload()">Reintentar conexión</button>
+    <p class="hint">Las operaciones realizadas sin conexión se encolan en tu dispositivo y se envían al servidor en cuanto se restablezca la conexión.</p>
+  </div>
+  <script>
+    // Volver a la app cuando se recupere la conexión
+    window.addEventListener('online', () => location.href = '/');
+  </script>
+</body>
+</html>

@@ -331,5 +331,22 @@ export async function POST(req: NextRequest) {
     return newSale;
   });
 
+  // Crear comisión para el vendedor (Fase 4)
+  try {
+    const profit = items.reduce(
+      (sum, it) => sum + (it.unitPrice - it.costPrice) * it.quantity,
+      0
+    );
+    const { createCommissionForSale } = await import("@/lib/commissions");
+    await createCommissionForSale(sale.id, storeId, u.id, {
+      total: sale.total,
+      profit,
+      onCredit: sale.onCredit,
+      amountPaid: sale.amountPaid,
+    });
+  } catch (e) {
+    console.error("Error creando comisión:", e);
+  }
+
   return NextResponse.json(sale);
 }

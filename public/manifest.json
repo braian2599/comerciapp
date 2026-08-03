@@ -1,0 +1,59 @@
+{
+  "name": "ComerciApp - Gestor de Ventas",
+  "short_name": "ComerciApp",
+  "description": "Sistema de gestión de ventas para comercios y tiendas de barrio. Funciona offline.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#059669",
+  "lang": "es-AR",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "shopping"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Punto de Venta",
+      "short_name": "POS",
+      "description": "Cargar una venta nueva",
+      "url": "/?view=pos",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Caja",
+      "short_name": "Caja",
+      "description": "Abrir o cerrar caja",
+      "url": "/?view=cash",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Panel",
+      "short_name": "Panel",
+      "description": "Ver resumen del día",
+      "url": "/?view=dashboard",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
