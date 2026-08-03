@@ -166,7 +166,7 @@ export function AppShell() {
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-emerald-600">Cargando ComerciApp...</div>
+        <div className="animate-pulse text-slate-700">Cargando ComerciApp...</div>
       </div>
     );
   }
@@ -251,38 +251,42 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-muted/30">
-      {/* Top bar con navegación integrada — sin sidebar */}
-      <header className="sticky top-0 z-30 bg-white border-b border-emerald-100 shadow-sm">
-        <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5">
+    <div className="min-h-screen flex flex-col bg-slate-100/60">
+      {/* Top bar con navegación integrada — estilo empresarial */}
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
+        <div className="flex items-center gap-3 px-4 sm:px-6 h-14">
           {/* Logo + nombre del comercio + vista actual */}
-          <div className="flex items-center gap-2 shrink-0 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-              <Store className="w-5 h-5" />
+          <div className="flex items-center gap-2.5 shrink-0 min-w-0">
+            <div className="w-8 h-8 rounded-md bg-slate-900 text-white flex items-center justify-center shrink-0">
+              <Store className="w-4 h-4" />
             </div>
-            <div className="hidden sm:block min-w-0">
-              <p className="text-sm font-semibold leading-tight truncate">{storeName}</p>
-              <p className="text-xs text-muted-foreground truncate">
+            <div className="hidden sm:block min-w-0 leading-tight">
+              <p className="text-sm font-semibold text-slate-900 truncate">{storeName}</p>
+              <p className="text-[11px] text-slate-500 truncate">
                 {rubroIcon(storeRubro)} {currentItem?.label}
               </p>
             </div>
+            <div className="hidden sm:block w-px h-8 bg-slate-200 ml-1" />
           </div>
 
-          {/* Nav tabs horizontales — desktop (md+) */}
-          <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center overflow-x-auto min-w-0">
+          {/* Nav tabs horizontales — desktop (md+), estilo underline */}
+          <nav className="hidden md:flex items-center gap-1 flex-1 overflow-x-auto min-w-0 h-full">
             {frequentItems.map((item) => (
               <button
                 key={item.key}
                 onClick={() => setView(item.key)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors",
+                  "relative flex items-center gap-2 px-3 text-sm font-medium whitespace-nowrap transition-colors h-full",
                   currentView === item.key
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    ? "text-slate-900"
+                    : "text-slate-500 hover:text-slate-900"
                 )}
               >
                 {item.icon}
                 <span className="hidden lg:inline">{item.label}</span>
+                {currentView === item.key && (
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-slate-900 rounded-full" />
+                )}
               </button>
             ))}
           </nav>
@@ -308,7 +312,7 @@ export function AppShell() {
                           onClick={() => setView(item.key)}
                           className={cn(
                             "gap-2 cursor-pointer",
-                            currentView === item.key && "bg-emerald-50 text-emerald-700"
+                            currentView === item.key && "bg-slate-100 text-slate-900 font-medium"
                           )}
                         >
                           {item.icon}
@@ -324,7 +328,7 @@ export function AppShell() {
 
             {/* Indicador offline */}
             {!pwa.isOnline && (
-              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
                 <WifiOff className="w-3 h-3 mr-1" />
                 Sin conexión
               </Badge>
@@ -370,7 +374,7 @@ export function AppShell() {
               <Button
                 size="sm"
                 onClick={pwa.applyUpdate}
-                className="h-8 gap-1 bg-blue-600 hover:bg-blue-700"
+                className="h-8 gap-1 bg-slate-900 hover:bg-slate-800"
               >
                 <CheckCircle2 className="w-3 h-3" />
                 <span className="hidden sm:inline text-xs">Actualizar</span>
@@ -382,7 +386,7 @@ export function AppShell() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 px-2">
                   <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs">
+                    <AvatarFallback className="bg-slate-100 text-slate-700 text-xs font-semibold">
                       {userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
@@ -420,11 +424,11 @@ export function AppShell() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar — desktop (md+), con scroll propio independiente del page scroll */}
         {moreCategories.length > 0 && (
-          <aside className="hidden md:flex w-60 flex-col bg-white border-r border-emerald-100 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto shrink-0">
-            <nav className="flex-1 px-3 pb-4">
+          <aside className="hidden md:flex w-60 flex-col bg-slate-50 border-r border-slate-200 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto shrink-0">
+            <nav className="flex-1 px-3 py-2">
               {moreCategories.map((cat) => (
-                <div key={cat.id} className="mb-1">
-                  <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <div key={cat.id} className="mb-2">
+                  <p className="px-3 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     {cat.label}
                   </p>
                   <div className="space-y-0.5">
@@ -433,10 +437,10 @@ export function AppShell() {
                         key={item.key}
                         onClick={() => setView(item.key)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                          "w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border-l-2 -ml-px",
                           currentView === item.key
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                            ? "bg-white text-slate-900 border-slate-900 shadow-sm"
+                            : "text-slate-600 border-transparent hover:bg-slate-100/70 hover:text-slate-900"
                         )}
                       >
                         {item.icon}

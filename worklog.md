@@ -391,3 +391,37 @@ Stage Summary:
 - Mobile (<md): botón menú con todas las vistas categorizadas.
 - Cada área (sidebar, main) tiene su propio scroll — el page scroll del body no se activa.
 - CAJERO sin sidebar (no tiene items "Más"), solo ve los 3 tabs frecuentes.
+
+---
+Task ID: feat-empresarial-style
+Agent: main
+Task: Cambiar estilo visual a más empresarial (slate + indigo en lugar de emerald)
+
+Work Log:
+- Paleta migrada de emerald (verde retail/casual) a slate (gris corporativo):
+  - Header: `bg-white border-b border-slate-200` (sin shadow-sm, borde más sutil)
+  - Body: `bg-slate-100/60` en lugar de `bg-muted/30`
+  - Sidebar: `bg-slate-50 border-r border-slate-200` (antes blanco + emerald-100)
+  - Logo: cuadrado `bg-slate-900` de 32x32 con esquinas redondeadas (antes emerald-600 de 36x36)
+- Header más compacto: altura fija `h-14` con `px-4 sm:px-6` (antes `px-3 sm:px-4 py-2.5`)
+- Separador vertical entre logo y tabs: `w-px h-8 bg-slate-200 ml-1`
+- Tabs frecuentes con estilo underline (estilo Linear/Stripe):
+  - Item activo: `text-slate-900` + barra inferior `h-0.5 bg-slate-900` (antes fondo emerald-50)
+  - Item inactivo: `text-slate-500 hover:text-slate-900`
+  - Tabs ocupan toda la altura del header (`h-full`) en lugar de py-1.5 con rounded-md
+- Sidebar items con left-border activo (estilo Notion):
+  - Activo: `bg-white text-slate-900 border-slate-900 shadow-sm` (antes emerald-50 text-emerald-700)
+  - Inactivo: `text-slate-600 border-transparent hover:bg-slate-100/70`
+  - Padding más compacto: `py-1.5` (antes `py-2`)
+- Categorías sidebar: `text-slate-400` (antes `text-muted-foreground/70`)
+- Avatar usuario: `bg-slate-100 text-slate-700 font-semibold` (antes emerald-100 emerald-700)
+- Indicador "Sin conexión": rojo (`bg-red-50 text-red-700 border-red-200`) en lugar de amber
+- Botón "Actualizar" PWA: `bg-slate-900 hover:bg-slate-800` (antes blue-600)
+- Pantalla de carga: `text-slate-700` (antes emerald-600)
+- Dropdown mobile items activos: `bg-slate-100 text-slate-900 font-medium` (antes emerald-50 emerald-700)
+- `tsc --noEmit` limpio, `eslint` limpio, dev server OK.
+
+Stage Summary:
+- Estética migrada de "retail verde" a "corporativo slate" (estilo Linear/Stripe/Vercel).
+- Cambios puramente visuales (clases Tailwind), sin tocar lógica ni estructura de componentes.
+- Referencia visual: header compacto blanco + tabs underline + sidebar gris claro con items activos destacados por left-border + fondo gris muy claro.
