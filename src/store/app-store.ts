@@ -12,6 +12,8 @@ export type ViewKey =
   | "purchases"
   | "expenses"
   | "cash"
+  | "invoices"
+  | "reports"
   | "settings";
 
 interface AppState {

@@ -40,6 +40,10 @@ model Store {
   purchaseOrders PurchaseOrder[]
   expenses      Expense[]
   customerPayments CustomerPayment[]
+  invoices      Invoice[]
+  taxConfig     TaxConfig?
+  mercadoPagoConfig MercadoPagoConfig?
+  mercadoPagoPayments MercadoPagoPayment[]
 }
 
 // ===== USUARIO =====
@@ -62,6 +66,7 @@ model User {
   purchaseOrders PurchaseOrder[]
   expenses       Expense[]
   customerPayments CustomerPayment[]
+  invoices       Invoice[]
 }
 
 // ===== CATEGORÍA =====
@@ -109,6 +114,9 @@ model Customer {
   email     String?
   address   String?
   notes     String?
+  // Datos fiscales (AFIP)
+  cuit      String?  // CUIT/CUIL del cliente (sin guiones)
+  taxType   String?  // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
   storeId   String
   creditLimit Float  @default(0) // límite de cuenta corriente (0 = sin límite)
   createdAt DateTime @default(now())
@@ -117,6 +125,7 @@ model Customer {
   store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   sales     Sale[]
   payments  CustomerPayment[]
+  invoices  Invoice[]
 }
 
 // ===== VENTA =====
@@ -147,6 +156,9 @@ model Sale {
   paymentMethodRef PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
   items           SaleItem[]
+  // Facturación y Mercado Pago
+  invoice         Invoice?
+  mercadoPagoPayment MercadoPagoPayment?
 
   @@index([storeId, createdAt])
   @@index([storeId, status])
@@ -350,4 +362,156 @@ model CustomerPayment {
 
   @@index([storeId, date])
   @@index([customerId, date])
+}
+
+// ===== CONFIGURACIÓN FISCAL (AFIP / ARCA) =====
+// Datos del contribuyente necesarios para emitir facturas electrónicas
+model TaxConfig {
+  id              String   @id @default(cuid())
+  storeId         String   @unique
+  // Datos del contribuyente
+  cuit            String   // CUIT del emisor (sin guiones)
+  razonSocial     String   // Razón social
+  direccionFiscal String?  // Domicilio fiscal
+  inicioActividades DateTime?
+  // Configuración AFIP
+  puntoVenta      Int      @default(1) // punto de venta habilitado
+  tipoFactura     String   @default("B") // tipo por defecto: A, B, C, M
+  condicionFiscal String   @default("MONOTRIBUTO") // MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
+  categoriaMonotributo String? // A, B, C, D, E, F, G, H (si aplica)
+  // IVA
+  ivaRate         Float    @default(21) // porcentaje de IVA (0, 10.5, 21, 27)
+  // Certificados (.p12) - ruta al archivo cargado
+  certPath        String?  // ruta al certificado en /upload
+  privateKeyPath  String?  // ruta a la clave privada
+  certPassword    String?  // contraseña del certificado (encriptado idealmente)
+  // Modo AFIP: homologación (testing) o producción
+  environment     String   @default("homologacion") // homologacion, produccion
+  // Token de acceso AFIP (cache)
+  authToken       String?  // TA.xml serializado
+  authTokenExpires DateTime?
+  // Numeración: último número de factura emitido por tipo
+  lastInvoiceA    Int      @default(0)
+  lastInvoiceB    Int      @default(0)
+  lastInvoiceC    Int      @default(0)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invoices        Invoice[]
+}
+
+// ===== FACTURA ELECTRÓNICA =====
+// Representa una factura electrónica emitida ante AFIP/ARCA
+model Invoice {
+  id              String   @id @default(cuid())
+  storeId         String
+  userId          String   // usuario que emitió
+  saleId          String?  @unique // venta asociada (opcional: una factura puede existir sin venta)
+  customerId      String?  // cliente (null = Consumidor Final)
+  taxConfigId     String
+  // Datos de la factura
+  tipo            String   // A, B, C, M, E
+  puntoVenta      Int
+  numero          Int      // número de factura dentro del punto de venta
+  numeroCompleto  String   // "0001-00000001" (legible)
+  fechaEmision    DateTime @default(now())
+  concepto        String   @default("PRODUCTOS") // PRODUCTOS, SERVICIOS, PRODUCTOS_Y_SERVICIOS
+  // Totales
+  netoGravado     Float    @default(0) // base imponible sin IVA
+  ivaRate         Float    @default(0)
+  ivaAmount       Float    @default(0) // monto de IVA
+  noGravado       Float    @default(0) // importes no gravados
+  exento          Float    @default(0) // importes exentos
+  total           Float
+  // Datos del cliente (snapshot)
+  customerName    String   @default("Consumidor Final")
+  customerCuit    String?  // CUIT del cliente (null si es CF)
+  customerTaxType String   @default("CONSUMIDOR_FINAL")
+  // Respuesta AFIP
+  cae             String?  // Código de Autorización Electrónico
+  caeVencimiento  DateTime? // fecha de vencimiento del CAE
+  qrData          String?  // datos codificados para el QR AFIP (RG 4291)
+  // Estado
+  status          String   @default("EMITIDA") // EMITIDA, ANULADA, RECHAZADA, PENDIENTE
+  observation     String?  // observaciones AFIP
+  resultado       String?  // A (aprobado), R (rechazado), O (observado)
+  // Anulación
+  anulatedAt      DateTime?
+  anulatedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id])
+  sale            Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  taxConfig       TaxConfig @relation(fields: [taxConfigId], references: [id])
+
+  @@index([storeId, fechaEmision])
+  @@index([storeId, tipo, numero])
+  @@index([saleId])
+  @@index([cae])
+}
+
+// ===== CONFIGURACIÓN MERCADO PAGO =====
+model MercadoPagoConfig {
+  id              String   @id @default(cuid())
+  storeId         String   @unique
+  accessToken     String?  // token de acceso (producción)
+  publicKey       String?  // clave pública
+  // Para testing (sandbox)
+  sandboxAccessToken String?
+  sandboxPublicKey String?
+  // Modo
+  environment     String   @default("sandbox") // sandbox, produccion
+  // Datos del comercio en MP
+  userId          String?  // MP user id
+  collectorId     String?  // collector id (para QR)
+  // Configuración QR
+  qrEnabled       Boolean  @default(true)
+  defaultDescription String? // descripción por defecto en el QR
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payments        MercadoPagoPayment[]
+}
+
+// ===== PAGOS MERCADO PAGO =====
+// Registra cada intento/transacción de pago con Mercado Pago QR
+model MercadoPagoPayment {
+  id              String   @id @default(cuid())
+  storeId         String
+  saleId          String?  @unique // venta asociada
+  configId        String
+  // Datos de la transacción MP
+  mpPaymentId     String?  // id del pago en MP (numérico como string)
+  mpPreferenceId  String?  // id de la preferencia creada
+  mpOrderId       String?  // id de la orden de MP
+  // QR
+  qrCode          String?  // código QR copia y pega (string)
+  qrImageUrl      String?  // URL de la imagen del QR
+  // Monto y estado
+  amount          Float    // monto a cobrar
+  status          String   @default("PENDIENTE") // PENDIENTE, APPROVED, REJECTED, CANCELLED, REFUNDED
+  statusDetail    String?  // detalle del estado
+  paymentMethod   String?  // metodo de pago usado en MP (credit_card, debit_card, qr, etc.)
+  payerEmail      String?
+  // Respuesta completa (JSON serializado)
+  rawResponse     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  approvedAt      DateTime?
+
+  store           Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sale            Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  config          MercadoPagoConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+  @@index([saleId])
+  @@index([mpPaymentId])
+  @@index([status])
 }

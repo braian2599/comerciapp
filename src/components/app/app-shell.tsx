@@ -12,6 +12,8 @@ import { InventoryView } from "@/components/views/inventory-view";
 import { PurchasesView } from "@/components/views/purchases-view";
 import { ExpensesView } from "@/components/views/expenses-view";
 import { CashRegisterView } from "@/components/views/cash-register-view";
+import { InvoicesView } from "@/components/views/invoices-view";
+import { ReportsView } from "@/components/views/reports-view";
 import { SettingsView } from "@/components/views/settings-view";
 import { AuthScreen } from "@/components/app/auth-screen";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,8 @@ import {
   Truck,
   TrendingDown,
   Wallet,
+  FileText,
+  BarChart3,
   Settings,
   LogOut,
   Store,
@@ -56,10 +60,12 @@ const NAV_ITEMS: NavItem[] = [
   { key: "cash", label: "Caja", icon: <Wallet className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "products", label: "Productos", icon: <Package className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "sales", label: "Ventas", icon: <Receipt className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+  { key: "invoices", label: "Facturación", icon: <FileText className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
   { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "purchases", label: "Compras", icon: <Truck className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "inventory", label: "Inventario", icon: <Warehouse className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
   { key: "expenses", label: "Gastos", icon: <TrendingDown className="w-4 h-4" />, roles: ["ADMIN"] },
+  { key: "reports", label: "Reportes", icon: <BarChart3 className="w-4 h-4" />, roles: ["ADMIN"] },
   { key: "settings", label: "Configuración", icon: <Settings className="w-4 h-4" />, roles: ["ADMIN"] },
 ];
 
@@ -123,6 +129,8 @@ export function AppShell() {
         return <ProductsView />;
       case "sales":
         return <SalesView />;
+      case "invoices":
+        return <InvoicesView />;
       case "customers":
         return <CustomersView />;
       case "purchases":
@@ -131,6 +139,8 @@ export function AppShell() {
         return <InventoryView />;
       case "expenses":
         return <ExpensesView />;
+      case "reports":
+        return <ReportsView />;
       case "settings":
         return <SettingsView />;
       default:
@@ -217,8 +227,8 @@ export function AppShell() {
             ))}
           </nav>
           <div className="p-3 border-t border-emerald-100 text-xs text-muted-foreground">
-            <p>ComerciApp v1.0</p>
-            <p>MVP para tiendas de barrio</p>
+            <p>ComerciApp v2.0</p>
+            <p>Fase 2: Facturación + MP + Reportes</p>
           </div>
         </aside>
 

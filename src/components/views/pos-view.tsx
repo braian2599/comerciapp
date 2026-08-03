@@ -33,9 +33,17 @@ import {
   CheckCircle2,
   Printer,
   X,
+  QrCode,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Product {
   id: string;
@@ -88,6 +96,12 @@ export function PosView() {
   const [processing, setProcessing] = useState(false);
   const [lastSale, setLastSale] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  // Mercado Pago QR
+  const [mpConfig, setMpConfig] = useState<any>(null);
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [qrData, setQrData] = useState<any>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrPolling, setQrPolling] = useState(false);
 
   const symbol = store?.currencySymbol || "$";
   const taxEnabled = store?.taxEnabled;
@@ -100,7 +114,8 @@ export function PosView() {
       fetch("/api/categories").then((r) => r.json()),
       fetch("/api/customers").then((r) => r.json()),
       fetch("/api/payment-methods").then((r) => r.json()),
-    ]).then(([p, c, cust, pm]) => {
+      fetch("/api/mercadopago/config").then((r) => r.json()),
+    ]).then(([p, c, cust, pm, mp]) => {
       setProducts(p.filter((x: Product) => x.active));
       setCategories(c);
       setCustomers(cust);
@@ -108,6 +123,7 @@ export function PosView() {
       setPaymentMethods(activePM);
       const def = activePM.find((m) => m.isDefault) || activePM[0];
       if (def) setPaymentMethodId(def.id);
+      setMpConfig(mp);
       setLoading(false);
     });
   }, []);
@@ -543,7 +559,21 @@ export function PosView() {
             </div>
 
             <div className="space-y-2">
-              <Label>Método de pago</Label>
+              <div className="flex items-center justify-between">
+                <Label>Método de pago</Label>
+                {mpConfig?.active && mpConfig?.qrEnabled && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQrDialogOpen(true)}
+                    className="text-xs h-7"
+                  >
+                    <QrCode className="w-3 h-3 mr-1" />
+                    Pago QR (MP)
+                  </Button>
+                )}
+              </div>
               <Select
                 value={paymentMethodId}
                 onValueChange={setPaymentMethodId}
@@ -568,6 +598,186 @@ export function PosView() {
                 </p>
               )}
             </div>
+
+            {/* Dialog de Pago QR Mercado Pago */}
+            <Dialog open={qrDialogOpen} onOpenChange={(v) => {
+              setQrDialogOpen(v);
+              if (!v) {
+                setQrData(null);
+                setQrPolling(false);
+              }
+            }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <QrCode className="w-5 h-5 text-blue-600" />
+                    Pago con QR - Mercado Pago
+                  </DialogTitle>
+                  <DialogDescription>
+                    Generá un código QR para que el cliente pague escaneando con su app.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-3 py-2">
+                  <div className="bg-muted/50 rounded-md p-3 text-center">
+                    <p className="text-xs text-muted-foreground">Total a cobrar</p>
+                    <p className="text-2xl font-bold text-emerald-700">
+                      {formatCurrency(total, symbol)}
+                    </p>
+                  </div>
+
+                  {!qrData && (
+                    <Button
+                      onClick={async () => {
+                        setQrLoading(true);
+                        try {
+                          // 1. Crear la venta primero (sin cobrar todavía)
+                          const saleRes = await fetch("/api/sales", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              items: cart.map((i) => ({
+                                productId: i.product.id,
+                                quantity: i.qty,
+                              })),
+                              customerId: customerId || null,
+                              discount: discountAmount,
+                              paymentMethodId,
+                              notes,
+                              taxRate: taxEnabled ? taxRate : 0,
+                            }),
+                          });
+                          const saleData = await saleRes.json();
+                          if (!saleRes.ok) throw new Error(saleData.error);
+
+                          // 2. Crear orden QR en Mercado Pago
+                          const qrRes = await fetch("/api/mercadopago/create-order", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              saleId: saleData.id,
+                              amount: total,
+                              description: `Compra ${store?.name || ""} #${saleData.id.slice(-6).toUpperCase()}`,
+                              externalReference: saleData.id,
+                            }),
+                          });
+                          const qrJson = await qrRes.json();
+                          if (!qrRes.ok) throw new Error(qrJson.error);
+                          setQrData({ ...qrJson, saleId: saleData.id });
+                        } catch (e: any) {
+                          toast.error(e.message);
+                        } finally {
+                          setQrLoading(false);
+                        }
+                      }}
+                      disabled={qrLoading || cart.length === 0}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                    >
+                      {qrLoading ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <QrCode className="w-4 h-4 mr-2" />
+                      )}
+                      Generar QR de pago
+                    </Button>
+                  )}
+
+                  {qrData && (
+                    <>
+                      <div className="flex flex-col items-center gap-2">
+                        {qrData.qrImageUrl && (
+                          <img
+                            src={qrData.qrImageUrl}
+                            alt="QR de pago"
+                            className="w-64 h-64 border rounded-lg"
+                          />
+                        )}
+                        <p className="text-xs text-muted-foreground text-center">
+                          Pedile al cliente que escanee este QR con su app de Mercado Pago
+                        </p>
+                        {qrData.qrCode && (
+                          <details className="w-full">
+                            <summary className="text-xs cursor-pointer text-muted-foreground">
+                              Ver código copia y pega
+                            </summary>
+                            <Input
+                              readOnly
+                              value={qrData.qrCode}
+                              className="mt-1 text-xs font-mono"
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                            />
+                          </details>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          disabled={qrPolling}
+                          onClick={async () => {
+                            setQrPolling(true);
+                            try {
+                              const res = await fetch(`/api/mercadopago/status?id=${qrData.paymentId}`);
+                              const data = await res.json();
+                              if (data.status === "APPROVED") {
+                                toast.success("Pago aprobado!");
+                                setLastSale({
+                                  id: qrData.saleId,
+                                  createdAt: new Date().toISOString(),
+                                  items: cart,
+                                  customer: customers.find((c) => c.id === customerId),
+                                  paymentMethod: { name: "Mercado Pago QR" },
+                                  discount: discountAmount,
+                                  tax: taxAmount,
+                                  surcharge: surchargeAmount,
+                                  total,
+                                  subtotal,
+                                });
+                                setQrDialogOpen(false);
+                                setCheckoutOpen(false);
+                                setReceiptOpen(true);
+                                clearCart();
+                                setQrData(null);
+                                const refreshed = await fetch("/api/products").then((r) => r.json());
+                                setProducts(refreshed.filter((x: Product) => x.active));
+                              } else if (data.status === "REJECTED" || data.status === "CANCELLED") {
+                                toast.error(`Pago ${data.status.toLowerCase()}`);
+                              } else {
+                                toast.info(`Estado: ${data.status || "PENDIENTE"}`);
+                              }
+                            } catch (e: any) {
+                              toast.error(e.message);
+                            } finally {
+                              setQrPolling(false);
+                            }
+                          }}
+                        >
+                          {qrPolling ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                          )}
+                          Verificar pago
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setQrData(null);
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center">
+                        El pago se confirma automáticamente cuando se acredite.
+                        También podés verificar manualmente.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <div className="space-y-2">
               <Label>Notas (opcional)</Label>

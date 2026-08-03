@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard } from "lucide-react";
+import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard, FileText, QrCode } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { RUBROS, PAYMENT_METHOD_TYPES, paymentTypeLabel, paymentTypeIcon } from "@/lib/constants";
 import {
@@ -75,6 +75,37 @@ export function SettingsView() {
   });
   const [methodSaving, setMethodSaving] = useState(false);
 
+  // Configuración fiscal (AFIP)
+  const [taxConfig, setTaxConfig] = useState<any>(null);
+  const [taxForm, setTaxForm] = useState<any>({
+    cuit: "",
+    razonSocial: "",
+    direccionFiscal: "",
+    puntoVenta: 1,
+    tipoFactura: "B",
+    condicionFiscal: "MONOTRIBUTO",
+    categoriaMonotributo: "",
+    ivaRate: 21,
+    environment: "homologacion",
+    active: true,
+  });
+  const [taxSaving, setTaxSaving] = useState(false);
+
+  // Mercado Pago
+  const [mpConfig, setMpConfig] = useState<any>(null);
+  const [mpForm, setMpForm] = useState<any>({
+    accessToken: "",
+    publicKey: "",
+    sandboxAccessToken: "",
+    sandboxPublicKey: "",
+    environment: "sandbox",
+    collectorId: "",
+    qrEnabled: true,
+    defaultDescription: "",
+    active: true,
+  });
+  const [mpSaving, setMpSaving] = useState(false);
+
   async function loadMethods() {
     setMethodsLoading(true);
     const res = await fetch("/api/payment-methods");
@@ -83,9 +114,94 @@ export function SettingsView() {
     setMethodsLoading(false);
   }
 
+  async function loadTaxConfig() {
+    const res = await fetch("/api/tax-config");
+    const data = await res.json();
+    setTaxConfig(data);
+    if (data) {
+      setTaxForm({
+        cuit: data.cuit || "",
+        razonSocial: data.razonSocial || "",
+        direccionFiscal: data.direccionFiscal || "",
+        puntoVenta: data.puntoVenta || 1,
+        tipoFactura: data.tipoFactura || "B",
+        condicionFiscal: data.condicionFiscal || "MONOTRIBUTO",
+        categoriaMonotributo: data.categoriaMonotributo || "",
+        ivaRate: data.ivaRate || 21,
+        environment: data.environment || "homologacion",
+        active: data.active ?? true,
+      });
+    }
+  }
+
+  async function loadMpConfig() {
+    const res = await fetch("/api/mercadopago/config");
+    const data = await res.json();
+    setMpConfig(data);
+    if (data) {
+      setMpForm({
+        accessToken: data.accessToken && data.accessToken !== "***CONFIGURADO***" ? data.accessToken : "",
+        publicKey: data.publicKey || "",
+        sandboxAccessToken: data.sandboxAccessToken && data.sandboxAccessToken !== "***CONFIGURADO***" ? data.sandboxAccessToken : "",
+        sandboxPublicKey: data.sandboxPublicKey || "",
+        environment: data.environment || "sandbox",
+        collectorId: data.collectorId || "",
+        qrEnabled: data.qrEnabled ?? true,
+        defaultDescription: data.defaultDescription || "",
+        active: data.active ?? true,
+      });
+    }
+  }
+
   useEffect(() => {
     loadMethods();
+    loadTaxConfig();
+    loadMpConfig();
   }, []);
+
+  async function handleSaveTax() {
+    setTaxSaving(true);
+    try {
+      const res = await fetch("/api/tax-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(taxForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Error guardando configuración fiscal");
+        return;
+      }
+      toast.success("Configuración fiscal guardada");
+      loadTaxConfig();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setTaxSaving(false);
+    }
+  }
+
+  async function handleSaveMp() {
+    setMpSaving(true);
+    try {
+      const res = await fetch("/api/mercadopago/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mpForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Error guardando configuración MP");
+        return;
+      }
+      toast.success("Configuración de Mercado Pago guardada");
+      loadMpConfig();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setMpSaving(false);
+    }
+  }
 
   function openNewMethod() {
     setMethodForm({
@@ -580,6 +696,323 @@ export function SettingsView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Configuración Fiscal (AFIP/ARCA) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-600" />
+            Facturación Electrónica (AFIP/ARCA)
+          </CardTitle>
+          <CardDescription>
+            Datos para emitir facturas electrónicas con CAE. En modo demo se simula el CAE.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm">Habilitar facturación electrónica</Label>
+              <p className="text-xs text-muted-foreground">
+                Activa el módulo de facturación en el sistema
+              </p>
+            </div>
+            <Switch
+              checked={taxForm.active}
+              onCheckedChange={(v) => setTaxForm({ ...taxForm, active: v })}
+            />
+          </div>
+
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>CUIT (sin guiones)</Label>
+              <Input
+                value={taxForm.cuit}
+                onChange={(e) => setTaxForm({ ...taxForm, cuit: e.target.value.replace(/\D/g, "") })}
+                placeholder="30712345678"
+                maxLength={11}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Razón social</Label>
+              <Input
+                value={taxForm.razonSocial}
+                onChange={(e) => setTaxForm({ ...taxForm, razonSocial: e.target.value })}
+                placeholder="Mi Comercio SRL"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Dirección fiscal</Label>
+            <Input
+              value={taxForm.direccionFiscal}
+              onChange={(e) => setTaxForm({ ...taxForm, direccionFiscal: e.target.value })}
+              placeholder="Av. San Martín 123, CABA"
+            />
+          </div>
+
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Punto de venta</Label>
+              <Input
+                type="number"
+                value={taxForm.puntoVenta}
+                onChange={(e) => setTaxForm({ ...taxForm, puntoVenta: Number(e.target.value) })}
+                min={1}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Condición fiscal</Label>
+              <Select
+                value={taxForm.condicionFiscal}
+                onValueChange={(v) => setTaxForm({ ...taxForm, condicionFiscal: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MONOTRIBUTO">Monotributo</SelectItem>
+                  <SelectItem value="RESPONSABLE_INSCRIPTO">Responsable Inscripto</SelectItem>
+                  <SelectItem value="EXENTO">Exento</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo factura por defecto</Label>
+              <Select
+                value={taxForm.tipoFactura}
+                onValueChange={(v) => setTaxForm({ ...taxForm, tipoFactura: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="A">A</SelectItem>
+                  <SelectItem value="B">B</SelectItem>
+                  <SelectItem value="C">C</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label>IVA (%)</Label>
+              <Select
+                value={String(taxForm.ivaRate)}
+                onValueChange={(v) => setTaxForm({ ...taxForm, ivaRate: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0%</SelectItem>
+                  <SelectItem value="10.5">10.5%</SelectItem>
+                  <SelectItem value="21">21%</SelectItem>
+                  <SelectItem value="27">27%</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Categoría Monotributo</Label>
+              <Select
+                value={taxForm.categoriaMonotributo || "_ninguna"}
+                onValueChange={(v) => setTaxForm({ ...taxForm, categoriaMonotributo: v === "_ninguna" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_ninguna">No aplica</SelectItem>
+                  {["A", "B", "C", "D", "E", "F", "G", "H"].map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Modo AFIP</Label>
+              <Select
+                value={taxForm.environment}
+                onValueChange={(v) => setTaxForm({ ...taxForm, environment: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="homologacion">Homologación (Demo)</SelectItem>
+                  <SelectItem value="produccion">Producción</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {taxForm.environment === "produccion" && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-800">
+              <strong>Modo Producción:</strong> Para emitir facturas reales necesitás cargar el certificado digital (.p12)
+              obtenido en AFIP. Esto se hace mediante un archivo de configuración en el servidor.
+              Mientras tanto, usá modo Homologación (genera CAE simulado para pruebas).
+            </div>
+          )}
+
+          {taxForm.environment === "homologacion" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-800">
+              <strong>Modo Demo:</strong> Las facturas emitidas generan un CAE simulado de 14 dígitos
+              y un QR válido según RG AFIP 4291. Para facturación real, cambiá a modo Producción
+              y cargá tu certificado.
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button onClick={handleSaveTax} disabled={taxSaving} className="bg-blue-600 hover:bg-blue-700">
+              {taxSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              Guardar configuración fiscal
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Mercado Pago */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-cyan-600" />
+            Mercado Pago - Pago con QR
+          </CardTitle>
+          <CardDescription>
+            Configurá tus credenciales de Mercado Pago para habilitar cobros con QR.
+            Obtenelas en mercadopago.com.ar/developers
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm">Habilitar Mercado Pago</Label>
+              <p className="text-xs text-muted-foreground">
+                Activa la integración con MP
+              </p>
+            </div>
+            <Switch
+              checked={mpForm.active}
+              onCheckedChange={(v) => setMpForm({ ...mpForm, active: v })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm">Habilitar cobros QR</Label>
+              <p className="text-xs text-muted-foreground">
+                Muestra el botón de QR en el POS
+              </p>
+            </div>
+            <Switch
+              checked={mpForm.qrEnabled}
+              onCheckedChange={(v) => setMpForm({ ...mpForm, qrEnabled: v })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modo</Label>
+            <Select
+              value={mpForm.environment}
+              onValueChange={(v) => setMpForm({ ...mpForm, environment: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
+                <SelectItem value="produccion">Producción</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {mpForm.environment === "sandbox" ? (
+            <div className="space-y-3">
+              <div className="bg-cyan-50 border border-cyan-200 rounded-md p-2 text-xs text-cyan-800">
+                Credenciales de testing (sandbox). Obtenelas en el panel de desarrolladores de MP.
+              </div>
+              <div className="space-y-2">
+                <Label>Access Token (Sandbox)</Label>
+                <Input
+                  type="password"
+                  value={mpForm.sandboxAccessToken}
+                  onChange={(e) => setMpForm({ ...mpForm, sandboxAccessToken: e.target.value })}
+                  placeholder="TEST-..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Public Key (Sandbox)</Label>
+                <Input
+                  value={mpForm.sandboxPublicKey}
+                  onChange={(e) => setMpForm({ ...mpForm, sandboxPublicKey: e.target.value })}
+                  placeholder="APP_USR-..."
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-green-50 border border-green-200 rounded-md p-2 text-xs text-green-800">
+                Credenciales de producción. Usa estas para cobros reales.
+              </div>
+              <div className="space-y-2">
+                <Label>Access Token (Producción)</Label>
+                <Input
+                  type="password"
+                  value={mpForm.accessToken}
+                  onChange={(e) => setMpForm({ ...mpForm, accessToken: e.target.value })}
+                  placeholder="APP_USR-..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Public Key (Producción)</Label>
+                <Input
+                  value={mpForm.publicKey}
+                  onChange={(e) => setMpForm({ ...mpForm, publicKey: e.target.value })}
+                  placeholder="APP_USR-..."
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-4 grid-cols-2">
+            <div className="space-y-2">
+              <Label>Collector ID (opcional)</Label>
+              <Input
+                value={mpForm.collectorId}
+                onChange={(e) => setMpForm({ ...mpForm, collectorId: e.target.value })}
+                placeholder="ID del vendedor en MP"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción en QR</Label>
+              <Input
+                value={mpForm.defaultDescription}
+                onChange={(e) => setMpForm({ ...mpForm, defaultDescription: e.target.value })}
+                placeholder="Nombre del comercio"
+              />
+            </div>
+          </div>
+
+          <div className="bg-muted/50 rounded-md p-3 text-xs">
+            <p className="font-medium mb-1">URL del Webhook para recibir notificaciones de pago:</p>
+            <code className="text-xs break-all">
+              {typeof window !== "undefined" ? window.location.origin : "https://tu-dominio.com"}/api/mercadopago/webhook
+            </code>
+            <p className="mt-1 text-muted-foreground">
+              Configurá esta URL en el panel de desarrolladores de Mercado Pago →
+              Tu aplicación → Webhooks.
+            </p>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSaveMp} disabled={mpSaving} className="bg-cyan-600 hover:bg-cyan-700">
+              {mpSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              Guardar configuración MP
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end">
         <Button
