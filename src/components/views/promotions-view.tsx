@@ -271,7 +271,7 @@ export function PromotionsView() {
         <Card>
           <CardContent className="pt-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
                 <Tag className="w-5 h-5" />
               </div>
               <div>
@@ -284,7 +284,7 @@ export function PromotionsView() {
         <Card>
           <CardContent className="pt-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 text-green-700 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
                 <TrendingUp className="w-5 h-5" />
               </div>
               <div>
@@ -314,7 +314,7 @@ export function PromotionsView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center p-12">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
             </div>
           ) : promotions.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">
@@ -659,7 +659,7 @@ export function PromotionsView() {
                       onClick={() => toggleDay(d.value)}
                       className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
                         selected
-                          ? "bg-emerald-600 text-white border-emerald-600"
+                          ? "bg-indigo-600 text-white border-indigo-600"
                           : "bg-white text-muted-foreground border-gray-200 hover:bg-muted"
                       }`}
                     >

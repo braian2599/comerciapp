@@ -55,7 +55,7 @@ import { formatCurrency, formatDate } from "@/lib/constants";
 
 type TabKey = "sales" | "profits" | "taxes" | "products" | "customers" | "cashflow";
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
+const COLORS = ["#6366f1", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 export function ReportsView() {
   const { store } = useAppStore();
@@ -176,7 +176,7 @@ export function ReportsView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-emerald-600" />
+            <BarChart3 className="w-6 h-6 text-indigo-600" />
             Reportes
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -202,7 +202,7 @@ export function ReportsView() {
                 setTab(t.key);
                 setData(null); // reset inmediato para no renderizar data de otro tab
               }}
-              className={tab === t.key ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+              className={tab === t.key ? "bg-indigo-600 hover:bg-indigo-700" : ""}
             >
               <Icon className="w-4 h-4 mr-1" />
               {t.label}
@@ -234,7 +234,7 @@ export function ReportsView() {
       {/* Contenido */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
         </div>
       ) : !data ? (
         <Card>
@@ -272,7 +272,7 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total ventas" value={formatCurrency(summary.totalAmount || 0, symbol)} icon={DollarSign} color="emerald" />
+        <StatCard label="Total ventas" value={formatCurrency(summary.totalAmount || 0, symbol)} icon={DollarSign} color="indigo" />
         <StatCard label="Cantidad" value={(summary.totalSales || 0).toString()} icon={Receipt} color="blue" />
         <StatCard label="Ticket promedio" value={formatCurrency(summary.averageTicket || 0, symbol)} icon={TrendingUp} color="purple" />
         <StatCard label="Recargos" value={formatCurrency(summary.totalSurcharge || 0, symbol)} icon={TrendingUp} color="amber" />
@@ -295,7 +295,7 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
                   formatter={(v: any, name: string) => [formatCurrency(v, symbol), name === "total" ? "Total" : name]}
                 />
                 <Legend />
-                <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} name="Total" />
+                <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} name="Total" />
                 <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={1} name="Cantidad" hide />
               </LineChart>
             </ResponsiveContainer>
@@ -373,7 +373,7 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
                   <XAxis dataKey="userName" fontSize={11} />
                   <YAxis fontSize={11} />
                   <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
-                  <Bar dataKey="total" fill="#10b981" />
+                  <Bar dataKey="total" fill="#6366f1" />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -418,8 +418,8 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Ganancia bruta" value={formatCurrency(summary.gananciaBruta || 0, symbol)} icon={TrendingUp} color="emerald" />
-        <StatCard label="Ganancia neta" value={formatCurrency(gananciaNeta, symbol)} icon={DollarSign} color={gananciaNeta >= 0 ? "emerald" : "red"} />
+        <StatCard label="Ganancia bruta" value={formatCurrency(summary.gananciaBruta || 0, symbol)} icon={TrendingUp} color="indigo" />
+        <StatCard label="Ganancia neta" value={formatCurrency(gananciaNeta, symbol)} icon={DollarSign} color={gananciaNeta >= 0 ? "indigo" : "red"} />
         <StatCard label="Margen neto" value={`${summary.margenNeto || 0}%`} icon={BarChart3} color="blue" />
         <StatCard label="Total gastos" value={formatCurrency(summary.totalGastos || 0, symbol)} icon={TrendingDown} color="red" />
       </div>
@@ -439,7 +439,7 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
                 <YAxis fontSize={11} />
                 <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
                 <Legend />
-                <Bar dataKey="ventas" fill="#10b981" name="Ventas" />
+                <Bar dataKey="ventas" fill="#6366f1" name="Ventas" />
                 <Bar dataKey="costo" fill="#ef4444" name="Costo" />
                 <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
               </BarChart>
@@ -494,7 +494,7 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Margen bruto</p>
-            <p className="font-bold text-emerald-600">{summary.margenBruto || 0}%</p>
+            <p className="font-bold text-indigo-600">{summary.margenBruto || 0}%</p>
           </div>
         </CardContent>
       </Card>
@@ -509,7 +509,7 @@ function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total facturado" value={formatCurrency(summary.totalFacturado || 0, symbol)} icon={Receipt} color="emerald" />
+        <StatCard label="Total facturado" value={formatCurrency(summary.totalFacturado || 0, symbol)} icon={Receipt} color="indigo" />
         <StatCard label="IVA recaudado" value={formatCurrency(summary.totalIva || 0, symbol)} icon={DollarSign} color="blue" />
         <StatCard label="Facturas emitidas" value={(summary.cantidadFacturas || 0).toString()} icon={BarChart3} color="purple" />
         <StatCard label="Ventas sin facturar" value={(summary.ventasSinFactura || 0).toString()} icon={TrendingDown} color="amber" />
@@ -582,8 +582,8 @@ function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Productos vendidos" value={(summary.totalProductosVendidos || 0).toString()} icon={Package} color="blue" />
         <StatCard label="Items vendidos" value={totalItems.toFixed(0)} icon={BarChart3} color="purple" />
-        <StatCard label="Ingresos totales" value={formatCurrency(summary.revenue || 0, symbol)} icon={DollarSign} color="emerald" />
-        <StatCard label="Ganancia total" value={formatCurrency(summary.profit || 0, symbol)} icon={TrendingUp} color="emerald" />
+        <StatCard label="Ingresos totales" value={formatCurrency(summary.revenue || 0, symbol)} icon={DollarSign} color="indigo" />
+        <StatCard label="Ganancia total" value={formatCurrency(summary.profit || 0, symbol)} icon={TrendingUp} color="indigo" />
       </div>
 
       <Card>
@@ -612,9 +612,9 @@ function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
                   <TableCell className="text-right">{p.quantitySold}</TableCell>
                   <TableCell className="text-right">{formatCurrency(p.revenue, symbol)}</TableCell>
                   <TableCell className="text-right text-red-600">{formatCurrency(p.cost, symbol)}</TableCell>
-                  <TableCell className="text-right text-emerald-600 font-medium">{formatCurrency(p.profit, symbol)}</TableCell>
+                  <TableCell className="text-right text-indigo-600 font-medium">{formatCurrency(p.profit, symbol)}</TableCell>
                   <TableCell className="text-right">
-                    <Badge variant="outline" className={p.margin > 30 ? "text-emerald-700" : p.margin > 10 ? "text-amber-700" : "text-red-700"}>
+                    <Badge variant="outline" className={p.margin > 30 ? "text-indigo-700" : p.margin > 10 ? "text-amber-700" : "text-red-700"}>
                       {p.margin}%
                     </Badge>
                   </TableCell>
@@ -734,9 +734,9 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Ingresos efectivo" value={formatCurrency(summary.totalIngresosEfectivo || 0, symbol)} icon={TrendingUp} color="emerald" />
+        <StatCard label="Ingresos efectivo" value={formatCurrency(summary.totalIngresosEfectivo || 0, symbol)} icon={TrendingUp} color="indigo" />
         <StatCard label="Egresos efectivo" value={formatCurrency(summary.totalEgresosEfectivo || 0, symbol)} icon={TrendingDown} color="red" />
-        <StatCard label="Flujo neto efectivo" value={formatCurrency(flujoNeto, symbol)} icon={Wallet} color={flujoNeto >= 0 ? "emerald" : "red"} />
+        <StatCard label="Flujo neto efectivo" value={formatCurrency(flujoNeto, symbol)} icon={Wallet} color={flujoNeto >= 0 ? "indigo" : "red"} />
         <StatCard label="Ventas fiadas" value={formatCurrency(summary.ventasFiadas || 0, symbol)} icon={Receipt} color="amber" />
       </div>
 
@@ -755,7 +755,7 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
                 <YAxis fontSize={11} />
                 <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
                 <Legend />
-                <Bar dataKey="totalIngresos" fill="#10b981" name="Ingresos" />
+                <Bar dataKey="totalIngresos" fill="#6366f1" name="Ingresos" />
                 <Bar dataKey="totalEgresos" fill="#ef4444" name="Egresos" />
               </BarChart>
             </ResponsiveContainer>
@@ -784,12 +784,12 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
               {series.slice().reverse().map((s: any) => (
                 <TableRow key={s.date}>
                   <TableCell>{formatDate(s.date)}</TableCell>
-                  <TableCell className="text-right text-emerald-600">{formatCurrency(s.ventasEfectivo, symbol)}</TableCell>
-                  <TableCell className="text-right text-emerald-600">{formatCurrency(s.cobrosCuenta, symbol)}</TableCell>
-                  <TableCell className="text-right text-emerald-600">{formatCurrency(s.ingresosManuales, symbol)}</TableCell>
+                  <TableCell className="text-right text-indigo-600">{formatCurrency(s.ventasEfectivo, symbol)}</TableCell>
+                  <TableCell className="text-right text-indigo-600">{formatCurrency(s.cobrosCuenta, symbol)}</TableCell>
+                  <TableCell className="text-right text-indigo-600">{formatCurrency(s.ingresosManuales, symbol)}</TableCell>
                   <TableCell className="text-right text-red-600">{formatCurrency(s.gastosEfectivo, symbol)}</TableCell>
                   <TableCell className="text-right text-red-600">{formatCurrency(s.egresosManuales, symbol)}</TableCell>
-                  <TableCell className={`text-right font-bold ${(s.flujoNeto || 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                  <TableCell className={`text-right font-bold ${(s.flujoNeto || 0) >= 0 ? "text-indigo-700" : "text-red-700"}`}>
                     {formatCurrency(s.flujoNeto, symbol)}
                   </TableCell>
                 </TableRow>
@@ -812,7 +812,7 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
 // ===== COMPONENTE: STAT CARD =====
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: string; icon: any; color: string }) {
   const colorMap: Record<string, string> = {
-    emerald: "text-emerald-600 bg-emerald-50",
+    indigo: "text-indigo-600 bg-indigo-50",
     blue: "text-blue-600 bg-blue-50",
     red: "text-red-600 bg-red-50",
     amber: "text-amber-600 bg-amber-50",
@@ -822,7 +822,7 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: s
     <Card>
       <CardContent className="pt-4">
         <div className="flex items-center gap-2 mb-1">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${colorMap[color] || colorMap.emerald}`}>
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${colorMap[color] || colorMap.indigo}`}>
             <Icon className="w-4 h-4" />
           </div>
           <p className="text-xs text-muted-foreground">{label}</p>

@@ -457,3 +457,45 @@ Stage Summary:
 - Tamaño base reducido de 16px a **14px** (compacto, tipo Linear/Notion).
 - Densidad equilibrada mantenida (no se tocaron paddings/espaciados).
 - Estética final: corporativa moderna con acento indigo, similar a Linear/Stripe.
+
+---
+Task ID: feat-full-palette-indigo-no-greens
+Agent: main
+Task: Eliminar TODOS los tonos verdes de la app (no solo app-shell) y unificar a indigo
+
+Work Log:
+- Detectado que el fix anterior solo cambió colores en app-shell.tsx, pero había 161 referencias a tonos verdes en 20 archivos.
+- Mapa de tonos verdes encontrados:
+  - emerald: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900 (todas las sombras)
+  - green: 50, 100, 200, 500, 600, 700, 800
+  - teal: 50, 100, 500, 600, 700
+  - hex codes: #10b981 (emerald-500), #059669 (emerald-600)
+- Reemplazo masivo con `sed` en todos los archivos .tsx, .ts, .css de src/:
+  - `emerald-{50,100,200,300,400,500,600,700,800,900}` → `indigo-{mismo número}`
+  - `green-{50,100,200,500,600,700,800}` → `indigo-{mismo número}`
+  - `teal-{50,100,500,600,700}` → `indigo-{mismo número}`
+- Reemplazo de hex codes:
+  - `#10b981` → `#6366f1` (indigo-500) en charts de Recharts (dashboard, reports)
+  - `#059669` → `#4f46e5` (indigo-600) en manifest.json y offline.html
+- Renombrado de claves internas "emerald" a "indigo":
+  - `color="emerald"` → `color="indigo"` (prop de StatCard en dashboard-view y reports-view)
+  - `emerald: { bg: ..., text: ... }` → `indigo: { bg: ..., text: ... }` (entradas de colorMap)
+  - `colorMap.emerald` → `colorMap.indigo`
+  - `? "emerald"` → `? "indigo"` (ternarios)
+- globals.css: actualizadas variables CSS:
+  - `--primary`: oklch(0.205 0 0) (negro) → oklch(0.541 0.281 264.48) (indigo-600)
+  - `--ring`: oklch(0.708 0 0) → oklch(0.541 0.281 264.48) (indigo)
+  - `--chart-1`: oklch(0.646 0.222 41.116) (naranja) → oklch(0.541 0.281 264.48) (indigo)
+  - `--sidebar-primary`: → indigo
+  - `--sidebar-ring`: → indigo
+  - En dark mode: `--primary`, `--ring`, `--sidebar-primary`, `--sidebar-ring` actualizados a oklch(0.707 0.18 266.41) (indigo-400/500 claro).
+- Verificación final: cero referencias a `emerald`, `green-*`, `teal-*`, `#10b981`, `#059669` en src/ y public/.
+- `tsc --noEmit` limpio. `eslint` limpio. Dev server OK sin errores.
+
+Stage Summary:
+- Paleta verde completamente erradicada de toda la app.
+- 20 archivos afectados: dashboard, reports, pos, cash-register, customers, purchases, settings, invoices, commissions, inventory, auth-screen, products, sales, promotions, ecommerce, print-templates, branches, refunds, expenses, lib/commissions.
+- Hex codes de charts (Recharts) también migrados: todos los `#10b981` → `#6366f1`.
+- Variables CSS de tema (light + dark) actualizadas para que `--primary`, `--ring`, `--chart-1`, `--sidebar-*` usen indigo.
+- Assets PWA (manifest.json, offline.html) actualizados a `#4f46e5` (indigo-600).
+- Identificadores internos "emerald" renombrados a "indigo" en colorMaps de StatCard.

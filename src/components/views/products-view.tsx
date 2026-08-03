@@ -263,7 +263,7 @@ export function ProductsView() {
                   onChange={(e) => setNewCatName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
                 />
-                <Button onClick={handleAddCategory} className="bg-emerald-600 hover:bg-emerald-700">
+                <Button onClick={handleAddCategory} className="bg-indigo-600 hover:bg-indigo-700">
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
@@ -299,7 +299,7 @@ export function ProductsView() {
             </DialogContent>
           </Dialog>
 
-          <Button onClick={openNew} className="bg-emerald-600 hover:bg-emerald-700">
+          <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
             <Plus className="w-4 h-4 mr-2" />
             Nuevo producto
           </Button>
@@ -413,7 +413,7 @@ export function ProductsView() {
                               ? "text-red-600 font-medium"
                               : p.stock <= p.minStock
                               ? "text-amber-600 font-medium"
-                              : "text-emerald-700"
+                              : "text-indigo-700"
                           }
                         >
                           {p.stock} {p.unit === "KG" ? "kg" : "u"}
@@ -421,7 +421,7 @@ export function ProductsView() {
                       </TableCell>
                       <TableCell className="text-center">
                         {p.active ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
                             Activo
                           </Badge>
                         ) : (
@@ -632,7 +632,7 @@ export function ProductsView() {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {form.id ? "Guardar cambios" : "Crear producto"}

@@ -49,10 +49,10 @@ interface DashboardData {
   ventasPorMetodo: Record<string, number>;
 }
 
-const PIE_COLORS = ["#10b981", "#f59e0b", "#3b82f6", "#ec4899", "#8b5cf6"];
+const PIE_COLORS = ["#6366f1", "#f59e0b", "#3b82f6", "#ec4899", "#8b5cf6"];
 
 const CARD_COLORS: Record<string, { bg: string; text: string }> = {
-  emerald: { bg: "bg-emerald-100", text: "text-emerald-700" },
+  indigo: { bg: "bg-indigo-100", text: "text-indigo-700" },
   blue: { bg: "bg-blue-100", text: "text-blue-700" },
   amber: { bg: "bg-amber-100", text: "text-amber-700" },
   purple: { bg: "bg-purple-100", text: "text-purple-700" },
@@ -104,7 +104,7 @@ export function DashboardView() {
       icon: <DollarSign className="w-4 h-4" />,
       delta: data.variacion,
       deltaLabel: "vs período anterior",
-      color: "emerald",
+      color: "indigo",
     },
     {
       label: "Ganancia bruta",
@@ -123,7 +123,7 @@ export function DashboardView() {
       label: "Ganancia neta",
       value: formatCurrency(data.gananciaNeta, symbol),
       icon: <DollarSign className="w-4 h-4" />,
-      color: data.gananciaNeta >= 0 ? "emerald" : "amber",
+      color: data.gananciaNeta >= 0 ? "indigo" : "amber",
       highlight: true,
     },
   ];
@@ -159,7 +159,7 @@ export function DashboardView() {
               variant={days === d ? "default" : "outline"}
               size="sm"
               onClick={() => setDays(d)}
-              className={days === d ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+              className={days === d ? "bg-indigo-600 hover:bg-indigo-700" : ""}
             >
               {d} días
             </Button>
@@ -184,13 +184,13 @@ export function DashboardView() {
               {c.delta !== undefined && (
                 <div className="flex items-center gap-1 mt-1 text-xs">
                   {c.delta >= 0 ? (
-                    <TrendingUp className="w-3 h-3 text-emerald-600" />
+                    <TrendingUp className="w-3 h-3 text-indigo-600" />
                   ) : (
                     <TrendingDown className="w-3 h-3 text-red-600" />
                   )}
                   <span
                     className={
-                      c.delta >= 0 ? "text-emerald-600" : "text-red-600"
+                      c.delta >= 0 ? "text-indigo-600" : "text-red-600"
                     }
                   >
                     {Math.abs(c.delta).toFixed(1)}%
@@ -216,8 +216,8 @@ export function DashboardView() {
               <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="ventasGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -230,7 +230,7 @@ export function DashboardView() {
                 <Area
                   type="monotone"
                   dataKey="total"
-                  stroke="#10b981"
+                  stroke="#6366f1"
                   strokeWidth={2}
                   fill="url(#ventasGradient)"
                 />
@@ -299,7 +299,7 @@ export function DashboardView() {
                     }
                     contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
                   />
-                  <Bar dataKey="qty" fill="#10b981" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="qty" fill="#6366f1" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -320,7 +320,7 @@ export function DashboardView() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setView("inventory")}
-                className="text-emerald-700"
+                className="text-indigo-700"
               >
                 Ver inventario
                 <ArrowRight className="w-3 h-3 ml-1" />
@@ -330,7 +330,7 @@ export function DashboardView() {
           <CardContent>
             {data.productosBajoStock.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Package className="w-10 h-10 text-emerald-500 mb-2" />
+                <Package className="w-10 h-10 text-indigo-500 mb-2" />
                 <p className="text-sm text-muted-foreground">
                   Todo el stock está OK
                 </p>

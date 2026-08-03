@@ -189,7 +189,7 @@ export function PrintTemplatesView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="p-8 text-center">
-              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
               Cargando plantillas...
             </div>
           ) : templates.length === 0 ? (
@@ -237,7 +237,7 @@ export function PrintTemplatesView() {
                       <TableCell className="text-xs">{t.charset}</TableCell>
                       <TableCell>
                         {t.cutPaper ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <CheckCircle2 className="w-4 h-4 text-indigo-600" />
                         ) : (
                           <span className="text-muted-foreground text-xs">No</span>
                         )}
@@ -251,7 +251,7 @@ export function PrintTemplatesView() {
                       </TableCell>
                       <TableCell className="text-center">
                         {t.active ? (
-                          <Badge className="bg-emerald-100 text-emerald-700">Activa</Badge>
+                          <Badge className="bg-indigo-100 text-indigo-700">Activa</Badge>
                         ) : (
                           <Badge variant="outline">Inactiva</Badge>
                         )}

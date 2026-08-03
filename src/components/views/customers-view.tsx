@@ -327,7 +327,7 @@ export function CustomersView() {
             </span>
           </p>
         </div>
-        <Button onClick={openNew} className="bg-emerald-600 hover:bg-emerald-700">
+        <Button onClick={openNew} className="bg-indigo-600 hover:bg-indigo-700">
           <Plus className="w-4 h-4 mr-2" />
           Nuevo cliente
         </Button>
@@ -351,7 +351,7 @@ export function CustomersView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="p-8 text-center">
-              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
               Cargando clientes...
             </div>
           ) : filtered.length === 0 ? (
@@ -499,7 +499,7 @@ export function CustomersView() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ReceiptText className="w-5 h-5 text-emerald-600" />
+              <ReceiptText className="w-5 h-5 text-indigo-600" />
               Cuenta corriente
             </DialogTitle>
             <DialogDescription>
@@ -510,7 +510,7 @@ export function CustomersView() {
 
           {accountLoading ? (
             <div className="py-12 text-center">
-              <Loader2 className="w-6 h-6 animate-spin inline text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin inline text-indigo-600" />
             </div>
           ) : accountData ? (
             <div className="space-y-4">
@@ -535,7 +535,7 @@ export function CustomersView() {
                 <Card>
                   <CardContent className="p-3">
                     <p className="text-xs text-muted-foreground">Disponible</p>
-                    <p className="text-xl font-bold text-emerald-700">
+                    <p className="text-xl font-bold text-indigo-700">
                       {formatCurrency(
                         accountData.creditLimit > 0
                           ? Math.max(0, accountData.disponible)
@@ -557,7 +557,7 @@ export function CustomersView() {
                     setPayOpen(true);
                   }}
                   disabled={accountData.saldo <= 0}
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="bg-indigo-600 hover:bg-indigo-700"
                 >
                   <ArrowDownCircle className="w-4 h-4 mr-2" />
                   Registrar pago
@@ -597,7 +597,7 @@ export function CustomersView() {
                                 Venta
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                              <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
                                 <ArrowDownCircle className="w-3 h-3 mr-1" />
                                 Pago
                               </Badge>
@@ -614,7 +614,7 @@ export function CustomersView() {
                           <TableCell className="text-right text-red-700">
                             {m.type === "DEBE" ? formatCurrency(m.amount, symbol) : "—"}
                           </TableCell>
-                          <TableCell className="text-right text-emerald-700">
+                          <TableCell className="text-right text-indigo-700">
                             {m.type === "HABER" ? formatCurrency(m.amount, symbol) : "—"}
                           </TableCell>
                           <TableCell className="text-right font-medium">
@@ -689,7 +689,7 @@ export function CustomersView() {
             <Button
               onClick={handlePayment}
               disabled={paySaving}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {paySaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Registrar pago
@@ -774,7 +774,7 @@ export function CustomersView() {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {form.id ? "Guardar" : "Crear cliente"}
@@ -788,7 +788,7 @@ export function CustomersView() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-emerald-600" />
+              <Award className="w-5 h-5 text-indigo-600" />
               Puntos de fidelización
             </DialogTitle>
             <DialogDescription>
@@ -799,15 +799,15 @@ export function CustomersView() {
 
           {pointsLoading ? (
             <div className="py-12 text-center">
-              <Loader2 className="w-6 h-6 animate-spin inline text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin inline text-indigo-600" />
             </div>
           ) : pointsData ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Card className="bg-emerald-50 border-emerald-200">
+                <Card className="bg-indigo-50 border-indigo-200">
                   <CardContent className="p-3">
-                    <p className="text-xs text-emerald-700">Puntos actuales</p>
-                    <p className="text-xl font-bold text-emerald-800">
+                    <p className="text-xs text-indigo-700">Puntos actuales</p>
+                    <p className="text-xl font-bold text-indigo-800">
                       {Math.floor(pointsData.customer.loyaltyPoints || 0)}
                     </p>
                   </CardContent>
@@ -900,7 +900,7 @@ export function CustomersView() {
                               variant="outline"
                               className={
                                 p.type === "EARN"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  ? "bg-indigo-50 text-indigo-700 border-indigo-200"
                                   : p.type === "REDEEM"
                                   ? "bg-orange-50 text-orange-700 border-orange-200"
                                   : p.type === "EXPIRE"
@@ -915,7 +915,7 @@ export function CustomersView() {
                           <TableCell className="text-sm">{p.description}</TableCell>
                           <TableCell
                             className={`text-right font-medium ${
-                              p.points > 0 ? "text-emerald-700" : "text-red-700"
+                              p.points > 0 ? "text-indigo-700" : "text-red-700"
                             }`}
                           >
                             {p.points > 0 ? "+" : ""}

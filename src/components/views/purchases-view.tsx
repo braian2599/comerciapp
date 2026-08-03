@@ -301,7 +301,7 @@ export function PurchasesView() {
             Gestión de proveedores y órdenes de compra
           </p>
         </div>
-        <Button onClick={openNewOC} className="bg-emerald-600 hover:bg-emerald-700">
+        <Button onClick={openNewOC} className="bg-indigo-600 hover:bg-indigo-700">
           <PackagePlus className="w-4 h-4 mr-2" />
           Nueva orden de compra
         </Button>
@@ -338,7 +338,7 @@ export function PurchasesView() {
             <CardContent className="p-0">
               {ordersLoading ? (
                 <div className="p-8 text-center">
-                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
                   Cargando órdenes...
                 </div>
               ) : filteredOrders.length === 0 ? (
@@ -378,7 +378,7 @@ export function PurchasesView() {
                           </TableCell>
                           <TableCell className="text-center">
                             {o.status === "RECIBIDA" ? (
-                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                              <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-100">
                                 <CheckCircle2 className="w-3 h-3 mr-1" /> Recibida
                               </Badge>
                             ) : o.status === "PENDIENTE" ? (
@@ -405,7 +405,7 @@ export function PurchasesView() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 text-emerald-700"
+                                className="h-8 text-indigo-700"
                                 onClick={() => receiveOrder(o.id)}
                               >
                                 Recibir
@@ -440,7 +440,7 @@ export function PurchasesView() {
                   setSupForm({ ...emptySupplier });
                   setSupFormOpen(true);
                 }}
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-indigo-600 hover:bg-indigo-700"
               >
                 <Plus className="w-4 h-4 mr-2" /> Nuevo proveedor
               </Button>
@@ -626,9 +626,9 @@ export function PurchasesView() {
               </div>
             )}
 
-            <div className="flex justify-between items-center p-3 rounded-md bg-emerald-50 border border-emerald-200">
-              <span className="text-sm font-medium text-emerald-800">Total orden</span>
-              <span className="text-xl font-bold text-emerald-700">
+            <div className="flex justify-between items-center p-3 rounded-md bg-indigo-50 border border-indigo-200">
+              <span className="text-sm font-medium text-indigo-800">Total orden</span>
+              <span className="text-xl font-bold text-indigo-700">
                 {formatCurrency(ocTotal, symbol)}
               </span>
             </div>
@@ -648,7 +648,7 @@ export function PurchasesView() {
                 type="checkbox"
                 checked={ocReceiveNow}
                 onChange={(e) => setOcReceiveNow(e.target.checked)}
-                className="w-4 h-4 accent-emerald-600"
+                className="w-4 h-4 accent-indigo-600"
               />
               Recibir mercadería ahora (actualiza stock y costo de productos)
             </label>
@@ -660,7 +660,7 @@ export function PurchasesView() {
             <Button
               onClick={saveOC}
               disabled={ocSaving}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {ocSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {ocReceiveNow ? "Registrar y recibir" : "Crear orden pendiente"}
@@ -686,7 +686,7 @@ export function PurchasesView() {
                 <Badge
                   className={
                     detailOrder.status === "RECIBIDA"
-                      ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                      ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-100"
                       : "bg-amber-100 text-amber-800 hover:bg-amber-100"
                   }
                 >
@@ -724,7 +724,7 @@ export function PurchasesView() {
               </Table>
               <div className="flex justify-between p-3 rounded-md bg-muted">
                 <span className="font-medium">Total</span>
-                <span className="font-bold text-emerald-700">
+                <span className="font-bold text-indigo-700">
                   {formatCurrency(detailOrder.total, symbol)}
                 </span>
               </div>
@@ -738,7 +738,7 @@ export function PurchasesView() {
           <DialogFooter>
             {detailOrder?.status === "PENDIENTE" && (
               <Button
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-indigo-600 hover:bg-indigo-700"
                 onClick={() => {
                   receiveOrder(detailOrder.id);
                   setDetailOpen(false);
@@ -789,7 +789,7 @@ export function PurchasesView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSupFormOpen(false)}>Cancelar</Button>
-            <Button onClick={saveSupplier} disabled={supSaving} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button onClick={saveSupplier} disabled={supSaving} className="bg-indigo-600 hover:bg-indigo-700">
               {supSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {supForm.id ? "Guardar" : "Crear"}
             </Button>

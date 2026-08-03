@@ -392,7 +392,7 @@ export function SettingsView() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Store className="w-4 h-4 text-emerald-600" />
+            <Store className="w-4 h-4 text-indigo-600" />
             Datos del comercio
           </CardTitle>
           <CardDescription>
@@ -556,7 +556,7 @@ export function SettingsView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-emerald-600" />
+                <CreditCard className="w-4 h-4 text-indigo-600" />
                 Métodos de pago
               </CardTitle>
               <CardDescription>
@@ -567,7 +567,7 @@ export function SettingsView() {
             <Button
               onClick={openNewMethod}
               size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               <Plus className="w-4 h-4 mr-1" />
               Nuevo
@@ -577,7 +577,7 @@ export function SettingsView() {
         <CardContent className="p-0">
           {methodsLoading ? (
             <div className="p-6 text-center">
-              <Loader2 className="w-4 h-4 animate-spin inline text-emerald-600" />
+              <Loader2 className="w-4 h-4 animate-spin inline text-indigo-600" />
             </div>
           ) : methods.length === 0 ? (
             <div className="p-8 text-center">
@@ -589,7 +589,7 @@ export function SettingsView() {
               <Button
                 onClick={openNewMethod}
                 size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-indigo-600 hover:bg-indigo-700"
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Crear el primero
@@ -630,7 +630,7 @@ export function SettingsView() {
                       </TableCell>
                       <TableCell className="text-center">
                         {m.isDefault ? (
-                          <Badge className="bg-emerald-100 text-emerald-700">
+                          <Badge className="bg-indigo-100 text-indigo-700">
                             Sí
                           </Badge>
                         ) : (
@@ -639,7 +639,7 @@ export function SettingsView() {
                       </TableCell>
                       <TableCell className="text-center">
                         {m.active ? (
-                          <Badge className="bg-emerald-100 text-emerald-700">
+                          <Badge className="bg-indigo-100 text-indigo-700">
                             Activo
                           </Badge>
                         ) : (
@@ -774,7 +774,7 @@ export function SettingsView() {
             <Button
               onClick={handleSaveMethod}
               disabled={methodSaving}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {methodSaving && (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -1044,7 +1044,7 @@ export function SettingsView() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="bg-green-50 border border-green-200 rounded-md p-2 text-xs text-green-800">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-md p-2 text-xs text-indigo-800">
                 Credenciales de producción. Usa estas para cobros reales.
               </div>
               <div className="space-y-2">
@@ -1297,7 +1297,7 @@ export function SettingsView() {
         <Button
           onClick={handleSave}
           disabled={saving}
-          className="bg-emerald-600 hover:bg-emerald-700"
+          className="bg-indigo-600 hover:bg-indigo-700"
         >
           {saving ? (
             <Loader2 className="w-4 h-4 animate-spin mr-2" />

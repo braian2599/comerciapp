@@ -184,7 +184,7 @@ export function EcommerceView() {
   if (loading) {
     return (
       <div className="p-8 text-center">
-        <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+        <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
         Cargando configuración...
       </div>
     );
@@ -453,7 +453,7 @@ export function EcommerceView() {
         <CardContent className="p-0">
           {loadingLogs ? (
             <div className="p-8 text-center">
-              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
               Cargando logs...
             </div>
           ) : logs.length === 0 ? (
@@ -491,7 +491,7 @@ export function EcommerceView() {
                       <TableCell className="text-xs font-mono">{l.externalId || "—"}</TableCell>
                       <TableCell className="text-center">
                         {l.status === "SUCCESS" && (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" />
+                          <CheckCircle2 className="w-4 h-4 text-indigo-600 inline" />
                         )}
                         {l.status === "ERROR" && (
                           <XCircle className="w-4 h-4 text-red-600 inline" />
@@ -529,7 +529,7 @@ function SyncOption({
 }) {
   return (
     <div className="flex items-start space-x-3 p-3 border rounded-lg">
-      <div className="p-2 rounded-md bg-emerald-50 text-emerald-700 mt-0.5">{icon}</div>
+      <div className="p-2 rounded-md bg-indigo-50 text-indigo-700 mt-0.5">{icon}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <Label className="font-medium">{label}</Label>

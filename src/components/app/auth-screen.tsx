@@ -128,10 +128,10 @@ export function AuthScreen() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-emerald-50 via-background to-orange-50 p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 via-background to-orange-50 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-600 text-white shadow-lg mb-3">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600 text-white shadow-lg mb-3">
             <Store className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">ComerciApp</h1>
@@ -140,7 +140,7 @@ export function AuthScreen() {
           </p>
         </div>
 
-        <Card className="shadow-xl border-emerald-100">
+        <Card className="shadow-xl border-indigo-100">
           <Tabs defaultValue="login">
             <CardHeader>
               <TabsList className="grid w-full grid-cols-2">
@@ -178,7 +178,7 @@ export function AuthScreen() {
                 <CardFooter className="flex flex-col gap-3">
                   <Button
                     type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700"
                     disabled={loading}
                   >
                     {loading ? (
@@ -251,7 +251,7 @@ export function AuthScreen() {
                 <CardFooter className="flex flex-col gap-3">
                   <Button
                     type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700"
                     disabled={loading}
                   >
                     {loading ? (
@@ -274,7 +274,7 @@ export function AuthScreen() {
             variant="outline"
             onClick={handleSeedDemo}
             disabled={seedLoading}
-            className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            className="w-full border-indigo-200 text-indigo-700 hover:bg-indigo-50"
           >
             {seedLoading ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />

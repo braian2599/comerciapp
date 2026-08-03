@@ -490,7 +490,7 @@ export function PosView() {
                   size="sm"
                   onClick={() => setFilterCat("all")}
                   className={
-                    filterCat === "all" ? "bg-emerald-600 hover:bg-emerald-700" : ""
+                    filterCat === "all" ? "bg-indigo-600 hover:bg-indigo-700" : ""
                   }
                 >
                   Todos
@@ -502,7 +502,7 @@ export function PosView() {
                     size="sm"
                     onClick={() => setFilterCat(c.id)}
                     className={
-                      filterCat === c.id ? "bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap" : "whitespace-nowrap"
+                      filterCat === c.id ? "bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap" : "whitespace-nowrap"
                     }
                   >
                     {c.name}
@@ -514,7 +514,7 @@ export function PosView() {
 
           {loading ? (
             <div className="p-12 text-center">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" />
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto pr-1">
@@ -523,12 +523,12 @@ export function PosView() {
                   key={p.id}
                   onClick={() => addToCart(p)}
                   disabled={p.stock <= 0}
-                  className="group text-left p-3 rounded-lg border border-emerald-100 bg-white hover:border-emerald-400 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="group text-left p-3 rounded-lg border border-indigo-100 bg-white hover:border-indigo-400 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <p className="text-sm font-medium line-clamp-2 min-h-[2.5rem]">
                     {p.name}
                   </p>
-                  <p className="text-sm font-bold text-emerald-700 mt-1">
+                  <p className="text-sm font-bold text-indigo-700 mt-1">
                     {formatCurrency(p.salePrice, symbol)}
                   </p>
                   <p
@@ -657,8 +657,8 @@ export function PosView() {
                             }
                             className={`text-xs px-2 py-1 rounded-md border transition-colors ${
                               appliedPromotion?.promotionId === p.promotionId
-                                ? "bg-emerald-600 text-white border-emerald-600"
-                                : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                ? "bg-indigo-600 text-white border-indigo-600"
+                                : "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
                             }`}
                           >
                             {p.promotionName} · −{formatCurrency(p.discountAmount, symbol)}
@@ -668,7 +668,7 @@ export function PosView() {
                     </div>
                   )}
                   {promotionDiscount > 0 && (
-                    <div className="flex justify-between text-sm text-emerald-700">
+                    <div className="flex justify-between text-sm text-indigo-700">
                       <span>Promo aplicada</span>
                       <span>−{formatCurrency(promotionDiscount, symbol)}</span>
                     </div>
@@ -744,13 +744,13 @@ export function PosView() {
                   )}
                   <div className="flex justify-between text-lg font-bold pt-2 border-t">
                     <span>Total</span>
-                    <span className="text-emerald-700">
+                    <span className="text-indigo-700">
                       {formatCurrency(total, symbol)}
                     </span>
                   </div>
 
                   <Button
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 h-11 text-base"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 text-base"
                     onClick={() => setCheckoutOpen(true)}
                   >
                     Cobrar {formatCurrency(total, symbol)}
@@ -869,7 +869,7 @@ export function PosView() {
                 <div className="space-y-3 py-2">
                   <div className="bg-muted/50 rounded-md p-3 text-center">
                     <p className="text-xs text-muted-foreground">Total a cobrar</p>
-                    <p className="text-2xl font-bold text-emerald-700">
+                    <p className="text-2xl font-bold text-indigo-700">
                       {formatCurrency(total, symbol)}
                     </p>
                   </div>
@@ -1071,7 +1071,7 @@ export function PosView() {
               )}
               <div className="flex justify-between text-base font-bold pt-1 border-t">
                 <span>Total</span>
-                <span className="text-emerald-700">
+                <span className="text-indigo-700">
                   {formatCurrency(total, symbol)}
                 </span>
               </div>
@@ -1088,7 +1088,7 @@ export function PosView() {
             <Button
               onClick={processSale}
               disabled={processing}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {processing ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -1106,8 +1106,8 @@ export function PosView() {
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                <CheckCircle2 className="w-6 h-6 text-indigo-600" />
               </div>
               <div>
                 <SheetTitle>¡Venta registrada!</SheetTitle>
@@ -1210,7 +1210,7 @@ export function PosView() {
               </Button>
             </div>
             <Button
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              className="w-full bg-indigo-600 hover:bg-indigo-700"
               onClick={() => setReceiptOpen(false)}
             >
               Nueva venta

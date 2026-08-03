@@ -262,7 +262,7 @@ export function RefundsView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center p-12">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
             </div>
           ) : refunds.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">

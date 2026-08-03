@@ -240,7 +240,7 @@ export function CashRegisterView() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Caja</h1>
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
         </div>
       </div>
     );
@@ -270,7 +270,7 @@ export function CashRegisterView() {
         ) : (
           <Button
             onClick={() => setOpenDlg(true)}
-            className="bg-emerald-600 hover:bg-emerald-700"
+            className="bg-indigo-600 hover:bg-indigo-700"
           >
             <Unlock className="w-4 h-4 mr-2" />
             Abrir caja
@@ -299,9 +299,9 @@ export function CashRegisterView() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                  <TrendingUp className="w-3 h-3 text-emerald-600" /> Ventas efectivo
+                  <TrendingUp className="w-3 h-3 text-indigo-600" /> Ventas efectivo
                 </div>
-                <p className="text-xl font-bold mt-1 text-emerald-700">
+                <p className="text-xl font-bold mt-1 text-indigo-700">
                   +{formatCurrency(arqueo.ventasEfectivo, symbol)}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -322,15 +322,15 @@ export function CashRegisterView() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-emerald-300 bg-emerald-50">
+            <Card className="border-indigo-300 bg-indigo-50">
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-emerald-700 text-xs font-medium">
+                <div className="flex items-center gap-2 text-indigo-700 text-xs font-medium">
                   <Calculator className="w-3 h-3" /> Balance esperado
                 </div>
-                <p className="text-2xl font-bold mt-1 text-emerald-700">
+                <p className="text-2xl font-bold mt-1 text-indigo-700">
                   {formatCurrency(arqueo.expected, symbol)}
                 </p>
-                <p className="text-xs text-emerald-600">
+                <p className="text-xs text-indigo-600">
                   Conteo físico al cerrar
                 </p>
               </CardContent>
@@ -401,7 +401,7 @@ export function CashRegisterView() {
                                 variant="outline"
                                 className={
                                   isIngreso
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
                                     : "bg-red-50 text-red-700 border-red-200"
                                 }
                               >
@@ -411,7 +411,7 @@ export function CashRegisterView() {
                             <TableCell className="text-sm">{m.concept}</TableCell>
                             <TableCell
                               className={`text-right font-medium ${
-                                isIngreso ? "text-emerald-700" : "text-red-700"
+                                isIngreso ? "text-indigo-700" : "text-red-700"
                               }`}
                             >
                               {isIngreso ? "+" : "-"}
@@ -442,7 +442,7 @@ export function CashRegisterView() {
             </p>
             <Button
               onClick={() => setOpenDlg(true)}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               <Unlock className="w-4 h-4 mr-2" />
               Abrir caja ahora
@@ -502,7 +502,7 @@ export function CashRegisterView() {
                             Math.abs(diff) < 0.01
                               ? "text-muted-foreground"
                               : diff > 0
-                              ? "text-emerald-700"
+                              ? "text-indigo-700"
                               : "text-red-700"
                           }`}
                         >
@@ -555,7 +555,7 @@ export function CashRegisterView() {
             <Button
               onClick={openNewRegister}
               disabled={creating}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Abrir caja
@@ -574,9 +574,9 @@ export function CashRegisterView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3 py-2">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-md p-3">
-              <p className="text-xs text-emerald-700">Balance esperado según sistema</p>
-              <p className="text-2xl font-bold text-emerald-700">
+            <div className="bg-indigo-50 border border-indigo-200 rounded-md p-3">
+              <p className="text-xs text-indigo-700">Balance esperado según sistema</p>
+              <p className="text-2xl font-bold text-indigo-700">
                 {formatCurrency(arqueo?.expected || 0, symbol)}
               </p>
             </div>
@@ -596,7 +596,7 @@ export function CashRegisterView() {
                   Math.abs(closingBalance - arqueo.expected) < 0.01
                     ? "bg-muted text-muted-foreground"
                     : closingBalance > arqueo.expected
-                    ? "bg-emerald-50 text-emerald-700"
+                    ? "bg-indigo-50 text-indigo-700"
                     : "bg-red-50 text-red-700"
                 }`}
               >
@@ -678,7 +678,7 @@ export function CashRegisterView() {
               disabled={savingMov}
               className={
                 movType === "INGRESO"
-                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  ? "bg-indigo-600 hover:bg-indigo-700"
                   : "bg-red-600 hover:bg-red-700"
               }
             >

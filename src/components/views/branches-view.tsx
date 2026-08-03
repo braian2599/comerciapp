@@ -172,7 +172,7 @@ export function BranchesView() {
         <Card>
           <CardContent className="pt-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
                 <StoreIcon className="w-5 h-5" />
               </div>
               <div>
@@ -222,7 +222,7 @@ export function BranchesView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center p-12">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
             </div>
           ) : branches.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">

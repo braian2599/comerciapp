@@ -216,7 +216,7 @@ export function InvoicesView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileText className="w-6 h-6 text-emerald-600" />
+            <FileText className="w-6 h-6 text-indigo-600" />
             Facturación Electrónica
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -254,7 +254,7 @@ export function InvoicesView() {
         <Card>
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground">Total facturado</p>
-            <p className="text-xl font-bold text-emerald-700">
+            <p className="text-xl font-bold text-indigo-700">
               {formatCurrency(totalFacturado, symbol)}
             </p>
           </CardContent>
@@ -335,7 +335,7 @@ export function InvoicesView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -377,7 +377,7 @@ export function InvoicesView() {
                     <TableCell className="font-mono text-xs">{inv.cae || "-"}</TableCell>
                     <TableCell>
                       {inv.status === "EMITIDA" && (
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
                           <CheckCircle2 className="w-3 h-3 mr-1" /> Emitida
                         </Badge>
                       )}
@@ -550,7 +550,7 @@ export function InvoicesView() {
                   <p className="text-xs text-muted-foreground">Estado</p>
                   <p>
                     {selectedInvoice.status === "EMITIDA" && (
-                      <Badge className="bg-emerald-100 text-emerald-700">Emitida</Badge>
+                      <Badge className="bg-indigo-100 text-indigo-700">Emitida</Badge>
                     )}
                     {selectedInvoice.status === "ANULADA" && (
                       <Badge variant="destructive">Anulada</Badge>
@@ -567,14 +567,14 @@ export function InvoicesView() {
 
               {/* Datos AFIP */}
               {selectedInvoice.cae && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-md p-3 grid grid-cols-2 gap-2 text-sm">
+                <div className="bg-indigo-50 border border-indigo-200 rounded-md p-3 grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <p className="text-xs text-emerald-700">CAE</p>
-                    <p className="font-mono font-bold text-emerald-900">{selectedInvoice.cae}</p>
+                    <p className="text-xs text-indigo-700">CAE</p>
+                    <p className="font-mono font-bold text-indigo-900">{selectedInvoice.cae}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-emerald-700">Vencimiento CAE</p>
-                    <p className="font-medium text-emerald-900">
+                    <p className="text-xs text-indigo-700">Vencimiento CAE</p>
+                    <p className="font-medium text-indigo-900">
                       {selectedInvoice.caeVencimiento ? formatDate(selectedInvoice.caeVencimiento) : "-"}
                     </p>
                   </div>

@@ -158,7 +158,7 @@ export function SalesView() {
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-md bg-emerald-100 text-emerald-700">
+            <div className="p-2 rounded-md bg-indigo-100 text-indigo-700">
               <DollarSign className="w-5 h-5" />
             </div>
             <div>
@@ -240,7 +240,7 @@ export function SalesView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="p-8 text-center">
-              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
               Cargando ventas...
             </div>
           ) : filtered.length === 0 ? (
@@ -292,7 +292,7 @@ export function SalesView() {
                       </TableCell>
                       <TableCell className="text-center">
                         {s.status === "COMPLETADA" ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
                             Completada
                           </Badge>
                         ) : (
@@ -363,7 +363,7 @@ export function SalesView() {
                 <div>
                   <p className="text-xs text-muted-foreground">Estado</p>
                   {selected.status === "COMPLETADA" ? (
-                    <Badge className="bg-emerald-100 text-emerald-700">Completada</Badge>
+                    <Badge className="bg-indigo-100 text-indigo-700">Completada</Badge>
                   ) : (
                     <Badge variant="destructive">Anulada</Badge>
                   )}

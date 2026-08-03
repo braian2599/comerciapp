@@ -65,7 +65,7 @@ interface Product {
 }
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-  ENTRADA: { label: "Entrada", color: "bg-emerald-100 text-emerald-700", icon: ArrowDownToLine },
+  ENTRADA: { label: "Entrada", color: "bg-indigo-100 text-indigo-700", icon: ArrowDownToLine },
   SALIDA: { label: "Salida", color: "bg-red-100 text-red-700", icon: ArrowUpFromLine },
   AJUSTE: { label: "Ajuste", color: "bg-amber-100 text-amber-700", icon: Plus },
   VENTA: { label: "Venta", color: "bg-blue-100 text-blue-700", icon: Package },
@@ -148,7 +148,7 @@ export function InventoryView() {
         {canManage && (
           <Button
             onClick={() => setAdjustOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700"
+            className="bg-indigo-600 hover:bg-indigo-700"
           >
             <Plus className="w-4 h-4 mr-2" />
             Registrar movimiento
@@ -161,7 +161,7 @@ export function InventoryView() {
         <Button
           variant={tab === "movements" ? "default" : "outline"}
           onClick={() => setTab("movements")}
-          className={tab === "movements" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+          className={tab === "movements" ? "bg-indigo-600 hover:bg-indigo-700" : ""}
         >
           <Warehouse className="w-4 h-4 mr-2" />
           Movimientos ({movements.length})
@@ -193,7 +193,7 @@ export function InventoryView() {
           <CardContent className="p-0">
             {loading ? (
               <div className="p-8 text-center">
-                <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+                <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
                 Cargando movimientos...
               </div>
             ) : movements.length === 0 ? (
@@ -234,7 +234,7 @@ export function InventoryView() {
                           <TableCell className="font-medium">{m.product.name}</TableCell>
                           <TableCell
                             className={`text-right font-semibold ${
-                              m.quantity > 0 ? "text-emerald-700" : "text-red-700"
+                              m.quantity > 0 ? "text-indigo-700" : "text-red-700"
                             }`}
                           >
                             {m.quantity > 0 ? "+" : ""}
@@ -269,11 +269,11 @@ export function InventoryView() {
           <CardContent className="p-0">
             {loading ? (
               <div className="p-8 text-center">
-                <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+                <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
               </div>
             ) : lowStockProducts.length === 0 ? (
               <div className="p-12 text-center">
-                <Package className="w-10 h-10 mx-auto text-emerald-500 mb-3" />
+                <Package className="w-10 h-10 mx-auto text-indigo-500 mb-3" />
                 <p className="text-sm text-muted-foreground">
                   Todo el stock está OK. Nada que reponer.
                 </p>
@@ -411,7 +411,7 @@ export function InventoryView() {
             <Button
               onClick={handleAdjust}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-indigo-600 hover:bg-indigo-700"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Registrar movimiento

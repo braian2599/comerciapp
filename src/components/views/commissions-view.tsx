@@ -254,7 +254,7 @@ export function CommissionsView() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">Total acumulado</p>
-              <Coins className="w-4 h-4 text-emerald-600" />
+              <Coins className="w-4 h-4 text-indigo-600" />
             </div>
             <p className="text-xl font-bold">{formatCurrency(totals.total, symbol)}</p>
           </CardContent>
@@ -272,9 +272,9 @@ export function CommissionsView() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">Pagado</p>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <CheckCircle2 className="w-4 h-4 text-indigo-600" />
             </div>
-            <p className="text-xl font-bold text-emerald-700">{formatCurrency(totals.paid, symbol)}</p>
+            <p className="text-xl font-bold text-indigo-700">{formatCurrency(totals.paid, symbol)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -324,7 +324,7 @@ export function CommissionsView() {
             <CardContent className="p-0">
               {loadingRules ? (
                 <div className="p-8 text-center">
-                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
                   Cargando reglas...
                 </div>
               ) : rules.length === 0 ? (
@@ -368,7 +368,7 @@ export function CommissionsView() {
                           <TableCell>{formatCurrency(r.minSaleAmount, symbol)}</TableCell>
                           <TableCell>
                             {r.onlyPaid ? (
-                              <Badge className="bg-emerald-100 text-emerald-700">Sí</Badge>
+                              <Badge className="bg-indigo-100 text-indigo-700">Sí</Badge>
                             ) : (
                               <Badge variant="outline">No</Badge>
                             )}
@@ -378,7 +378,7 @@ export function CommissionsView() {
                           </TableCell>
                           <TableCell className="text-center">
                             {r.active ? (
-                              <Badge className="bg-emerald-100 text-emerald-700">Activa</Badge>
+                              <Badge className="bg-indigo-100 text-indigo-700">Activa</Badge>
                             ) : (
                               <Badge variant="outline">Inactiva</Badge>
                             )}
@@ -473,7 +473,7 @@ export function CommissionsView() {
                           <TableCell className="text-right text-amber-700">
                             {formatCurrency(s.pendingAmount, symbol)}
                           </TableCell>
-                          <TableCell className="text-right text-emerald-700">
+                          <TableCell className="text-right text-indigo-700">
                             {formatCurrency(s.paidAmount, symbol)}
                           </TableCell>
                           <TableCell className="text-center">{s.count}</TableCell>
@@ -509,7 +509,7 @@ export function CommissionsView() {
             <CardContent className="p-0">
               {loadingComms ? (
                 <div className="p-8 text-center">
-                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+                  <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
                   Cargando comisiones...
                 </div>
               ) : commissions.length === 0 ? (
@@ -573,7 +573,7 @@ export function CommissionsView() {
                             {formatCurrency(c.base, symbol)}
                           </TableCell>
                           <TableCell className="text-right">{c.rate}%</TableCell>
-                          <TableCell className="text-right font-bold text-emerald-700">
+                          <TableCell className="text-right font-bold text-indigo-700">
                             {formatCurrency(c.amount, symbol)}
                           </TableCell>
                           <TableCell className="text-center">

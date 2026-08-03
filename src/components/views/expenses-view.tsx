@@ -248,7 +248,7 @@ export function ExpensesView() {
         <CardContent className="p-0">
           {loading ? (
             <div className="p-8 text-center">
-              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-emerald-600" />
+              <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-indigo-600" />
               Cargando gastos...
             </div>
           ) : expenses.length === 0 ? (
