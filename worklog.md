@@ -583,3 +583,36 @@ Stage Summary:
 - No sobrescribe datos que el usuario ya haya cargado a mano.
 - Muestra preview de la imagen del producto si está disponible.
 - No requiere claves API ni configuración adicional — funciona out of the box.
+
+---
+Task ID: barcode-lookup-v2
+Agent: main
+Task: Mejorar la calidad del nombre autocompletado por código de barras (incluir tipo de producto + cantidad)
+
+Work Log:
+- Diagnóstico: Open Food Facts devuelve `product_name` como solo la marca ("PLAYADITO") mientras que los datos útiles (tipo de producto, cantidad) están en campos separados (`generic_name`, `categories`, `quantity`).
+- Creado script de prueba `scripts/test-barcode-lookup.ts` con 5 códigos reales (Playadito, Amanda, Coca-Cola, Nutella, Nescau) para validar la lógica antes de deployar.
+- Mejoras en `src/lib/barcode-lookup.ts`:
+  - Función `buildDisplayName(p)` que construye un nombre completo combinando varios campos:
+    1. Si `product_name` ya contiene el tipo de producto → usarlo tal cual.
+    2. Si `product_name` parece ser solo la marca (palabra corta sin espacios/guiones) Y hay `generic_name` en español → prependear la categoría específica (ej: "Yerba mate PLAYADITO").
+    3. Si no hay `generic_name` en español → dejar el nombre tal cual (evita prependear categorías en francés/portugués como "Petit-déjeuners").
+    4. Si `product_name` está vacío → construir desde generic + brand.
+    5. Appendear cantidad normalizada si no está ya incluida.
+  - Función `normalizeQuantity(q)` que convierte "500 gramos" → "500g", "1 kilo" → "1kg", "33 cl" → "330ml", "1.5 litros" → "1.5l", "400 g" → "400g".
+  - Función `pickUsableCategory(cats)` que recorre las categorías de la más específica a la más general y elige la primera que sea corta (1-2 palabras), no genérica y en español.
+  - Función `looksSpanish(s)` que filtra textos con acentos no españoles (â, ê, î, ô, û, ç, ã, õ, à, ù) para evitar categorías en francés/portugués.
+  - Función `buildDescription(p)` que arma una descripción enriquecida: "Yerba mate elaborada con palo · Marca: LIEBIG".
+- Resultados validados con el script de prueba:
+  - Playadito: "PLAYADITO" → "Yerba mate PLAYADITO 500g" ✓
+  - Amanda: "Yerba mate especial" → "Yerba mate especial 500g" ✓
+  - Coca-Cola: "coca-cola" → "Coca-Cola 330ml" ✓
+  - Nutella: "Nutella" (sin cambios, no se le agregó prefijo francés) ✓
+  - Nescau: "Nescau 2.0" → "Nescau 2.0 400g" ✓
+- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso.
+
+Stage Summary:
+- La calidad del autocompletado mejoró significativamente: ahora el nombre incluye tipo de producto + cantidad.
+- Heurística robusta: solo prependea categorías cuando hay `generic_name` en español (campo más confiable), evita agregar ruido en otros idiomas.
+- Cantidad normalizada a formato compacto (500g, 1L, 330ml) consistente con lo que el usuario vería en un etiqueta real.
+- Descripción enriquecida con `generic_name` completo + marca, dando contexto adicional al usuario.
