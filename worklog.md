@@ -425,3 +425,35 @@ Stage Summary:
 - Estética migrada de "retail verde" a "corporativo slate" (estilo Linear/Stripe/Vercel).
 - Cambios puramente visuales (clases Tailwind), sin tocar lógica ni estructura de componentes.
 - Referencia visual: header compacto blanco + tabs underline + sidebar gris claro con items activos destacados por left-border + fondo gris muy claro.
+
+---
+Task ID: feat-indigo-inter-compact
+Agent: main
+Task: Cambiar paleta a indigo, tipografía a Inter, tamaño compacto (14px base)
+
+Work Log:
+- **Tipografía**: reemplazado Geist por Inter en `src/app/layout.tsx` via `next/font/google`.
+  - `import { Inter, Geist_Mono } from "next/font/google"`
+  - `const inter = Inter({ variable: "--font-geist-sans", subsets: ["latin"] })`
+  - Variable CSS `--font-geist-sans` reutilizada (no hace falta cambiar globals.css theme inline).
+- **Tamaño base**: agregado `html { font-size: 14px }` en `globals.css` (antes default 16px).
+  - Impacto: todos los `text-sm`, `text-xs`, paddings en `rem` se reducen proporcionalmente.
+  - Sensación: más info por pantalla, estilo Linear/Notion.
+- **Mejoras de fuente**: agregado `font-smoothing: antialiased` y `font-feature-settings: "cv11", "ss01"` para mejorar renderizado de Inter.
+- **Paleta indigo**: cambiados todos los acentos slate-900 → indigo-600/700 en `app-shell.tsx`:
+  - Logo: `bg-indigo-600` (antes slate-900)
+  - Underline de tab activa: `bg-indigo-600` (antes slate-900)
+  - Left-border de item sidebar activo: `border-indigo-600` (antes slate-900)
+  - Avatar fallback: `bg-indigo-50 text-indigo-700` (antes slate-100/slate-700)
+  - Botón "Actualizar" PWA: `bg-indigo-600 hover:bg-indigo-700` (antes slate-900/slate-800)
+  - Items dropdown mobile activos: `bg-indigo-50 text-indigo-700` (antes slate-100/slate-900)
+- **Theme color** del viewport actualizado a `#4F46E5` (indigo-600).
+- Cache HMR stale tras renombrar `geistSans` → `inter` causó `ReferenceError: geistSans is not defined` (3 veces). Resuelto con restart limpio del dev server + clear de `.next/cache`.
+- `tsc --noEmit` limpio. `eslint` limpio. Dev server reiniciado OK, sin errores.
+
+Stage Summary:
+- Paleta migrada de slate monocromo a **slate + indigo** (acento indigo-600 sobre grises slate).
+- Tipografía migrada de Geist a **Inter** (con font-smoothing y font-features).
+- Tamaño base reducido de 16px a **14px** (compacto, tipo Linear/Notion).
+- Densidad equilibrada mantenida (no se tocaron paddings/espaciados).
+- Estética final: corporativa moderna con acento indigo, similar a Linear/Stripe.

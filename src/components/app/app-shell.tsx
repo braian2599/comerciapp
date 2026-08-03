@@ -257,7 +257,7 @@ export function AppShell() {
         <div className="flex items-center gap-3 px-4 sm:px-6 h-14">
           {/* Logo + nombre del comercio + vista actual */}
           <div className="flex items-center gap-2.5 shrink-0 min-w-0">
-            <div className="w-8 h-8 rounded-md bg-slate-900 text-white flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-md bg-indigo-600 text-white flex items-center justify-center shrink-0">
               <Store className="w-4 h-4" />
             </div>
             <div className="hidden sm:block min-w-0 leading-tight">
@@ -285,7 +285,7 @@ export function AppShell() {
                 {item.icon}
                 <span className="hidden lg:inline">{item.label}</span>
                 {currentView === item.key && (
-                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-slate-900 rounded-full" />
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
                 )}
               </button>
             ))}
@@ -312,7 +312,7 @@ export function AppShell() {
                           onClick={() => setView(item.key)}
                           className={cn(
                             "gap-2 cursor-pointer",
-                            currentView === item.key && "bg-slate-100 text-slate-900 font-medium"
+                            currentView === item.key && "bg-indigo-50 text-indigo-700 font-medium"
                           )}
                         >
                           {item.icon}
@@ -374,7 +374,7 @@ export function AppShell() {
               <Button
                 size="sm"
                 onClick={pwa.applyUpdate}
-                className="h-8 gap-1 bg-slate-900 hover:bg-slate-800"
+                className="h-8 gap-1 bg-indigo-600 hover:bg-indigo-700"
               >
                 <CheckCircle2 className="w-3 h-3" />
                 <span className="hidden sm:inline text-xs">Actualizar</span>
@@ -386,7 +386,7 @@ export function AppShell() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 px-2">
                   <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-slate-100 text-slate-700 text-xs font-semibold">
+                    <AvatarFallback className="bg-indigo-50 text-indigo-700 text-xs font-semibold">
                       {userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
@@ -439,7 +439,7 @@ export function AppShell() {
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border-l-2 -ml-px",
                           currentView === item.key
-                            ? "bg-white text-slate-900 border-slate-900 shadow-sm"
+                            ? "bg-white text-slate-900 border-indigo-600 shadow-sm"
                             : "text-slate-600 border-transparent hover:bg-slate-100/70 hover:text-slate-900"
                         )}
                       >
