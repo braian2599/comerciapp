@@ -198,7 +198,10 @@ export function ReportsView() {
               key={t.key}
               variant={tab === t.key ? "default" : "outline"}
               size="sm"
-              onClick={() => setTab(t.key)}
+              onClick={() => {
+                setTab(t.key);
+                setData(null); // reset inmediato para no renderizar data de otro tab
+              }}
               className={tab === t.key ? "bg-emerald-600 hover:bg-emerald-700" : ""}
             >
               <Icon className="w-4 h-4 mr-1" />
@@ -262,13 +265,17 @@ export function ReportsView() {
 
 // ===== REPORTE DE VENTAS =====
 function SalesReport({ data, symbol }: { data: any; symbol: string }) {
+  const summary = data?.summary || {};
+  const series = data?.series || [];
+  const byPaymentMethod = data?.byPaymentMethod || [];
+  const byUser = data?.byUser || [];
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total ventas" value={formatCurrency(data.summary.totalAmount, symbol)} icon={DollarSign} color="emerald" />
-        <StatCard label="Cantidad" value={data.summary.totalSales.toString()} icon={Receipt} color="blue" />
-        <StatCard label="Ticket promedio" value={formatCurrency(data.summary.averageTicket, symbol)} icon={TrendingUp} color="purple" />
-        <StatCard label="Recargos" value={formatCurrency(data.summary.totalSurcharge, symbol)} icon={TrendingUp} color="amber" />
+        <StatCard label="Total ventas" value={formatCurrency(summary.totalAmount || 0, symbol)} icon={DollarSign} color="emerald" />
+        <StatCard label="Cantidad" value={(summary.totalSales || 0).toString()} icon={Receipt} color="blue" />
+        <StatCard label="Ticket promedio" value={formatCurrency(summary.averageTicket || 0, symbol)} icon={TrendingUp} color="purple" />
+        <StatCard label="Recargos" value={formatCurrency(summary.totalSurcharge || 0, symbol)} icon={TrendingUp} color="amber" />
       </div>
 
       <Card>
@@ -276,19 +283,23 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
           <CardTitle className="text-sm">Evolución de ventas</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data.series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="period" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip
-                formatter={(v: any, name: string) => [formatCurrency(v, symbol), name === "total" ? "Total" : name]}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} name="Total" />
-              <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={1} name="Cantidad" hide />
-            </LineChart>
-          </ResponsiveContainer>
+          {series.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Sin ventas en el período</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="period" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip
+                  formatter={(v: any, name: string) => [formatCurrency(v, symbol), name === "total" ? "Total" : name]}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} name="Total" />
+                <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={1} name="Cantidad" hide />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
@@ -298,24 +309,28 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
             <CardTitle className="text-sm">Por método de pago</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={data.byPaymentMethod}
-                  dataKey="total"
-                  nameKey="method"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  label={(e: any) => `${e.method}`}
-                >
-                  {data.byPaymentMethod.map((_: any, i: number) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
-              </PieChart>
-            </ResponsiveContainer>
+            {byPaymentMethod.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Sin datos</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={byPaymentMethod}
+                    dataKey="total"
+                    nameKey="method"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    label={(e: any) => `${e.method}`}
+                  >
+                    {byPaymentMethod.map((_: any, i: number) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -325,13 +340,20 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.byPaymentMethod.map((m: any) => (
+                {byPaymentMethod.map((m: any) => (
                   <TableRow key={m.method}>
                     <TableCell className="font-medium">{m.method}</TableCell>
                     <TableCell className="text-right">{m.count}</TableCell>
                     <TableCell className="text-right">{formatCurrency(m.total, symbol)}</TableCell>
                   </TableRow>
                 ))}
+                {byPaymentMethod.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      Sin datos
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -342,15 +364,19 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
             <CardTitle className="text-sm">Por vendedor</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={data.byUser}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="userName" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
-                <Bar dataKey="total" fill="#10b981" />
-              </BarChart>
-            </ResponsiveContainer>
+            {byUser.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Sin datos</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={byUser}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="userName" fontSize={11} />
+                  <YAxis fontSize={11} />
+                  <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+                  <Bar dataKey="total" fill="#10b981" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -360,13 +386,20 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.byUser.map((u: any) => (
+                {byUser.map((u: any) => (
                   <TableRow key={u.userId}>
                     <TableCell className="font-medium">{u.userName}</TableCell>
                     <TableCell className="text-right">{u.count}</TableCell>
                     <TableCell className="text-right">{formatCurrency(u.total, symbol)}</TableCell>
                   </TableRow>
                 ))}
+                {byUser.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      Sin datos
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -378,13 +411,17 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
 
 // ===== REPORTE DE GANANCIAS =====
 function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
+  const summary = data?.summary || {};
+  const series = data?.series || [];
+  const expensesByCategory = data?.expensesByCategory || [];
+  const gananciaNeta = summary.gananciaNeta || 0;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Ganancia bruta" value={formatCurrency(data.summary.gananciaBruta, symbol)} icon={TrendingUp} color="emerald" />
-        <StatCard label="Ganancia neta" value={formatCurrency(data.summary.gananciaNeta, symbol)} icon={DollarSign} color={data.summary.gananciaNeta >= 0 ? "emerald" : "red"} />
-        <StatCard label="Margen neto" value={`${data.summary.margenNeto}%`} icon={BarChart3} color="blue" />
-        <StatCard label="Total gastos" value={formatCurrency(data.summary.totalGastos, symbol)} icon={TrendingDown} color="red" />
+        <StatCard label="Ganancia bruta" value={formatCurrency(summary.gananciaBruta || 0, symbol)} icon={TrendingUp} color="emerald" />
+        <StatCard label="Ganancia neta" value={formatCurrency(gananciaNeta, symbol)} icon={DollarSign} color={gananciaNeta >= 0 ? "emerald" : "red"} />
+        <StatCard label="Margen neto" value={`${summary.margenNeto || 0}%`} icon={BarChart3} color="blue" />
+        <StatCard label="Total gastos" value={formatCurrency(summary.totalGastos || 0, symbol)} icon={TrendingDown} color="red" />
       </div>
 
       <Card>
@@ -392,18 +429,22 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
           <CardTitle className="text-sm">Ventas vs Costo vs Gastos</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={data.series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
-              <Legend />
-              <Bar dataKey="ventas" fill="#10b981" name="Ventas" />
-              <Bar dataKey="costo" fill="#ef4444" name="Costo" />
-              <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
-            </BarChart>
-          </ResponsiveContainer>
+          {series.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Sin datos en el período</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+                <Legend />
+                <Bar dataKey="ventas" fill="#10b981" name="Ventas" />
+                <Bar dataKey="costo" fill="#ef4444" name="Costo" />
+                <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
@@ -412,13 +453,13 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
           <CardTitle className="text-sm">Gastos por categoría</CardTitle>
         </CardHeader>
         <CardContent>
-          {(!data.expensesByCategory || data.expensesByCategory.length === 0) ? (
+          {expensesByCategory.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">Sin gastos en el período</p>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
                 <Pie
-                  data={data.expensesByCategory}
+                  data={expensesByCategory}
                   dataKey="amount"
                   nameKey="category"
                   cx="50%"
@@ -426,7 +467,7 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
                   outerRadius={80}
                   label={(e: any) => `${e.category}`}
                 >
-                  {data.expensesByCategory.map((_: any, i: number) => (
+                  {expensesByCategory.map((_: any, i: number) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
@@ -441,19 +482,19 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
         <CardContent className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">Total ventas</p>
-            <p className="font-bold">{formatCurrency(data.summary.totalVentas, symbol)}</p>
+            <p className="font-bold">{formatCurrency(summary.totalVentas || 0, symbol)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Total costo</p>
-            <p className="font-bold text-red-600">{formatCurrency(data.summary.totalCosto, symbol)}</p>
+            <p className="font-bold text-red-600">{formatCurrency(summary.totalCosto || 0, symbol)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Total descuentos</p>
-            <p className="font-bold text-amber-600">{formatCurrency(data.summary.totalDescuentos, symbol)}</p>
+            <p className="font-bold text-amber-600">{formatCurrency(summary.totalDescuentos || 0, symbol)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Margen bruto</p>
-            <p className="font-bold text-emerald-600">{data.summary.margenBruto}%</p>
+            <p className="font-bold text-emerald-600">{summary.margenBruto || 0}%</p>
           </div>
         </CardContent>
       </Card>
@@ -463,13 +504,15 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
 
 // ===== REPORTE FISCAL =====
 function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
+  const summary = data?.summary || {};
+  const byTipo = data?.byTipo || [];
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total facturado" value={formatCurrency(data.summary.totalFacturado, symbol)} icon={Receipt} color="emerald" />
-        <StatCard label="IVA recaudado" value={formatCurrency(data.summary.totalIva, symbol)} icon={DollarSign} color="blue" />
-        <StatCard label="Facturas emitidas" value={data.summary.cantidadFacturas.toString()} icon={BarChart3} color="purple" />
-        <StatCard label="Ventas sin facturar" value={data.summary.ventasSinFactura.toString()} icon={TrendingDown} color="amber" />
+        <StatCard label="Total facturado" value={formatCurrency(summary.totalFacturado || 0, symbol)} icon={Receipt} color="emerald" />
+        <StatCard label="IVA recaudado" value={formatCurrency(summary.totalIva || 0, symbol)} icon={DollarSign} color="blue" />
+        <StatCard label="Facturas emitidas" value={(summary.cantidadFacturas || 0).toString()} icon={BarChart3} color="purple" />
+        <StatCard label="Ventas sin facturar" value={(summary.ventasSinFactura || 0).toString()} icon={TrendingDown} color="amber" />
       </div>
 
       <Card>
@@ -490,7 +533,7 @@ function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.byTipo.map((t: any) => (
+              {byTipo.map((t: any) => (
                 <TableRow key={t.tipo}>
                   <TableCell>
                     <Badge variant="outline">Factura {t.tipo}</Badge>
@@ -503,7 +546,7 @@ function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
                   <TableCell className="text-right font-bold">{formatCurrency(t.total, symbol)}</TableCell>
                 </TableRow>
               ))}
-              {data.byTipo.length === 0 && (
+              {byTipo.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No hay facturas emitidas en el período
@@ -515,11 +558,11 @@ function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
         </CardContent>
       </Card>
 
-      {data.summary.ventasSinFactura > 0 && (
+      {summary.ventasSinFactura > 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="pt-4">
             <p className="text-sm text-amber-900">
-              <strong>Atención:</strong> Hay {data.summary.ventasSinFactura} ventas por {formatCurrency(data.summary.montoSinFacturar, symbol)} sin facturar en el período.
+              <strong>Atención:</strong> Hay {summary.ventasSinFactura} ventas por {formatCurrency(summary.montoSinFacturar || 0, symbol)} sin facturar en el período.
               Para cumplimiento fiscal, deberías emitir las facturas correspondientes.
             </p>
           </CardContent>
@@ -531,13 +574,16 @@ function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
 
 // ===== REPORTE DE PRODUCTOS =====
 function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
+  const summary = data?.summary || {};
+  const ranking = data?.ranking || [];
+  const totalItems = Number(summary.totalItemsVendidos || 0);
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Productos vendidos" value={data.summary.totalProductosVendidos.toString()} icon={Package} color="blue" />
-        <StatCard label="Items vendidos" value={data.summary.totalItemsVendidos.toFixed(0)} icon={BarChart3} color="purple" />
-        <StatCard label="Ingresos totales" value={formatCurrency(data.summary.revenue, symbol)} icon={DollarSign} color="emerald" />
-        <StatCard label="Ganancia total" value={formatCurrency(data.summary.profit, symbol)} icon={TrendingUp} color="emerald" />
+        <StatCard label="Productos vendidos" value={(summary.totalProductosVendidos || 0).toString()} icon={Package} color="blue" />
+        <StatCard label="Items vendidos" value={totalItems.toFixed(0)} icon={BarChart3} color="purple" />
+        <StatCard label="Ingresos totales" value={formatCurrency(summary.revenue || 0, symbol)} icon={DollarSign} color="emerald" />
+        <StatCard label="Ganancia total" value={formatCurrency(summary.profit || 0, symbol)} icon={TrendingUp} color="emerald" />
       </div>
 
       <Card>
@@ -559,7 +605,7 @@ function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.ranking.map((p: any, i: number) => (
+              {ranking.map((p: any, i: number) => (
                 <TableRow key={p.productId}>
                   <TableCell className="font-bold text-muted-foreground">{i + 1}</TableCell>
                   <TableCell className="font-medium">{p.productName}</TableCell>
@@ -579,7 +625,7 @@ function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
                   </TableCell>
                 </TableRow>
               ))}
-              {data.ranking.length === 0 && (
+              {ranking.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No hay ventas en el período
@@ -596,12 +642,15 @@ function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
 
 // ===== REPORTE DE CLIENTES =====
 function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
+  const summary = data?.summary || {};
+  const topClientes = data?.topClientes || [];
+  const clientesConSaldo = data?.clientesConSaldo || [];
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard label="Clientes activos" value={data.summary.clientesActivos.toString()} icon={Users} color="blue" />
-        <StatCard label="Con saldo deudor" value={data.summary.clientesConSaldoDeudor.toString()} icon={TrendingDown} color="red" />
-        <StatCard label="Total saldo" value={formatCurrency(data.summary.totalSaldoDeudor, symbol)} icon={Wallet} color="amber" />
+        <StatCard label="Clientes activos" value={(summary.clientesActivos || 0).toString()} icon={Users} color="blue" />
+        <StatCard label="Con saldo deudor" value={(summary.clientesConSaldoDeudor || 0).toString()} icon={TrendingDown} color="red" />
+        <StatCard label="Total saldo" value={formatCurrency(summary.totalSaldoDeudor || 0, symbol)} icon={Wallet} color="amber" />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -619,7 +668,7 @@ function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.topClientes.map((c: any) => (
+                {topClientes.map((c: any) => (
                   <TableRow key={c.customerId}>
                     <TableCell className="font-medium">{c.customerName}</TableCell>
                     <TableCell className="text-right">{formatCurrency(c.totalCompras, symbol)}</TableCell>
@@ -628,7 +677,7 @@ function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
                     </TableCell>
                   </TableRow>
                 ))}
-                {data.topClientes.length === 0 && (
+                {topClientes.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground">
                       Sin datos en el período
@@ -653,7 +702,7 @@ function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.clientesConSaldo.map((c: any) => (
+                {clientesConSaldo.map((c: any) => (
                   <TableRow key={c.customerId}>
                     <TableCell className="font-medium">{c.customerName || c.customerId}</TableCell>
                     <TableCell className="text-right text-red-600 font-bold">
@@ -661,7 +710,7 @@ function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
                     </TableCell>
                   </TableRow>
                 ))}
-                {data.clientesConSaldo.length === 0 && (
+                {clientesConSaldo.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="text-center text-muted-foreground">
                       No hay clientes con saldo deudor
@@ -679,13 +728,16 @@ function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
 
 // ===== REPORTE FLUJO DE CAJA =====
 function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
+  const summary = data?.summary || {};
+  const series = data?.series || [];
+  const flujoNeto = summary.flujoNetoEfectivo || 0;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Ingresos efectivo" value={formatCurrency(data.summary.totalIngresosEfectivo, symbol)} icon={TrendingUp} color="emerald" />
-        <StatCard label="Egresos efectivo" value={formatCurrency(data.summary.totalEgresosEfectivo, symbol)} icon={TrendingDown} color="red" />
-        <StatCard label="Flujo neto efectivo" value={formatCurrency(data.summary.flujoNetoEfectivo, symbol)} icon={Wallet} color={data.summary.flujoNetoEfectivo >= 0 ? "emerald" : "red"} />
-        <StatCard label="Ventas fiadas" value={formatCurrency(data.summary.ventasFiadas, symbol)} icon={Receipt} color="amber" />
+        <StatCard label="Ingresos efectivo" value={formatCurrency(summary.totalIngresosEfectivo || 0, symbol)} icon={TrendingUp} color="emerald" />
+        <StatCard label="Egresos efectivo" value={formatCurrency(summary.totalEgresosEfectivo || 0, symbol)} icon={TrendingDown} color="red" />
+        <StatCard label="Flujo neto efectivo" value={formatCurrency(flujoNeto, symbol)} icon={Wallet} color={flujoNeto >= 0 ? "emerald" : "red"} />
+        <StatCard label="Ventas fiadas" value={formatCurrency(summary.ventasFiadas || 0, symbol)} icon={Receipt} color="amber" />
       </div>
 
       <Card>
@@ -693,17 +745,21 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
           <CardTitle className="text-sm">Flujo de caja diario</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={data.series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
-              <Legend />
-              <Bar dataKey="totalIngresos" fill="#10b981" name="Ingresos" />
-              <Bar dataKey="totalEgresos" fill="#ef4444" name="Egresos" />
-            </BarChart>
-          </ResponsiveContainer>
+          {series.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Sin movimientos en el período</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+                <Legend />
+                <Bar dataKey="totalIngresos" fill="#10b981" name="Ingresos" />
+                <Bar dataKey="totalEgresos" fill="#ef4444" name="Egresos" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
@@ -725,7 +781,7 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.series.slice().reverse().map((s: any) => (
+              {series.slice().reverse().map((s: any) => (
                 <TableRow key={s.date}>
                   <TableCell>{formatDate(s.date)}</TableCell>
                   <TableCell className="text-right text-emerald-600">{formatCurrency(s.ventasEfectivo, symbol)}</TableCell>
@@ -733,12 +789,12 @@ function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
                   <TableCell className="text-right text-emerald-600">{formatCurrency(s.ingresosManuales, symbol)}</TableCell>
                   <TableCell className="text-right text-red-600">{formatCurrency(s.gastosEfectivo, symbol)}</TableCell>
                   <TableCell className="text-right text-red-600">{formatCurrency(s.egresosManuales, symbol)}</TableCell>
-                  <TableCell className={`text-right font-bold ${s.flujoNeto >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                  <TableCell className={`text-right font-bold ${(s.flujoNeto || 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
                     {formatCurrency(s.flujoNeto, symbol)}
                   </TableCell>
                 </TableRow>
               ))}
-              {data.series.length === 0 && (
+              {series.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground">
                     Sin movimientos en el período

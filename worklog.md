@@ -305,3 +305,33 @@ Work Log:
 Stage Summary:
 - Bug de race condition en Reportes corregido. Patrón similar al anterior (LineChart con yAxisId huérfano): ambos eran crashes por data inconsistente entre tabs.
 - Cambio mínimo de 2 líneas, sin afectar otras funcionalidades.
+
+---
+Task ID: fix-reports-all-tabs
+Agent: main
+Task: Verificar y corregir errores en todas las pestañas del módulo Reportes
+
+Work Log:
+- Verificación con agent-browser: detectado que el tab "Fiscal" causaba "Application error: a client-side exception" al hacer click. Los demás tabs (Ventas, Ganancias, Productos, Clientes, Flujo Caja) funcionaban pero podían tener el mismo problema potencial.
+- Causa raíz: race condition. Al hacer click en un tab, `setTab(t.key)` dispara un re-render ANTES de que el `useEffect` ejecute `loadReport()` (que es donde estaba el `setData(null)`). En ese render intermedio, `tab="taxes"` pero `data` seguía siendo del tab `sales` (sin `summary.totalFacturado`, `summary.cantidadFacturas`, `byTipo`, etc.). `TaxesReport` hacé `data.summary.cantidadFacturas.toString()` → `undefined.toString()` → 💥.
+- Fix 1 (root cause): agregado `setData(null)` directamente en el `onClick` del handler de cambio de tab, además del que ya estaba en `loadReport()`. Ahora no hay render con data obsoleta de otro tab.
+- Fix 2 (defensive en TODOS los sub-reportes): aplicado patrón `const summary = data?.summary || {};` + `const xxx = data?.xxx || [];` al inicio de cada sub-reporte, y reemplazadas todas las referencias directas `data.xxx` por las variables con fallback. Esto hace que cada sub-reporte sea robusto a payloads parciales o incompletos.
+  - SalesReport: extraídas `summary`, `series`, `byPaymentMethod`, `byUser`. Agregados guards `length === 0` con mensajes "Sin datos" para PieChart y BarChart.
+  - ProfitsReport: extraídas `summary`, `series`, `expensesByCategory`. Guard `length === 0` para BarChart y PieChart.
+  - TaxesReport: extraídas `summary` y `byTipo`. Reemplazadas todas las referencias.
+  - ProductsReport: extraídas `summary` y `ranking`. Cast `Number(summary.totalItemsVendidos || 0)` para evitar `.toFixed()` en undefined.
+  - CustomersReport: extraídas `summary`, `topClientes`, `clientesConSaldo`.
+  - CashFlowReport: extraídas `summary` y `series`. Guard `length === 0` para BarChart.
+- Verificación E2E con agent-browser:
+  - Login exitoso con tienda demo.
+  - Navegación a Reportes OK.
+  - Click secuencial en los 6 tabs (Ventas → Ganancias → Fiscal → Productos → Clientes → Flujo Caja): TODOS OK, sin "Application error".
+  - Screenshots guardados en download/ (reports-fiscal-fixed.png, reports-products.png, reports-cashflow.png, reports-customers.png).
+  - Dev server: sin errores en log.
+- `npx tsc --noEmit` limpio en src/, `bun run lint` limpio.
+
+Stage Summary:
+- Bug de race condition en TODOS los tabs de Reportes corregido (no solo Fiscal que era el visible).
+- Cambio defensivo en los 6 sub-reportes para tolerar payloads parciales o data de otro tab sin romper.
+- Verificación E2E completa: los 6 tabs funcionan, sin application errors, con contenido visible.
+- Patrones aplicados: (a) reset síncrono de `data` al cambiar de tab; (b) optional chaining + defaults en cada sub-reporte; (c) guards `length === 0` con mensajes user-friendly para gráficos vacíos.

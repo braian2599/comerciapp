@@ -1,0 +1,779 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState } from "react";
+     4→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+     5→import { Button } from "@/components/ui/button";
+     6→import { Input } from "@/components/ui/input";
+     7→import { Label } from "@/components/ui/label";
+     8→import { Badge } from "@/components/ui/badge";
+     9→import {
+    10→  Table,
+    11→  TableBody,
+    12→  TableCell,
+    13→  TableHead,
+    14→  TableHeader,
+    15→  TableRow,
+    16→} from "@/components/ui/table";
+    17→import {
+    18→  Select,
+    19→  SelectContent,
+    20→  SelectItem,
+    21→  SelectTrigger,
+    22→  SelectValue,
+    23→} from "@/components/ui/select";
+    24→import {
+    25→  BarChart,
+    26→  Bar,
+    27→  LineChart,
+    28→  Line,
+    29→  PieChart,
+    30→  Pie,
+    31→  Cell,
+    32→  XAxis,
+    33→  YAxis,
+    34→  CartesianGrid,
+    35→  Tooltip,
+    36→  Legend,
+    37→  ResponsiveContainer,
+    38→} from "recharts";
+    39→import { toast } from "sonner";
+    40→import {
+    41→  BarChart3,
+    42→  TrendingUp,
+    43→  TrendingDown,
+    44→  DollarSign,
+    45→  Receipt,
+    46→  Users,
+    47→  Package,
+    48→  Wallet,
+    49→  Loader2,
+    50→  Download,
+    51→  Calendar,
+    52→} from "lucide-react";
+    53→import { useAppStore } from "@/store/app-store";
+    54→import { formatCurrency, formatDate } from "@/lib/constants";
+    55→
+    56→type TabKey = "sales" | "profits" | "taxes" | "products" | "customers" | "cashflow";
+    57→
+    58→const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
+    59→
+    60→export function ReportsView() {
+    61→  const { store } = useAppStore();
+    62→  const symbol = store?.currencySymbol || "$";
+    63→  const [tab, setTab] = useState<TabKey>("sales");
+    64→  const [from, setFrom] = useState("");
+    65→  const [to, setTo] = useState("");
+    66→  const [loading, setLoading] = useState(false);
+    67→  const [data, setData] = useState<any>(null);
+    68→
+    69→  // Defaults: últimos 30 días
+    70→  useEffect(() => {
+    71→    if (!from && !to) {
+    72→      const end = new Date();
+    73→      const start = new Date();
+    74→      start.setDate(start.getDate() - 30);
+    75→      setFrom(start.toISOString().slice(0, 10));
+    76→      setTo(end.toISOString().slice(0, 10));
+    77→    }
+    78→  }, []);
+    79→
+    80→  async function loadReport() {
+    81→    if (!from || !to) return;
+    82→    setLoading(true);
+    83→    setData(null); // reset para que no se renderice data de otro tab
+    84→    try {
+    85→      const params = new URLSearchParams({ from, to });
+    86→      const res = await fetch(`/api/reports/${tab}?${params}`);
+    87→      const json = await res.json();
+    88→      if (!res.ok) {
+    89→        toast.error(json.error || "Error cargando reporte");
+    90→        return;
+    91→      }
+    92→      setData(json);
+    93→    } catch (err) {
+    94→      toast.error("Error de conexión");
+    95→    } finally {
+    96→      setLoading(false);
+    97→    }
+    98→  }
+    99→
+   100→  useEffect(() => {
+   101→    if (from && to) loadReport();
+   102→  }, [tab, from, to]);
+   103→
+   104→  function setPeriod(days: number) {
+   105→    const end = new Date();
+   106→    const start = new Date();
+   107→    start.setDate(start.getDate() - days);
+   108→    setFrom(start.toISOString().slice(0, 10));
+   109→    setTo(end.toISOString().slice(0, 10));
+   110→  }
+   111→
+   112→  function exportarCSV() {
+   113→    if (!data) return;
+   114→    let rows: string[][] = [];
+   115→    let filename: string = tab;
+   116→
+   117→    if (tab === "sales" && data.series) {
+   118→      rows = [["Período", "Cantidad", "Total", "Descuentos", "Recargos"]];
+   119→      data.series.forEach((s: any) => {
+   120→        rows.push([s.period, s.count, s.total, s.discount, s.surcharge]);
+   121→      });
+   122→      filename = "ventas";
+   123→    } else if (tab === "profits" && data.series) {
+   124→      rows = [["Fecha", "Ventas", "Costo", "Gastos", "Ganancia Bruta", "Ganancia Neta"]];
+   125→      data.series.forEach((s: any) => {
+   126→        rows.push([s.date, s.ventas, s.costo, s.gastos, s.gananciaBruta, s.gananciaNeta]);
+   127→      });
+   128→      filename = "ganancias";
+   129→    } else if (tab === "products" && data.ranking) {
+   130→      rows = [["Producto", "Cantidad", "Ingresos", "Costo", "Ganancia", "Margen %", "Stock Actual"]];
+   131→      data.ranking.forEach((p: any) => {
+   132→        rows.push([p.productName, p.quantitySold, p.revenue, p.cost, p.profit, p.margin, p.currentStock]);
+   133→      });
+   134→      filename = "productos";
+   135→    } else if (tab === "customers" && data.topClientes) {
+   136→      rows = [["Cliente", "Compras", "Cantidad ventas", "Fiado", "Pagado"]];
+   137→      data.topClientes.forEach((c: any) => {
+   138→        rows.push([c.customerName, c.totalCompras, c.cantidadVentas, c.totalFiado, c.totalPagado]);
+   139→      });
+   140→      filename = "clientes";
+   141→    } else if (tab === "taxes" && data.byTipo) {
+   142→      rows = [["Tipo", "Cantidad", "Neto", "IVA", "Total"]];
+   143→      data.byTipo.forEach((t: any) => {
+   144→        rows.push([t.tipo, t.count, t.netoGravado, t.iva, t.total]);
+   145→      });
+   146→      filename = "fiscal";
+   147→    } else if (tab === "cashflow" && data.series) {
+   148→      rows = [["Fecha", "Ventas Efectivo", "Cobros Cuenta", "Ing. Manuales", "Gastos", "Egresos Manuales", "Flujo Neto"]];
+   149→      data.series.forEach((s: any) => {
+   150→        rows.push([s.date, s.ventasEfectivo, s.cobrosCuenta, s.ingresosManuales, s.gastosEfectivo, s.egresosManuales, s.flujoNeto]);
+   151→      });
+   152→      filename = "flujo-caja";
+   153→    }
+   154→
+   155→    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+   156→    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+   157→    const url = URL.createObjectURL(blob);
+   158→    const a = document.createElement("a");
+   159→    a.href = url;
+   160→    a.download = `reporte-${filename}-${new Date().toISOString().slice(0, 10)}.csv`;
+   161→    a.click();
+   162→    URL.revokeObjectURL(url);
+   163→  }
+   164→
+   165→  const TABS: { key: TabKey; label: string; icon: any }[] = [
+   166→    { key: "sales", label: "Ventas", icon: Receipt },
+   167→    { key: "profits", label: "Ganancias", icon: TrendingUp },
+   168→    { key: "taxes", label: "Fiscal", icon: BarChart3 },
+   169→    { key: "products", label: "Productos", icon: Package },
+   170→    { key: "customers", label: "Clientes", icon: Users },
+   171→    { key: "cashflow", label: "Flujo Caja", icon: Wallet },
+   172→  ];
+   173→
+   174→  return (
+   175→    <div className="p-4 space-y-4">
+   176→      <div className="flex flex-wrap items-center justify-between gap-3">
+   177→        <div>
+   178→          <h1 className="text-2xl font-bold flex items-center gap-2">
+   179→            <BarChart3 className="w-6 h-6 text-emerald-600" />
+   180→            Reportes
+   181→          </h1>
+   182→          <p className="text-sm text-muted-foreground">
+   183→            Análisis de ventas, ganancias, fiscal, productos y clientes
+   184→          </p>
+   185→        </div>
+   186→        <Button variant="outline" onClick={exportarCSV} disabled={!data}>
+   187→          <Download className="w-4 h-4 mr-2" />
+   188→          Exportar CSV
+   189→        </Button>
+   190→      </div>
+   191→
+   192→      {/* Tabs */}
+   193→      <div className="flex flex-wrap gap-2">
+   194→        {TABS.map((t) => {
+   195→          const Icon = t.icon;
+   196→          return (
+   197→            <Button
+   198→              key={t.key}
+   199→              variant={tab === t.key ? "default" : "outline"}
+   200→              size="sm"
+   201→              onClick={() => setTab(t.key)}
+   202→              className={tab === t.key ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+   203→            >
+   204→              <Icon className="w-4 h-4 mr-1" />
+   205→              {t.label}
+   206→            </Button>
+   207→          );
+   208→        })}
+   209→      </div>
+   210→
+   211→      {/* Filtros */}
+   212→      <Card>
+   213→        <CardContent className="pt-4 flex flex-wrap items-end gap-3">
+   214→          <div>
+   215→            <Label className="text-xs">Desde</Label>
+   216→            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" />
+   217→          </div>
+   218→          <div>
+   219→            <Label className="text-xs">Hasta</Label>
+   220→            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" />
+   221→          </div>
+   222→          <div className="flex gap-1">
+   223→            <Button size="sm" variant="outline" onClick={() => setPeriod(7)}>7 días</Button>
+   224→            <Button size="sm" variant="outline" onClick={() => setPeriod(30)}>30 días</Button>
+   225→            <Button size="sm" variant="outline" onClick={() => setPeriod(90)}>90 días</Button>
+   226→            <Button size="sm" variant="outline" onClick={() => setPeriod(365)}>1 año</Button>
+   227→          </div>
+   228→        </CardContent>
+   229→      </Card>
+   230→
+   231→      {/* Contenido */}
+   232→      {loading ? (
+   233→        <div className="flex items-center justify-center py-12">
+   234→          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+   235→        </div>
+   236→      ) : !data ? (
+   237→        <Card>
+   238→          <CardContent className="text-center py-12 text-muted-foreground">
+   239→            <Calendar className="w-12 h-12 mx-auto mb-2 opacity-30" />
+   240→            <p>Selecciona un rango de fechas</p>
+   241→          </CardContent>
+   242→        </Card>
+   243→      ) : (
+   244→        <>
+   245→          {/* VENTAS */}
+   246→          {tab === "sales" && <SalesReport data={data} symbol={symbol} />}
+   247→          {/* GANANCIAS */}
+   248→          {tab === "profits" && <ProfitsReport data={data} symbol={symbol} />}
+   249→          {/* FISCAL */}
+   250→          {tab === "taxes" && <TaxesReport data={data} symbol={symbol} />}
+   251→          {/* PRODUCTOS */}
+   252→          {tab === "products" && <ProductsReport data={data} symbol={symbol} />}
+   253→          {/* CLIENTES */}
+   254→          {tab === "customers" && <CustomersReport data={data} symbol={symbol} />}
+   255→          {/* FLUJO CAJA */}
+   256→          {tab === "cashflow" && <CashFlowReport data={data} symbol={symbol} />}
+   257→        </>
+   258→      )}
+   259→    </div>
+   260→  );
+   261→}
+   262→
+   263→// ===== REPORTE DE VENTAS =====
+   264→function SalesReport({ data, symbol }: { data: any; symbol: string }) {
+   265→  return (
+   266→    <div className="space-y-4">
+   267→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   268→        <StatCard label="Total ventas" value={formatCurrency(data.summary.totalAmount, symbol)} icon={DollarSign} color="emerald" />
+   269→        <StatCard label="Cantidad" value={data.summary.totalSales.toString()} icon={Receipt} color="blue" />
+   270→        <StatCard label="Ticket promedio" value={formatCurrency(data.summary.averageTicket, symbol)} icon={TrendingUp} color="purple" />
+   271→        <StatCard label="Recargos" value={formatCurrency(data.summary.totalSurcharge, symbol)} icon={TrendingUp} color="amber" />
+   272→      </div>
+   273→
+   274→      <Card>
+   275→        <CardHeader>
+   276→          <CardTitle className="text-sm">Evolución de ventas</CardTitle>
+   277→        </CardHeader>
+   278→        <CardContent>
+   279→          <ResponsiveContainer width="100%" height={300}>
+   280→            <LineChart data={data.series}>
+   281→              <CartesianGrid strokeDasharray="3 3" />
+   282→              <XAxis dataKey="period" fontSize={11} />
+   283→              <YAxis fontSize={11} />
+   284→              <Tooltip
+   285→                formatter={(v: any, name: string) => [formatCurrency(v, symbol), name === "total" ? "Total" : name]}
+   286→              />
+   287→              <Legend />
+   288→              <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} name="Total" />
+   289→              <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={1} name="Cantidad" hide />
+   290→            </LineChart>
+   291→          </ResponsiveContainer>
+   292→        </CardContent>
+   293→      </Card>
+   294→
+   295→      <div className="grid md:grid-cols-2 gap-4">
+   296→        <Card>
+   297→          <CardHeader>
+   298→            <CardTitle className="text-sm">Por método de pago</CardTitle>
+   299→          </CardHeader>
+   300→          <CardContent>
+   301→            <ResponsiveContainer width="100%" height={250}>
+   302→              <PieChart>
+   303→                <Pie
+   304→                  data={data.byPaymentMethod}
+   305→                  dataKey="total"
+   306→                  nameKey="method"
+   307→                  cx="50%"
+   308→                  cy="50%"
+   309→                  outerRadius={80}
+   310→                  label={(e: any) => `${e.method}`}
+   311→                >
+   312→                  {data.byPaymentMethod.map((_: any, i: number) => (
+   313→                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+   314→                  ))}
+   315→                </Pie>
+   316→                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+   317→              </PieChart>
+   318→            </ResponsiveContainer>
+   319→            <Table>
+   320→              <TableHeader>
+   321→                <TableRow>
+   322→                  <TableHead>Método</TableHead>
+   323→                  <TableHead className="text-right">Cantidad</TableHead>
+   324→                  <TableHead className="text-right">Total</TableHead>
+   325→                </TableRow>
+   326→              </TableHeader>
+   327→              <TableBody>
+   328→                {data.byPaymentMethod.map((m: any) => (
+   329→                  <TableRow key={m.method}>
+   330→                    <TableCell className="font-medium">{m.method}</TableCell>
+   331→                    <TableCell className="text-right">{m.count}</TableCell>
+   332→                    <TableCell className="text-right">{formatCurrency(m.total, symbol)}</TableCell>
+   333→                  </TableRow>
+   334→                ))}
+   335→              </TableBody>
+   336→            </Table>
+   337→          </CardContent>
+   338→        </Card>
+   339→
+   340→        <Card>
+   341→          <CardHeader>
+   342→            <CardTitle className="text-sm">Por vendedor</CardTitle>
+   343→          </CardHeader>
+   344→          <CardContent>
+   345→            <ResponsiveContainer width="100%" height={250}>
+   346→              <BarChart data={data.byUser}>
+   347→                <CartesianGrid strokeDasharray="3 3" />
+   348→                <XAxis dataKey="userName" fontSize={11} />
+   349→                <YAxis fontSize={11} />
+   350→                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+   351→                <Bar dataKey="total" fill="#10b981" />
+   352→              </BarChart>
+   353→            </ResponsiveContainer>
+   354→            <Table>
+   355→              <TableHeader>
+   356→                <TableRow>
+   357→                  <TableHead>Vendedor</TableHead>
+   358→                  <TableHead className="text-right">Cantidad</TableHead>
+   359→                  <TableHead className="text-right">Total</TableHead>
+   360→                </TableRow>
+   361→              </TableHeader>
+   362→              <TableBody>
+   363→                {data.byUser.map((u: any) => (
+   364→                  <TableRow key={u.userId}>
+   365→                    <TableCell className="font-medium">{u.userName}</TableCell>
+   366→                    <TableCell className="text-right">{u.count}</TableCell>
+   367→                    <TableCell className="text-right">{formatCurrency(u.total, symbol)}</TableCell>
+   368→                  </TableRow>
+   369→                ))}
+   370→              </TableBody>
+   371→            </Table>
+   372→          </CardContent>
+   373→        </Card>
+   374→      </div>
+   375→    </div>
+   376→  );
+   377→}
+   378→
+   379→// ===== REPORTE DE GANANCIAS =====
+   380→function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
+   381→  return (
+   382→    <div className="space-y-4">
+   383→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   384→        <StatCard label="Ganancia bruta" value={formatCurrency(data.summary.gananciaBruta, symbol)} icon={TrendingUp} color="emerald" />
+   385→        <StatCard label="Ganancia neta" value={formatCurrency(data.summary.gananciaNeta, symbol)} icon={DollarSign} color={data.summary.gananciaNeta >= 0 ? "emerald" : "red"} />
+   386→        <StatCard label="Margen neto" value={`${data.summary.margenNeto}%`} icon={BarChart3} color="blue" />
+   387→        <StatCard label="Total gastos" value={formatCurrency(data.summary.totalGastos, symbol)} icon={TrendingDown} color="red" />
+   388→      </div>
+   389→
+   390→      <Card>
+   391→        <CardHeader>
+   392→          <CardTitle className="text-sm">Ventas vs Costo vs Gastos</CardTitle>
+   393→        </CardHeader>
+   394→        <CardContent>
+   395→          <ResponsiveContainer width="100%" height={320}>
+   396→            <BarChart data={data.series}>
+   397→              <CartesianGrid strokeDasharray="3 3" />
+   398→              <XAxis dataKey="date" fontSize={11} />
+   399→              <YAxis fontSize={11} />
+   400→              <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+   401→              <Legend />
+   402→              <Bar dataKey="ventas" fill="#10b981" name="Ventas" />
+   403→              <Bar dataKey="costo" fill="#ef4444" name="Costo" />
+   404→              <Bar dataKey="gastos" fill="#f59e0b" name="Gastos" />
+   405→            </BarChart>
+   406→          </ResponsiveContainer>
+   407→        </CardContent>
+   408→      </Card>
+   409→
+   410→      <Card>
+   411→        <CardHeader>
+   412→          <CardTitle className="text-sm">Gastos por categoría</CardTitle>
+   413→        </CardHeader>
+   414→        <CardContent>
+   415→          {(!data.expensesByCategory || data.expensesByCategory.length === 0) ? (
+   416→            <p className="text-sm text-muted-foreground text-center py-4">Sin gastos en el período</p>
+   417→          ) : (
+   418→            <ResponsiveContainer width="100%" height={250}>
+   419→              <PieChart>
+   420→                <Pie
+   421→                  data={data.expensesByCategory}
+   422→                  dataKey="amount"
+   423→                  nameKey="category"
+   424→                  cx="50%"
+   425→                  cy="50%"
+   426→                  outerRadius={80}
+   427→                  label={(e: any) => `${e.category}`}
+   428→                >
+   429→                  {data.expensesByCategory.map((_: any, i: number) => (
+   430→                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+   431→                  ))}
+   432→                </Pie>
+   433→                <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+   434→              </PieChart>
+   435→            </ResponsiveContainer>
+   436→          )}
+   437→        </CardContent>
+   438→      </Card>
+   439→
+   440→      <Card>
+   441→        <CardContent className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+   442→          <div>
+   443→            <p className="text-xs text-muted-foreground">Total ventas</p>
+   444→            <p className="font-bold">{formatCurrency(data.summary.totalVentas, symbol)}</p>
+   445→          </div>
+   446→          <div>
+   447→            <p className="text-xs text-muted-foreground">Total costo</p>
+   448→            <p className="font-bold text-red-600">{formatCurrency(data.summary.totalCosto, symbol)}</p>
+   449→          </div>
+   450→          <div>
+   451→            <p className="text-xs text-muted-foreground">Total descuentos</p>
+   452→            <p className="font-bold text-amber-600">{formatCurrency(data.summary.totalDescuentos, symbol)}</p>
+   453→          </div>
+   454→          <div>
+   455→            <p className="text-xs text-muted-foreground">Margen bruto</p>
+   456→            <p className="font-bold text-emerald-600">{data.summary.margenBruto}%</p>
+   457→          </div>
+   458→        </CardContent>
+   459→      </Card>
+   460→    </div>
+   461→  );
+   462→}
+   463→
+   464→// ===== REPORTE FISCAL =====
+   465→function TaxesReport({ data, symbol }: { data: any; symbol: string }) {
+   466→  return (
+   467→    <div className="space-y-4">
+   468→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   469→        <StatCard label="Total facturado" value={formatCurrency(data.summary.totalFacturado, symbol)} icon={Receipt} color="emerald" />
+   470→        <StatCard label="IVA recaudado" value={formatCurrency(data.summary.totalIva, symbol)} icon={DollarSign} color="blue" />
+   471→        <StatCard label="Facturas emitidas" value={data.summary.cantidadFacturas.toString()} icon={BarChart3} color="purple" />
+   472→        <StatCard label="Ventas sin facturar" value={data.summary.ventasSinFactura.toString()} icon={TrendingDown} color="amber" />
+   473→      </div>
+   474→
+   475→      <Card>
+   476→        <CardHeader>
+   477→          <CardTitle className="text-sm">Facturación por tipo de comprobante</CardTitle>
+   478→        </CardHeader>
+   479→        <CardContent>
+   480→          <Table>
+   481→            <TableHeader>
+   482→              <TableRow>
+   483→                <TableHead>Tipo</TableHead>
+   484→                <TableHead className="text-right">Cantidad</TableHead>
+   485→                <TableHead className="text-right">Neto gravado</TableHead>
+   486→                <TableHead className="text-right">IVA</TableHead>
+   487→                <TableHead className="text-right">No gravado</TableHead>
+   488→                <TableHead className="text-right">Exento</TableHead>
+   489→                <TableHead className="text-right">Total</TableHead>
+   490→              </TableRow>
+   491→            </TableHeader>
+   492→            <TableBody>
+   493→              {data.byTipo.map((t: any) => (
+   494→                <TableRow key={t.tipo}>
+   495→                  <TableCell>
+   496→                    <Badge variant="outline">Factura {t.tipo}</Badge>
+   497→                  </TableCell>
+   498→                  <TableCell className="text-right">{t.count}</TableCell>
+   499→                  <TableCell className="text-right">{formatCurrency(t.netoGravado, symbol)}</TableCell>
+   500→                  <TableCell className="text-right">{formatCurrency(t.iva, symbol)}</TableCell>
+   501→                  <TableCell className="text-right">{formatCurrency(t.noGravado, symbol)}</TableCell>
+   502→                  <TableCell className="text-right">{formatCurrency(t.exento, symbol)}</TableCell>
+   503→                  <TableCell className="text-right font-bold">{formatCurrency(t.total, symbol)}</TableCell>
+   504→                </TableRow>
+   505→              ))}
+   506→              {data.byTipo.length === 0 && (
+   507→                <TableRow>
+   508→                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+   509→                    No hay facturas emitidas en el período
+   510→                  </TableCell>
+   511→                </TableRow>
+   512→              )}
+   513→            </TableBody>
+   514→          </Table>
+   515→        </CardContent>
+   516→      </Card>
+   517→
+   518→      {data.summary.ventasSinFactura > 0 && (
+   519→        <Card className="border-amber-200 bg-amber-50">
+   520→          <CardContent className="pt-4">
+   521→            <p className="text-sm text-amber-900">
+   522→              <strong>Atención:</strong> Hay {data.summary.ventasSinFactura} ventas por {formatCurrency(data.summary.montoSinFacturar, symbol)} sin facturar en el período.
+   523→              Para cumplimiento fiscal, deberías emitir las facturas correspondientes.
+   524→            </p>
+   525→          </CardContent>
+   526→        </Card>
+   527→      )}
+   528→    </div>
+   529→  );
+   530→}
+   531→
+   532→// ===== REPORTE DE PRODUCTOS =====
+   533→function ProductsReport({ data, symbol }: { data: any; symbol: string }) {
+   534→  return (
+   535→    <div className="space-y-4">
+   536→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   537→        <StatCard label="Productos vendidos" value={data.summary.totalProductosVendidos.toString()} icon={Package} color="blue" />
+   538→        <StatCard label="Items vendidos" value={data.summary.totalItemsVendidos.toFixed(0)} icon={BarChart3} color="purple" />
+   539→        <StatCard label="Ingresos totales" value={formatCurrency(data.summary.revenue, symbol)} icon={DollarSign} color="emerald" />
+   540→        <StatCard label="Ganancia total" value={formatCurrency(data.summary.profit, symbol)} icon={TrendingUp} color="emerald" />
+   541→      </div>
+   542→
+   543→      <Card>
+   544→        <CardHeader>
+   545→          <CardTitle className="text-sm">Top 10 productos por ingresos</CardTitle>
+   546→        </CardHeader>
+   547→        <CardContent>
+   548→          <Table>
+   549→            <TableHeader>
+   550→              <TableRow>
+   551→                <TableHead>#</TableHead>
+   552→                <TableHead>Producto</TableHead>
+   553→                <TableHead className="text-right">Cantidad</TableHead>
+   554→                <TableHead className="text-right">Ingresos</TableHead>
+   555→                <TableHead className="text-right">Costo</TableHead>
+   556→                <TableHead className="text-right">Ganancia</TableHead>
+   557→                <TableHead className="text-right">Margen</TableHead>
+   558→                <TableHead className="text-right">Stock actual</TableHead>
+   559→              </TableRow>
+   560→            </TableHeader>
+   561→            <TableBody>
+   562→              {data.ranking.map((p: any, i: number) => (
+   563→                <TableRow key={p.productId}>
+   564→                  <TableCell className="font-bold text-muted-foreground">{i + 1}</TableCell>
+   565→                  <TableCell className="font-medium">{p.productName}</TableCell>
+   566→                  <TableCell className="text-right">{p.quantitySold}</TableCell>
+   567→                  <TableCell className="text-right">{formatCurrency(p.revenue, symbol)}</TableCell>
+   568→                  <TableCell className="text-right text-red-600">{formatCurrency(p.cost, symbol)}</TableCell>
+   569→                  <TableCell className="text-right text-emerald-600 font-medium">{formatCurrency(p.profit, symbol)}</TableCell>
+   570→                  <TableCell className="text-right">
+   571→                    <Badge variant="outline" className={p.margin > 30 ? "text-emerald-700" : p.margin > 10 ? "text-amber-700" : "text-red-700"}>
+   572→                      {p.margin}%
+   573→                    </Badge>
+   574→                  </TableCell>
+   575→                  <TableCell className="text-right">
+   576→                    <span className={p.currentStock <= 5 ? "text-red-600 font-medium" : ""}>
+   577→                      {p.currentStock}
+   578→                    </span>
+   579→                  </TableCell>
+   580→                </TableRow>
+   581→              ))}
+   582→              {data.ranking.length === 0 && (
+   583→                <TableRow>
+   584→                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+   585→                    No hay ventas en el período
+   586→                  </TableCell>
+   587→                </TableRow>
+   588→              )}
+   589→            </TableBody>
+   590→          </Table>
+   591→        </CardContent>
+   592→      </Card>
+   593→    </div>
+   594→  );
+   595→}
+   596→
+   597→// ===== REPORTE DE CLIENTES =====
+   598→function CustomersReport({ data, symbol }: { data: any; symbol: string }) {
+   599→  return (
+   600→    <div className="space-y-4">
+   601→      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+   602→        <StatCard label="Clientes activos" value={data.summary.clientesActivos.toString()} icon={Users} color="blue" />
+   603→        <StatCard label="Con saldo deudor" value={data.summary.clientesConSaldoDeudor.toString()} icon={TrendingDown} color="red" />
+   604→        <StatCard label="Total saldo" value={formatCurrency(data.summary.totalSaldoDeudor, symbol)} icon={Wallet} color="amber" />
+   605→      </div>
+   606→
+   607→      <div className="grid md:grid-cols-2 gap-4">
+   608→        <Card>
+   609→          <CardHeader>
+   610→            <CardTitle className="text-sm">Top clientes por compras</CardTitle>
+   611→          </CardHeader>
+   612→          <CardContent>
+   613→            <Table>
+   614→              <TableHeader>
+   615→                <TableRow>
+   616→                  <TableHead>Cliente</TableHead>
+   617→                  <TableHead className="text-right">Compras</TableHead>
+   618→                  <TableHead className="text-right">Fiado</TableHead>
+   619→                </TableRow>
+   620→              </TableHeader>
+   621→              <TableBody>
+   622→                {data.topClientes.map((c: any) => (
+   623→                  <TableRow key={c.customerId}>
+   624→                    <TableCell className="font-medium">{c.customerName}</TableCell>
+   625→                    <TableCell className="text-right">{formatCurrency(c.totalCompras, symbol)}</TableCell>
+   626→                    <TableCell className="text-right text-red-600">
+   627→                      {c.totalFiado > 0 ? formatCurrency(c.totalFiado, symbol) : "-"}
+   628→                    </TableCell>
+   629→                  </TableRow>
+   630→                ))}
+   631→                {data.topClientes.length === 0 && (
+   632→                  <TableRow>
+   633→                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+   634→                      Sin datos en el período
+   635→                    </TableCell>
+   636→                  </TableRow>
+   637→                )}
+   638→              </TableBody>
+   639→            </Table>
+   640→          </CardContent>
+   641→        </Card>
+   642→
+   643→        <Card>
+   644→          <CardHeader>
+   645→            <CardTitle className="text-sm">Saldos de cuenta corriente</CardTitle>
+   646→          </CardHeader>
+   647→          <CardContent>
+   648→            <Table>
+   649→              <TableHeader>
+   650→                <TableRow>
+   651→                  <TableHead>Cliente</TableHead>
+   652→                  <TableHead className="text-right">Saldo deudor</TableHead>
+   653→                </TableRow>
+   654→              </TableHeader>
+   655→              <TableBody>
+   656→                {data.clientesConSaldo.map((c: any) => (
+   657→                  <TableRow key={c.customerId}>
+   658→                    <TableCell className="font-medium">{c.customerName || c.customerId}</TableCell>
+   659→                    <TableCell className="text-right text-red-600 font-bold">
+   660→                      {formatCurrency(c.saldo, symbol)}
+   661→                    </TableCell>
+   662→                  </TableRow>
+   663→                ))}
+   664→                {data.clientesConSaldo.length === 0 && (
+   665→                  <TableRow>
+   666→                    <TableCell colSpan={2} className="text-center text-muted-foreground">
+   667→                      No hay clientes con saldo deudor
+   668→                    </TableCell>
+   669→                  </TableRow>
+   670→                )}
+   671→              </TableBody>
+   672→            </Table>
+   673→          </CardContent>
+   674→        </Card>
+   675→      </div>
+   676→    </div>
+   677→  );
+   678→}
+   679→
+   680→// ===== REPORTE FLUJO DE CAJA =====
+   681→function CashFlowReport({ data, symbol }: { data: any; symbol: string }) {
+   682→  return (
+   683→    <div className="space-y-4">
+   684→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   685→        <StatCard label="Ingresos efectivo" value={formatCurrency(data.summary.totalIngresosEfectivo, symbol)} icon={TrendingUp} color="emerald" />
+   686→        <StatCard label="Egresos efectivo" value={formatCurrency(data.summary.totalEgresosEfectivo, symbol)} icon={TrendingDown} color="red" />
+   687→        <StatCard label="Flujo neto efectivo" value={formatCurrency(data.summary.flujoNetoEfectivo, symbol)} icon={Wallet} color={data.summary.flujoNetoEfectivo >= 0 ? "emerald" : "red"} />
+   688→        <StatCard label="Ventas fiadas" value={formatCurrency(data.summary.ventasFiadas, symbol)} icon={Receipt} color="amber" />
+   689→      </div>
+   690→
+   691→      <Card>
+   692→        <CardHeader>
+   693→          <CardTitle className="text-sm">Flujo de caja diario</CardTitle>
+   694→        </CardHeader>
+   695→        <CardContent>
+   696→          <ResponsiveContainer width="100%" height={320}>
+   697→            <BarChart data={data.series}>
+   698→              <CartesianGrid strokeDasharray="3 3" />
+   699→              <XAxis dataKey="date" fontSize={11} />
+   700→              <YAxis fontSize={11} />
+   701→              <Tooltip formatter={(v: any) => formatCurrency(v, symbol)} />
+   702→              <Legend />
+   703→              <Bar dataKey="totalIngresos" fill="#10b981" name="Ingresos" />
+   704→              <Bar dataKey="totalEgresos" fill="#ef4444" name="Egresos" />
+   705→            </BarChart>
+   706→          </ResponsiveContainer>
+   707→        </CardContent>
+   708→      </Card>
+   709→
+   710→      <Card>
+   711→        <CardHeader>
+   712→          <CardTitle className="text-sm">Detalle por día</CardTitle>
+   713→        </CardHeader>
+   714→        <CardContent>
+   715→          <Table>
+   716→            <TableHeader>
+   717→              <TableRow>
+   718→                <TableHead>Fecha</TableHead>
+   719→                <TableHead className="text-right">Ventas Efectivo</TableHead>
+   720→                <TableHead className="text-right">Cobros cuenta</TableHead>
+   721→                <TableHead className="text-right">Ing. manuales</TableHead>
+   722→                <TableHead className="text-right">Gastos</TableHead>
+   723→                <TableHead className="text-right">Egr. manuales</TableHead>
+   724→                <TableHead className="text-right">Flujo neto</TableHead>
+   725→              </TableRow>
+   726→            </TableHeader>
+   727→            <TableBody>
+   728→              {data.series.slice().reverse().map((s: any) => (
+   729→                <TableRow key={s.date}>
+   730→                  <TableCell>{formatDate(s.date)}</TableCell>
+   731→                  <TableCell className="text-right text-emerald-600">{formatCurrency(s.ventasEfectivo, symbol)}</TableCell>
+   732→                  <TableCell className="text-right text-emerald-600">{formatCurrency(s.cobrosCuenta, symbol)}</TableCell>
+   733→                  <TableCell className="text-right text-emerald-600">{formatCurrency(s.ingresosManuales, symbol)}</TableCell>
+   734→                  <TableCell className="text-right text-red-600">{formatCurrency(s.gastosEfectivo, symbol)}</TableCell>
+   735→                  <TableCell className="text-right text-red-600">{formatCurrency(s.egresosManuales, symbol)}</TableCell>
+   736→                  <TableCell className={`text-right font-bold ${s.flujoNeto >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+   737→                    {formatCurrency(s.flujoNeto, symbol)}
+   738→                  </TableCell>
+   739→                </TableRow>
+   740→              ))}
+   741→              {data.series.length === 0 && (
+   742→                <TableRow>
+   743→                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+   744→                    Sin movimientos en el período
+   745→                  </TableCell>
+   746→                </TableRow>
+   747→              )}
+   748→            </TableBody>
+   749→          </Table>
+   750→        </CardContent>
+   751→      </Card>
+   752→    </div>
+   753→  );
+   754→}
+   755→
+   756→// ===== COMPONENTE: STAT CARD =====
+   757→function StatCard({ label, value, icon: Icon, color }: { label: string; value: string; icon: any; color: string }) {
+   758→  const colorMap: Record<string, string> = {
+   759→    emerald: "text-emerald-600 bg-emerald-50",
+   760→    blue: "text-blue-600 bg-blue-50",
+   761→    red: "text-red-600 bg-red-50",
+   762→    amber: "text-amber-600 bg-amber-50",
+   763→    purple: "text-purple-600 bg-purple-50",
+   764→  };
+   765→  return (
+   766→    <Card>
+   767→      <CardContent className="pt-4">
+   768→        <div className="flex items-center gap-2 mb-1">
+   769→          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${colorMap[color] || colorMap.emerald}`}>
+   770→            <Icon className="w-4 h-4" />
+   771→          </div>
+   772→          <p className="text-xs text-muted-foreground">{label}</p>
+   773→        </div>
+   774→        <p className="text-xl font-bold">{value}</p>
+   775→      </CardContent>
+   776→    </Card>
+   777→  );
+   778→}
+   779→
