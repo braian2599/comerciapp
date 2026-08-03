@@ -289,3 +289,19 @@ Stage Summary:
   3. SettingsView y EcommerceView ahora usan tabs en lugar de scroll infinito de Cards. Settings tiene 7 tabs, Ecommerce tiene 4.
 - Cambios mínimos, sin tocar lógica de negocio ni APIs. Solo reorganización visual.
 - Pattern de tabs consistente: `flex w-full flex-wrap h-auto justify-start gap-1 bg-muted/40 p-1` para el TabsList.
+
+---
+Task ID: fix-reports-profits-race-condition
+Agent: main
+Task: Corregir error en ProfitsReport (reports-view.tsx) — `data.expensesByCategory.length` rompe al cambiar de tab
+
+Work Log:
+- Detectado error en runtime: `data.expensesByCategory` era `undefined` al renderizar el tab "Ganancias" del módulo Reportes.
+- Causa raíz: race condition. Al cambiar de tab (ej: sales → profits), `loadReport()` hace `setLoading(true)` y dispara el fetch, pero `data` sigue siendo el del tab anterior hasta que el nuevo fetch termine. Como React puede renderizar una vez más entre el cambio de tab y el efecto del loader, `ProfitsReport` recibía `data` del tab `sales` (sin `expensesByCategory`).
+- Fix 1 (root cause): agregado `setData(null)` al inicio de `loadReport()` para resetear la data al cambiar de tab. Ahora el guard `!data` del componente padre muestra "Selecciona un rango de fechas" durante la carga.
+- Fix 2 (defensive): en `ProfitsReport`, cambiado `data.expensesByCategory.length === 0` por `!data.expensesByCategory || data.expensesByCategory.length === 0` para tolerar payloads parciales.
+- `npx tsc --noEmit` limpio en src/, `bun run lint` limpio, dev server OK.
+
+Stage Summary:
+- Bug de race condition en Reportes corregido. Patrón similar al anterior (LineChart con yAxisId huérfano): ambos eran crashes por data inconsistente entre tabs.
+- Cambio mínimo de 2 líneas, sin afectar otras funcionalidades.

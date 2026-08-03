@@ -80,6 +80,7 @@ export function ReportsView() {
   async function loadReport() {
     if (!from || !to) return;
     setLoading(true);
+    setData(null); // reset para que no se renderice data de otro tab
     try {
       const params = new URLSearchParams({ from, to });
       const res = await fetch(`/api/reports/${tab}?${params}`);
@@ -411,7 +412,7 @@ function ProfitsReport({ data, symbol }: { data: any; symbol: string }) {
           <CardTitle className="text-sm">Gastos por categoría</CardTitle>
         </CardHeader>
         <CardContent>
-          {data.expensesByCategory.length === 0 ? (
+          {(!data.expensesByCategory || data.expensesByCategory.length === 0) ? (
             <p className="text-sm text-muted-foreground text-center py-4">Sin gastos en el período</p>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
