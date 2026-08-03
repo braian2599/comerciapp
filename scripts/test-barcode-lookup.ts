@@ -12,7 +12,7 @@ const TEST_CODES = [
   "7792710000090",
   // Coca-Cola 330ml (Europe)
   "5449000000996",
-  // Nutella
+  // Nutella (tiene alérgenos: milk, nuts, soybeans)
   "3017620422003",
   // Nescau 2.0 400g
   "7891000053508",
@@ -34,6 +34,9 @@ async function main() {
       console.log(`Categoría:  ${result.category || "—"}`);
       console.log(`Cantidad:   ${result.quantity || "—"}`);
       console.log(`Imagen:     ${result.imageUrl ? "sí" : "no"}`);
+      console.log(`Ingredient: ${result.ingredients ? result.ingredients.substring(0, 80) + (result.ingredients.length > 80 ? "..." : "") : "—"}`);
+      console.log(`Etiquetas:  ${result.labels && result.labels.length ? result.labels.join(", ") : "—"}`);
+      console.log(`Alérgenos:  ${result.allergens && result.allergens.length ? result.allergens.join(", ") : "—"}`);
     } else {
       console.log(`No encontrado (fuente: ${result.source})`);
     }

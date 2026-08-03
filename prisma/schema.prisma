@@ -112,6 +112,12 @@ model Product {
   minStock    Float    @default(5)
   unit        String   @default("UNIDAD") // UNIDAD, KG, LITRO, METRO, PACK
   active      Boolean  @default(true)
+  // Datos adicionales autocompletados desde Open Food Facts / UPC Item DB
+  brand       String?  // Marca (ej: LIEBIG, Coca-Cola)
+  labels      String?  // Etiquetas separadas por coma (ej: "Sin TACC,Sin aditivos,Vegano")
+  ingredients String?  // Lista de ingredientes completa
+  allergens   String?  // Alérgenos separados por coma (ej: "leche,gluten,soja")
+  imageUrl    String?  // URL o path local de la imagen del producto
   // Fase 4: e-commerce sync
   ecommerceProductId String? // ID remoto en la plataforma (Tienda Nube, WooCommerce, etc.)
   ecommerceSyncedAt  DateTime?

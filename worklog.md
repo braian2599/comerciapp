@@ -616,3 +616,45 @@ Stage Summary:
 - Heurística robusta: solo prependea categorías cuando hay `generic_name` en español (campo más confiable), evita agregar ruido en otros idiomas.
 - Cantidad normalizada a formato compacto (500g, 1L, 330ml) consistente con lo que el usuario vería en un etiqueta real.
 - Descripción enriquecida con `generic_name` completo + marca, dando contexto adicional al usuario.
+
+---
+Task ID: barcode-lookup-v3
+Agent: main
+Task: Agregar 4 campos nuevos (marca, etiquetas, ingredientes, alérgenos) al formulario de productos y mostrar chips en POS
+
+Work Log:
+- Análisis previo: exploré la API de Open Food Facts y mapeé todos los campos disponibles por nivel de utilidad para un POS. Le presenté al usuario las opciones y eligió: Marca + Etiquetas + Ingredientes + Alérgenos, en sección colapsable, con chips visibles también en el POS.
+- Schema Prisma actualizado: agregados 5 campos opcionales a Product: `brand`, `labels` (string separado por comas), `ingredients` (texto largo), `allergens` (string separado por comas), `imageUrl` (URL externa o path local). Migración `prisma db push` exitosa.
+- API /api/products (POST y PUT) actualizada para persistir los 5 nuevos campos.
+- Librería `src/lib/barcode-lookup.ts` extendida:
+  - Interfaz `ProductLookupResult` ahora incluye `ingredients`, `labels` (string[]), `allergens` (string[]).
+  - Pedido a OFF ampliado con campos: `ingredients_text`, `ingredients_text_es`, `labels`, `labels_tags`, `allergens`, `allergens_tags`, `allergens_hierarchy`.
+  - Función `parseLabels()` con 30+ traducciones EN→ES (en:no-gluten → "Sin TACC", en:vegan → "Vegano", etc.), deduplicación case-insensitive, filtro de etiquetas técnicas (Triman, FSC, Green Dot, Made in EU, etc.), capitalización consistente.
+  - Función `parseAllergens()` con 20+ traducciones (en:milk → "Leche", en:soybeans → "Soja", etc.), deduplicación inteligente entre formato raw y tags.
+  - Resultados verificados con script de prueba: Nutella ahora muestra etiquetas=["Sin TACC"] y alérgenos=["Leche","Frutos secos","Soja"] sin duplicados.
+- Vista `src/components/views/products-view.tsx` actualizada:
+  - emptyForm extendido con los 5 nuevos campos.
+  - Estados nuevos: `showExtraFields`, `labelChips`, `allergenChips`, `labelInput`, `allergenInput`.
+  - Sección colapsable "Datos adicionales del producto" con header toggle (ChevronDown/ChevronRight) y badge "Autocompletado" cuando hay datos cargados por lookup.
+  - Campos en la sección colapsable:
+    * Marca (Input)
+    * Imagen URL (Input + preview 40x40px)
+    * Etiquetas (chips azules editables con botón X para eliminar + Input para agregar con Enter)
+    * Alérgenos (chips rojos con icono AlertTriangle + Input para agregar con Enter)
+    * Ingredientes (Textarea de 3 filas)
+  - handleBarcodeLookup actualizado: ahora también autocompleta brand, ingredients, imageUrl, labels y allergens. Si hay labels/allergens, abre automáticamente la sección colapsable.
+  - handleSave actualizado: envía labels y allergens como string separado por comas (formato persistencia).
+  - openEdit carga los chips desde los strings guardados.
+- Vista `src/components/views/pos-view.tsx` actualizada:
+  - Interfaz Product extendida con los 5 nuevos campos.
+  - En la grilla de productos del POS: agregada imagen del producto (si existe) en la parte superior de cada tarjeta, y chips de etiquetas (azul) y alérgenos (rojo con ⚠) bajo el stock. Limitado a 2 chips por tipo para no saturar visualmente.
+  - En el carrito: agregada marca bajo el precio, y chips compactos de labels/allergens (hasta 3 por tipo) bajo la info del item.
+- Verificación: `npx tsc --noEmit` sin errores en src/. `bun run build` exitoso.
+
+Stage Summary:
+- 5 campos nuevos persistidos en Product: brand, labels, ingredients, allergens, imageUrl.
+- Sección colapsable mantiene el formulario limpio para productos simples y solo se expande cuando hay datos (manual o vía lookup).
+- Chips editables permiten agregar/eliminar etiquetas y alérgenos con teclado (Enter para agregar, X para borrar).
+- En POS: imagen + chips visibles tanto en grilla de productos como en carrito.
+- Alérgenos destacados con color rojo y ⚠ para alerta visual inmediata del cajero.
+- Autocompletado desde OFF: ahora completa 7 campos en total (name, description, brand, ingredients, imageUrl, labels[], allergens[]).

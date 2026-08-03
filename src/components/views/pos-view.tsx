@@ -58,6 +58,11 @@ interface Product {
   active: boolean;
   category?: { id: string; name: string };
   categoryId?: string;
+  brand?: string;
+  labels?: string;
+  allergens?: string;
+  ingredients?: string;
+  imageUrl?: string;
 }
 
 interface CartItem {
@@ -522,13 +527,31 @@ export function PosView() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto pr-1">
-              {filtered.map((p) => (
+              {filtered.map((p) => {
+                const labels = p.labels
+                  ? p.labels.split(",").map((s) => s.trim()).filter(Boolean)
+                  : [];
+                const allergens = p.allergens
+                  ? p.allergens.split(",").map((s) => s.trim()).filter(Boolean)
+                  : [];
+                return (
                 <button
                   key={p.id}
                   onClick={() => addToCart(p)}
                   disabled={p.stock <= 0}
                   className="group text-left p-3 rounded-lg border border-indigo-100 bg-white hover:border-indigo-400 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
+                  {p.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.imageUrl}
+                      alt=""
+                      className="w-full h-16 object-cover rounded-md mb-2 bg-muted"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  )}
                   <p className="text-sm font-medium line-clamp-2 min-h-[2.5rem]">
                     {p.name}
                   </p>
@@ -548,8 +571,29 @@ export function PosView() {
                       ? "Sin stock"
                       : `${p.stock} ${p.unit === "KG" ? "kg" : "u"}`}
                   </p>
+                  {(labels.length > 0 || allergens.length > 0) && (
+                    <div className="flex flex-wrap gap-0.5 mt-1.5">
+                      {labels.slice(0, 2).map((l) => (
+                        <span
+                          key={`l-${l}`}
+                          className="text-[9px] py-0 px-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200"
+                        >
+                          {l}
+                        </span>
+                      ))}
+                      {allergens.slice(0, 2).map((a) => (
+                        <span
+                          key={`a-${a}`}
+                          className="text-[9px] py-0 px-1 rounded bg-red-50 text-red-700 border border-red-200"
+                        >
+                          ⚠ {a}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </button>
-              ))}
+                );
+              })}
               {filtered.length === 0 && (
                 <div className="col-span-full p-8 text-center text-muted-foreground">
                   <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -584,7 +628,14 @@ export function PosView() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
-                  {cart.map((i) => (
+                  {cart.map((i) => {
+                    const labels = i.product.labels
+                      ? i.product.labels.split(",").map((s) => s.trim()).filter(Boolean)
+                      : [];
+                    const allergens = i.product.allergens
+                      ? i.product.allergens.split(",").map((s) => s.trim()).filter(Boolean)
+                      : [];
+                    return (
                     <div
                       key={i.product.id}
                       className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
@@ -594,7 +645,30 @@ export function PosView() {
                         <p className="text-xs text-muted-foreground">
                           {formatCurrency(i.product.salePrice, symbol)} ·{" "}
                           {i.product.unit === "KG" ? "kg" : "u"}
+                          {i.product.brand && ` · ${i.product.brand}`}
                         </p>
+                        {(labels.length > 0 || allergens.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {labels.slice(0, 3).map((l) => (
+                              <Badge
+                                key={`l-${l}`}
+                                variant="outline"
+                                className="text-[10px] py-0 px-1.5 h-4 bg-indigo-50 text-indigo-700 border-indigo-200"
+                              >
+                                {l}
+                              </Badge>
+                            ))}
+                            {allergens.slice(0, 3).map((a) => (
+                              <Badge
+                                key={`a-${a}`}
+                                variant="outline"
+                                className="text-[10px] py-0 px-1.5 h-4 bg-red-50 text-red-700 border-red-200"
+                              >
+                                ⚠ {a}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         <Button
@@ -634,7 +708,8 @@ export function PosView() {
                         {formatCurrency(i.product.salePrice * i.qty, symbol)}
                       </p>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

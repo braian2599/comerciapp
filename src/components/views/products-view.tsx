@@ -55,6 +55,10 @@ import {
   ScanLine,
   CheckCircle2,
   ImageOff,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, UNITS } from "@/lib/constants";
@@ -73,6 +77,11 @@ interface Product {
   minStock: number;
   unit: string;
   active: boolean;
+  brand?: string;
+  labels?: string;
+  ingredients?: string;
+  allergens?: string;
+  imageUrl?: string;
 }
 
 interface Category {
@@ -94,6 +103,11 @@ const emptyForm = {
   minStock: 5,
   unit: "UNIDAD",
   active: true,
+  brand: "",
+  labels: "",
+  ingredients: "",
+  allergens: "",
+  imageUrl: "",
 };
 
 export function ProductsView() {
@@ -115,9 +129,22 @@ export function ProductsView() {
   // Lookup por código de barras
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResult, setLookupResult] = useState<
-    | { status: "idle" | "loading" | "found" | "notfound" | "error"; source?: string; imageUrl?: string }
+    | {
+        status: "idle" | "loading" | "found" | "notfound" | "error";
+        source?: string;
+        imageUrl?: string;
+        labels?: string[];
+        allergens?: string[];
+      }
     | null
   >(null);
+  // Sección colapsable de datos adicionales
+  const [showExtraFields, setShowExtraFields] = useState(false);
+  // Etiquetas y alérgenos editados como chips
+  const [labelChips, setLabelChips] = useState<string[]>([]);
+  const [allergenChips, setAllergenChips] = useState<string[]>([]);
+  const [labelInput, setLabelInput] = useState("");
+  const [allergenInput, setAllergenInput] = useState("");
 
   async function handleBarcodeLookup() {
     const code = (form.barcode || "").trim();
@@ -137,11 +164,29 @@ export function ProductsView() {
           name: prev.name || data.name || "",
           description: prev.description || data.description || data.brand || "",
           barcode: prev.barcode || code,
+          brand: prev.brand || data.brand || "",
+          ingredients: prev.ingredients || data.ingredients || "",
+          imageUrl: prev.imageUrl || data.imageUrl || "",
         }));
+        // Merge de etiquetas y alérgenos (sin duplicar)
+        if (Array.isArray(data.labels) && data.labels.length > 0) {
+          setLabelChips((prev) =>
+            Array.from(new Set([...prev, ...data.labels])).slice(0, 15)
+          );
+          setShowExtraFields(true);
+        }
+        if (Array.isArray(data.allergens) && data.allergens.length > 0) {
+          setAllergenChips((prev) =>
+            Array.from(new Set([...prev, ...data.allergens])).slice(0, 15)
+          );
+          setShowExtraFields(true);
+        }
         setLookupResult({
           status: "found",
           source: data.source,
           imageUrl: data.imageUrl,
+          labels: data.labels,
+          allergens: data.allergens,
         });
         const sourceLabel =
           data.source === "openfoodfacts" ? "Open Food Facts" : "UPC Item DB";
@@ -204,6 +249,9 @@ export function ProductsView() {
   function openNew() {
     setForm({ ...emptyForm });
     resetLookup();
+    setLabelChips([]);
+    setAllergenChips([]);
+    setShowExtraFields(false);
     setFormOpen(true);
   }
 
@@ -217,6 +265,11 @@ export function ProductsView() {
       adjustReason: "",
     });
     resetLookup();
+    setLabelChips(p.labels ? p.labels.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    setAllergenChips(p.allergens ? p.allergens.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    setShowExtraFields(
+      !!(p.brand || p.ingredients || p.labels || p.allergens || p.imageUrl)
+    );
     setFormOpen(true);
   }
 
@@ -228,10 +281,15 @@ export function ProductsView() {
     setSaving(true);
     try {
       const method = form.id ? "PUT" : "POST";
+      const payload = {
+        ...form,
+        labels: labelChips.join(","),
+        allergens: allergenChips.join(","),
+      };
       const res = await fetch("/api/products", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -764,6 +822,190 @@ export function ProductsView() {
                 onCheckedChange={(v) => setForm({ ...form, active: v })}
               />
               <Label htmlFor="active">Producto activo (visible en POS)</Label>
+            </div>
+
+            {/* Sección colapsable: datos adicionales */}
+            <div className="sm:col-span-2 border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowExtraFields((v) => !v)}
+                className="w-full flex items-center justify-between p-3 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  {showExtraFields ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  Datos adicionales del producto
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {(labelChips.length > 0 ||
+                    allergenChips.length > 0 ||
+                    form.brand ||
+                    form.ingredients) && (
+                    <Badge variant="secondary" className="ml-1">
+                      Autocompletado
+                    </Badge>
+                  )}
+                </span>
+              </button>
+              {showExtraFields && (
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 p-4">
+                  {/* Marca */}
+                  <div className="space-y-2">
+                    <Label htmlFor="brand">Marca</Label>
+                    <Input
+                      id="brand"
+                      placeholder="Ej: LIEBIG, Coca-Cola, Amanda"
+                      value={form.brand || ""}
+                      onChange={(e) =>
+                        setForm({ ...form, brand: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  {/* Imagen (URL) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="imageUrl">Imagen del producto (URL)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="imageUrl"
+                        placeholder="https://..."
+                        value={form.imageUrl || ""}
+                        onChange={(e) =>
+                          setForm({ ...form, imageUrl: e.target.value })
+                        }
+                      />
+                      {form.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={form.imageUrl}
+                          alt=""
+                          className="w-10 h-10 rounded border object-cover bg-white"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Etiquetas (chips editables) */}
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Etiquetas</Label>
+                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-md border bg-background">
+                      {labelChips.length === 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          Sin etiquetas. Ej: Sin TACC, Vegano, Orgánico...
+                        </span>
+                      )}
+                      {labelChips.map((label) => (
+                        <Badge
+                          key={label}
+                          variant="secondary"
+                          className="gap-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                        >
+                          {label}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLabelChips((prev) =>
+                                prev.filter((l) => l !== label)
+                              )
+                            }
+                            className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <Input
+                      placeholder="Escribí una etiqueta y presioná Enter..."
+                      value={labelInput}
+                      onChange={(e) => setLabelInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && labelInput.trim()) {
+                          e.preventDefault();
+                          const v = labelInput.trim();
+                          if (!labelChips.includes(v)) {
+                            setLabelChips((prev) => [...prev, v].slice(0, 15));
+                          }
+                          setLabelInput("");
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Alérgenos (chips editables con advertencia) */}
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                      Alérgenos
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-md border bg-background">
+                      {allergenChips.length === 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          Sin alérgenos declarados. Ej: Leche, Gluten, Soja...
+                        </span>
+                      )}
+                      {allergenChips.map((a) => (
+                        <Badge
+                          key={a}
+                          className="gap-1 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                        >
+                          {a}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAllergenChips((prev) =>
+                                prev.filter((x) => x !== a)
+                              )
+                            }
+                            className="ml-1 hover:bg-red-200 rounded-full p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <Input
+                      placeholder="Escribí un alérgeno y presioná Enter..."
+                      value={allergenInput}
+                      onChange={(e) => setAllergenInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && allergenInput.trim()) {
+                          e.preventDefault();
+                          const v = allergenInput.trim();
+                          if (!allergenChips.includes(v)) {
+                            setAllergenChips((prev) =>
+                              [...prev, v].slice(0, 15)
+                            );
+                          }
+                          setAllergenInput("");
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Ingredientes */}
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="ingredients">Ingredientes</Label>
+                    <Textarea
+                      id="ingredients"
+                      placeholder="Lista de ingredientes completa..."
+                      value={form.ingredients || ""}
+                      onChange={(e) =>
+                        setForm({ ...form, ingredients: e.target.value })
+                      }
+                      rows={3}
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

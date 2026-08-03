@@ -27,6 +27,12 @@ export interface ProductLookupResult {
   suggestedPrice?: number;
   /** Cantidad típica por pack (ej: "500ml", "6u"). */
   quantity?: string;
+  /** Lista de ingredientes completa (texto). */
+  ingredients?: string;
+  /** Etiquetas separadas por coma (ej: "Sin TACC,Sin aditivos,Vegano"). */
+  labels?: string[];
+  /** Alérgenos separados por coma (ej: ["leche","gluten","soja"]). */
+  allergens?: string[];
   raw?: any;
 }
 
@@ -249,6 +255,217 @@ function buildDescription(p: any): string {
   return parts.filter(Boolean).join(" · ");
 }
 
+/**
+ * Normaliza las etiquetas (labels) a un array de strings limpio.
+ * OFF las devuelve como string separado por comas:
+ *   "Sin aditivos, Sin TACC, Orgánico"
+ * Algunas vienen con prefijo de idioma o como tags (en:no-gluten).
+ * Traducimos los tags comunes al español para legibilidad.
+ */
+const LABEL_TRANSLATIONS: Record<string, string> = {
+  // Tags con prefijo (formato oficial OFF)
+  "en:no-gluten": "Sin TACC",
+  "en:gluten-free": "Sin TACC",
+  "en:no-additives": "Sin aditivos",
+  "en:no-preservatives": "Sin conservantes",
+  "en:no-artificial-flavours": "Sin saborizantes artificiales",
+  "en:no-artificial-colors": "Sin colorantes artificiales",
+  "en:organic": "Orgánico",
+  "en:vegan": "Vegano",
+  "en:vegetarian": "Vegetariano",
+  "en:no-milk": "Sin leche",
+  "en:dairy-free": "Sin lácteos",
+  "en:no-sugar": "Sin azúcar",
+  "en:sugar-free": "Sin azúcar",
+  "en:low-sugar": "Bajo en azúcar",
+  "en:fat-free": "Sin grasa",
+  "en:low-fat": "Bajo en grasa",
+  "en:halal": "Halal",
+  "en:kosher": "Kosher",
+  "en:fair-trade": "Comercio justo",
+  "en:no-gmos": "Sin transgénicos",
+  "en:non-gmo": "Sin transgénicos",
+  "en:palm-oil-free": "Sin aceite de palma",
+  "en:natural": "Natural",
+  "es:sin-tacc": "Sin TACC",
+  // Sin prefijo (formato libre)
+  "no gluten": "Sin TACC",
+  "gluten-free": "Sin TACC",
+  "gluten free": "Sin TACC",
+  "sin tacc": "Sin TACC",
+  "sin-tacc": "Sin TACC",
+  "no additives": "Sin aditivos",
+  "no preservatives": "Sin conservantes",
+  "sin aditivos": "Sin aditivos",
+  "sin conservantes": "Sin conservantes",
+  organic: "Orgánico",
+  "organico": "Orgánico",
+  vegan: "Vegano",
+  "vegano": "Vegano",
+  vegetarian: "Vegetariano",
+  "vegetariano": "Vegetariano",
+  "dairy-free": "Sin lácteos",
+  "sin lacteos": "Sin lácteos",
+  "sugar-free": "Sin azúcar",
+  "sugar free": "Sin azúcar",
+  "sin azucar": "Sin azúcar",
+  "palm-oil-free": "Sin aceite de palma",
+  "no gmos": "Sin transgénicos",
+  "non-gmo": "Sin transgénicos",
+};
+
+// Etiquetas que parecen técnicas/regulatorias y no aportan al cliente final
+const LABEL_BLOCKLIST = new Set([
+  "triman",
+  "made in the eu",
+  "made in the us",
+  "green dot",
+  "fsc",
+  "pefc",
+]);
+
+function parseLabels(labelsRaw: string, labelsTags?: string[]): string[] {
+  const out = new Set<string>();
+  // Para deduplicar por clave en minúsculas ("no additives" = "Sin aditivos")
+  const seenKeys = new Set<string>();
+
+  const add = (label: string) => {
+    // Normaliza capitalización: "Sin TACC" en vez de "Sin tacc"
+    const normalized =
+      label === label.toLowerCase()
+        ? label.charAt(0).toUpperCase() + label.slice(1)
+        : label;
+    const key = normalized.toLowerCase();
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    out.add(normalized);
+  };
+
+  // Procesa un token: si tiene traducción la usa, si no, lo limpia.
+  const processToken = (raw: string): string | null => {
+    const t = raw.trim().toLowerCase();
+    if (!t || t.length < 2 || t.length > 40) return null;
+    // Saltar códigos técnicos tipo "22 PAP", "PAP 22"
+    if (/^\d+\s/.test(t) || /^\d/.test(t)) return null;
+    // Quitar prefijo de idioma si lo tuviera
+    const cleaned = t.replace(/^[a-z]{2}:/i, "").trim();
+    if (!cleaned) return null;
+    if (LABEL_BLOCKLIST.has(t) || LABEL_BLOCKLIST.has(cleaned)) return null;
+    // Traducir si existe (sin o con prefijo)
+    if (LABEL_TRANSLATIONS[t]) return LABEL_TRANSLATIONS[t];
+    if (LABEL_TRANSLATIONS[cleaned]) return LABEL_TRANSLATIONS[cleaned];
+    // Capitalizar y devolver
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  };
+
+  if (labelsRaw) {
+    for (const l of String(labelsRaw).split(",")) {
+      const label = processToken(l);
+      if (label) add(label);
+    }
+  }
+  if (Array.isArray(labelsTags)) {
+    for (const tag of labelsTags) {
+      const t = String(tag).toLowerCase();
+      if (LABEL_TRANSLATIONS[t]) add(LABEL_TRANSLATIONS[t]);
+    }
+  }
+  return Array.from(out).slice(0, 10);
+}
+
+/**
+ * Normaliza los alérgenos a un array limpio.
+ * OFF los devuelve en `allergens` (string tipo "en:milk, en:gluten")
+ * o en `allergens_tags` (array de tags).
+ */
+const ALLERGEN_TRANSLATIONS: Record<string, string> = {
+  // Tags con prefijo de idioma (formato oficial de OFF)
+  "en:milk": "Leche",
+  "en:gluten": "Gluten",
+  "en:soy": "Soja",
+  "en:soybeans": "Soja",
+  "en:eggs": "Huevos",
+  "en:peanuts": "Maní",
+  "en:nuts": "Frutos secos",
+  "en:tree-nuts": "Frutos secos",
+  "en:fish": "Pescado",
+  "en:crustaceans": "Crustáceos",
+  "en:molluscs": "Moluscos",
+  "en:celery": "Apio",
+  "en:mustard": "Mostaza",
+  "en:sesame-seeds": "Sésamo",
+  "en:sulphur-dioxide-and-sulphites": "Sulfitos",
+  "en:lupin": "Altramuz",
+  "en:wheat": "Trigo",
+  // Sin prefijo (formato libre, también lo devuelve OFF a veces)
+  milk: "Leche",
+  gluten: "Gluten",
+  soy: "Soja",
+  soybeans: "Soja",
+  eggs: "Huevos",
+  peanuts: "Maní",
+  nuts: "Frutos secos",
+  "tree nuts": "Frutos secos",
+  "tree-nuts": "Frutos secos",
+  fish: "Pescado",
+  crustaceans: "Crustáceos",
+  molluscs: "Moluscos",
+  celery: "Apio",
+  mustard: "Mostaza",
+  sesame: "Sésamo",
+  "sesame seeds": "Sésamo",
+  "sesame-seeds": "Sésamo",
+  sulphites: "Sulfitos",
+  sulfites: "Sulfitos",
+  lupin: "Altramuz",
+  wheat: "Trigo",
+};
+
+function parseAllergens(allergensRaw: string, allergensTags?: string[]): string[] {
+  const out = new Set<string>();
+  // Marcador en minúsculas para deduplicar variantes (milk = Milk = en:milk)
+  const seenLower = new Set<string>();
+
+  const add = (translated: string, original?: string) => {
+    const key = translated.toLowerCase();
+    if (seenLower.has(key)) return;
+    seenLower.add(key);
+    out.add(translated);
+  };
+
+  if (allergensRaw) {
+    for (const a of String(allergensRaw).split(",")) {
+      const t = a.trim().toLowerCase();
+      if (!t) continue;
+      if (ALLERGEN_TRANSLATIONS[t]) {
+        add(ALLERGEN_TRANSLATIONS[t]);
+      } else {
+        // Limpia prefijo de idioma si lo tuviera
+        const cleaned = t.replace(/^[a-z]{2}:/i, "").trim();
+        if (cleaned && cleaned.length > 1 && cleaned.length < 30) {
+          add(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
+        }
+      }
+    }
+  }
+  // Solo agregamos los tags SI no hay raw, o si el raw no tenía traducción
+  // (para evitar duplicados tipo "milk" + "en:milk" → "Milk" + "Leche").
+  if (Array.isArray(allergensTags) && allergensTags.length > 0) {
+    const rawHadTranslations =
+      out.size > 0 &&
+      String(allergensRaw || "")
+        .split(",")
+        .some((a) => ALLERGEN_TRANSLATIONS[a.trim().toLowerCase()]);
+    if (!rawHadTranslations) {
+      for (const tag of allergensTags) {
+        const t = String(tag).toLowerCase();
+        if (ALLERGEN_TRANSLATIONS[t]) add(ALLERGEN_TRANSLATIONS[t]);
+      }
+    }
+  }
+  return Array.from(out);
+}
+
 // ---------------------------------------------------------------------------
 
 /** Open Food Facts — base de datos colaborativa de alimentos y productos. */
@@ -256,7 +473,7 @@ async function lookupOpenFoodFacts(barcode: string): Promise<ProductLookupResult
   try {
     const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(
       barcode
-    )}.json?fields=product_name,product_name_es,product_name_en,generic_name,brands,categories,image_url,image_front_url,image_front_small_url,quantity,product_quantity,quantity_value,quantity_unit,compared_to_category`;
+    )}.json?fields=product_name,product_name_es,product_name_en,generic_name,brands,categories,image_url,image_front_url,image_front_small_url,quantity,product_quantity,quantity_value,quantity_unit,compared_to_category,ingredients_text,ingredients_text_es,labels,labels_tags,allergens,allergens_tags,allergens_hierarchy`;
     const res = await fetchWithTimeout(url, {
       headers: {
         "User-Agent": "ComerciApp/1.0 (pos lookup)",
@@ -287,6 +504,9 @@ async function lookupOpenFoodFacts(barcode: string): Promise<ProductLookupResult
         : undefined,
       imageUrl: imageUrl || undefined,
       quantity: p.quantity ? normalizeQuantity(String(p.quantity)) : undefined,
+      ingredients: p.ingredients_text_es || p.ingredients_text || undefined,
+      labels: parseLabels(p.labels || "", p.labels_tags),
+      allergens: parseAllergens(p.allergens || "", p.allergens_tags),
       raw: p,
     };
   } catch {

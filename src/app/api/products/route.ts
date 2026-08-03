@@ -40,6 +40,11 @@ export async function POST(req: NextRequest) {
       minStock: Number(body.minStock) ?? 5,
       unit: body.unit || "UNIDAD",
       active: body.active ?? true,
+      brand: body.brand || null,
+      labels: body.labels || null,
+      ingredients: body.ingredients || null,
+      allergens: body.allergens || null,
+      imageUrl: body.imageUrl || null,
     },
   });
 
@@ -92,6 +97,11 @@ export async function PUT(req: NextRequest) {
       minStock: Number(body.minStock) ?? 5,
       unit: body.unit || "UNIDAD",
       active: body.active ?? true,
+      brand: body.brand || null,
+      labels: body.labels || null,
+      ingredients: body.ingredients || null,
+      allergens: body.allergens || null,
+      imageUrl: body.imageUrl || null,
     },
   });
 
