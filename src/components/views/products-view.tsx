@@ -574,7 +574,7 @@ export function ProductsView() {
 
       {/* Form dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{form.id ? "Editar producto" : "Nuevo producto"}</DialogTitle>
             <DialogDescription>
