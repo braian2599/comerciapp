@@ -34,11 +34,11 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  currentView: "dashboard",
+  currentView: "pos",
   setView: (v) => set({ currentView: v }),
 
   user: null,
   store: null,
   setUserData: (user, store) => set({ user, store }),
-  clear: () => set({ user: null, store: null, currentView: "dashboard" }),
+  clear: () => set({ user: null, store: null, currentView: "pos" }),
 }));

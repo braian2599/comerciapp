@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 interface PaymentMethod {
   id: string;
@@ -368,7 +369,7 @@ export function SettingsView() {
   }
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4 max-w-5xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
         <p className="text-sm text-muted-foreground">
@@ -376,6 +377,18 @@ export function SettingsView() {
         </p>
       </div>
 
+      <Tabs defaultValue="comercio" className="w-full">
+        <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 bg-muted/40 p-1">
+          <TabsTrigger value="comercio" className="text-xs">Comercio</TabsTrigger>
+          <TabsTrigger value="impuestos" className="text-xs">Moneda e Impuestos</TabsTrigger>
+          <TabsTrigger value="inventario" className="text-xs">Inventario</TabsTrigger>
+          <TabsTrigger value="pagos" className="text-xs">Métodos de Pago</TabsTrigger>
+          <TabsTrigger value="facturacion" className="text-xs">Facturación AFIP</TabsTrigger>
+          <TabsTrigger value="mercadopago" className="text-xs">Mercado Pago</TabsTrigger>
+          <TabsTrigger value="fidelizacion" className="text-xs">Fidelización</TabsTrigger>
+        </TabsList>
+
+      <TabsContent value="comercio" className="mt-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -434,7 +447,9 @@ export function SettingsView() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="impuestos" className="mt-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Moneda e impuestos</CardTitle>
@@ -501,7 +516,9 @@ export function SettingsView() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="inventario" className="mt-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Inventario</CardTitle>
@@ -530,7 +547,9 @@ export function SettingsView() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="pagos" className="mt-4">
       {/* Métodos de Pago */}
       <Card>
         <CardHeader>
@@ -765,7 +784,9 @@ export function SettingsView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </TabsContent>
 
+      <TabsContent value="facturacion" className="mt-4">
       {/* Configuración Fiscal (AFIP/ARCA) */}
       <Card>
         <CardHeader>
@@ -940,7 +961,9 @@ export function SettingsView() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="mercadopago" className="mt-4">
       {/* Mercado Pago */}
       <Card>
         <CardHeader>
@@ -1082,7 +1105,9 @@ export function SettingsView() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="fidelizacion" className="mt-4">
       {/* Fidelización / Programa de puntos */}
       <Card>
         <CardHeader>
@@ -1265,6 +1290,8 @@ export function SettingsView() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
+      </Tabs>
 
       <div className="flex justify-end">
         <Button

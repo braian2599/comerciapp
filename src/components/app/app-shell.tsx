@@ -62,6 +62,7 @@ import {
   RefreshCw,
   Download,
   CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 import { rubroIcon } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -73,30 +74,67 @@ interface NavItem {
   roles: string[]; // quienes pueden verlo
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", label: "Panel", icon: <LayoutDashboard className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
-  { key: "pos", label: "Punto de Venta", icon: <ShoppingCart className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
-  { key: "cash", label: "Caja", icon: <Wallet className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
-  { key: "products", label: "Productos", icon: <Package className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
-  { key: "sales", label: "Ventas", icon: <Receipt className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
-  { key: "invoices", label: "Facturación", icon: <FileText className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
-  { key: "refunds", label: "Devoluciones", icon: <RotateCcw className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
-  { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
-  { key: "purchases", label: "Compras", icon: <Truck className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
-  { key: "inventory", label: "Inventario", icon: <Warehouse className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
-  { key: "commissions", label: "Comisiones", icon: <Coins className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "promotions", label: "Promociones", icon: <Tag className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "branches", label: "Sucursales", icon: <Building2 className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "ecommerce", label: "E-commerce", icon: <Globe className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "print-templates", label: "Impresión", icon: <Printer className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "expenses", label: "Gastos", icon: <TrendingDown className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "reports", label: "Reportes", icon: <BarChart3 className="w-4 h-4" />, roles: ["ADMIN"] },
-  { key: "settings", label: "Configuración", icon: <Settings className="w-4 h-4" />, roles: ["ADMIN"] },
+interface NavCategory {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_CATEGORIES: NavCategory[] = [
+  {
+    id: "operaciones",
+    label: "Operaciones",
+    items: [
+      { key: "pos", label: "Punto de Venta", icon: <ShoppingCart className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+      { key: "cash", label: "Caja", icon: <Wallet className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+      { key: "dashboard", label: "Panel", icon: <LayoutDashboard className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+    ],
+  },
+  {
+    id: "ventas",
+    label: "Ventas",
+    items: [
+      { key: "sales", label: "Ventas", icon: <Receipt className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+      { key: "refunds", label: "Devoluciones", icon: <RotateCcw className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+      { key: "invoices", label: "Facturación", icon: <FileText className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+      { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+    ],
+  },
+  {
+    id: "catalogo",
+    label: "Catálogo y Stock",
+    items: [
+      { key: "products", label: "Productos", icon: <Package className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+      { key: "inventory", label: "Inventario", icon: <Warehouse className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+      { key: "purchases", label: "Compras", icon: <Truck className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
+      { key: "expenses", label: "Gastos", icon: <TrendingDown className="w-4 h-4" />, roles: ["ADMIN"] },
+    ],
+  },
+  {
+    id: "gestion",
+    label: "Gestión Comercial",
+    items: [
+      { key: "promotions", label: "Promociones", icon: <Tag className="w-4 h-4" />, roles: ["ADMIN"] },
+      { key: "commissions", label: "Comisiones", icon: <Coins className="w-4 h-4" />, roles: ["ADMIN"] },
+      { key: "branches", label: "Sucursales", icon: <Building2 className="w-4 h-4" />, roles: ["ADMIN"] },
+      { key: "print-templates", label: "Impresión", icon: <Printer className="w-4 h-4" />, roles: ["ADMIN"] },
+      { key: "ecommerce", label: "E-commerce", icon: <Globe className="w-4 h-4" />, roles: ["ADMIN"] },
+    ],
+  },
+  {
+    id: "sistema",
+    label: "Sistema",
+    items: [
+      { key: "reports", label: "Reportes", icon: <BarChart3 className="w-4 h-4" />, roles: ["ADMIN"] },
+      { key: "settings", label: "Configuración", icon: <Settings className="w-4 h-4" />, roles: ["ADMIN"] },
+    ],
+  },
 ];
 
 export function AppShell() {
   const { data: session, status } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const { currentView, setView, user, store, setUserData } = useAppStore();
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const pwa = usePWA();
@@ -141,8 +179,77 @@ export function AppShell() {
   const storeRubro = store?.rubro || (session?.user as any)?.storeRubro || "";
   const userName = (session?.user as any)?.name || user?.name || "Usuario";
 
-  const items = NAV_ITEMS.filter((i) => i.roles.includes(role));
-  const currentItem = items.find((i) => i.key === currentView) || items[0];
+  // Categorías filtradas por rol, descartando las vacías
+  const visibleCategories = NAV_CATEGORIES
+    .map((cat) => ({
+      ...cat,
+      items: cat.items.filter((i) => i.roles.includes(role)),
+    }))
+    .filter((cat) => cat.items.length > 0);
+
+  // Item actual para mostrar el label en el header
+  const currentItem = visibleCategories
+    .flatMap((c) => c.items)
+    .find((i) => i.key === currentView);
+
+  // Categoría que contiene la vista actual — arranca abierta
+  const activeCategory = visibleCategories.find((c) =>
+    c.items.some((i) => i.key === currentView)
+  )?.id;
+
+  function toggleCategory(id: string) {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function renderSidebarNav(onItemClick?: () => void) {
+    return visibleCategories.map((cat) => {
+      const isCollapsed = collapsedCategories.has(cat.id) && cat.id !== activeCategory;
+      return (
+        <div key={cat.id} className="mb-1">
+          <button
+            type="button"
+            onClick={() => toggleCategory(cat.id)}
+            className="w-full flex items-center justify-between px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 hover:text-muted-foreground"
+          >
+            <span>{cat.label}</span>
+            <ChevronDown
+              className={cn(
+                "w-3 h-3 transition-transform",
+                isCollapsed ? "-rotate-90" : ""
+              )}
+            />
+          </button>
+          {!isCollapsed && (
+            <div className="space-y-0.5">
+              {cat.items.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    setView(item.key);
+                    onItemClick?.();
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    currentView === item.key
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  )}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    });
+  }
 
   function renderView() {
     switch (currentView) {
@@ -183,7 +290,7 @@ export function AppShell() {
       case "settings":
         return <SettingsView />;
       default:
-        return <DashboardView />;
+        return <PosView />;
     }
   }
 
@@ -296,22 +403,8 @@ export function AppShell() {
       <div className="flex flex-1">
         {/* Sidebar - desktop */}
         <aside className="hidden lg:flex w-60 flex-col bg-white border-r border-emerald-100">
-          <nav className="flex-1 p-3 space-y-1">
-            {items.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setView(item.key)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  currentView === item.key
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                )}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
+          <nav className="flex-1 overflow-y-auto px-3 pb-4">
+            {renderSidebarNav()}
           </nav>
           <div className="p-3 border-t border-emerald-100 text-xs text-muted-foreground space-y-1">
             <p>ComerciApp v4.0</p>
@@ -341,25 +434,8 @@ export function AppShell() {
               <X className="w-5 h-5" />
             </Button>
           </div>
-          <nav className="flex-1 p-3 space-y-1">
-            {items.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => {
-                  setView(item.key);
-                  setSidebarOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  currentView === item.key
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                )}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
+          <nav className="flex-1 overflow-y-auto px-3 pb-4">
+            {renderSidebarNav(() => setSidebarOpen(false))}
           </nav>
         </aside>
 

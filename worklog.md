@@ -242,3 +242,50 @@ Stage Summary:
 - Bug visual del tab "Ventas" del módulo Reportes corregido.
 - Cambio mínimo de 1 línea, sin afectar otras funcionalidades.
 - Fase 4 sigue completa y operativa en v4.0.
+
+---
+Task ID: ux-improvements
+Agent: main
+Task: Mejoras UX: 1) POS como módulo principal por defecto, 2) Agrupar módulos en categorías en el sidebar, 3) Refactorizar módulos largos (Settings, Ecommerce) con pestañas
+
+Work Log:
+- Verificado estado: Fase 4 completa (v4.0). Limpieza de `LineChart` ya aplicada.
+- Mejora 1 — POS como vista por defecto:
+  - `src/store/app-store.ts`: cambiado `currentView` inicial de `"dashboard"` a `"pos"`. Mismo cambio en `clear()`.
+  - `src/components/app/app-shell.tsx`: actualizado `default:` del switch de `renderView()` para que retorne `<PosView />` en caso de view desconocida.
+- Mejora 2 — Sidebar con categorías agrupadas y colapsables:
+  - Reemplazado el array plano `NAV_ITEMS` por `NAV_CATEGORIES` con 5 grupos:
+    - Operaciones: POS, Caja, Panel
+    - Ventas: Ventas, Devoluciones, Facturación, Clientes
+    - Catálogo y Stock: Productos, Inventario, Compras, Gastos
+    - Gestión Comercial: Promociones, Comisiones, Sucursales, Impresión, E-commerce
+    - Sistema: Reportes, Configuración
+  - Agregado estado `collapsedCategories: Set<string>` y función `toggleCategory`.
+  - Creada función `renderSidebarNav(onItemClick?)` que renderiza cada categoría con header clickeable (label + chevron), items visibles cuando no está colapsada, y la categoría que contiene la vista actual siempre queda abierta.
+  - Reemplazados los sidebars desktop y mobile para usar `renderSidebarNav()`. El mobile pasa `onItemClick` para cerrar el drawer al navegar.
+  - Agregado `overflow-y-auto` al nav para scroll vertical cuando hay muchas categorías.
+  - Importado `ChevronDown` de lucide-react.
+- Mejora 3 — SettingsView refactorizado a tabs:
+  - Agregado import de `Tabs, TabsList, TabsTrigger, TabsContent`.
+  - Cambiado el ancho del contenedor de `max-w-3xl` a `max-w-5xl` para acomodar mejor los tabs.
+  - Envuelto el contenido en `<Tabs defaultValue="comercio">` con `TabsList` de 7 triggers:
+    - Comercio, Moneda e Impuestos, Inventario, Métodos de Pago, Facturación AFIP, Mercado Pago, Fidelización
+  - Cada Card envuelta en su `<TabsContent>` correspondiente. El Dialog de "Editar método de pago" quedó dentro del tab "pagos" (es coherente, pertenece a esa sección).
+  - El botón "Guardar cambios del comercio" quedó fuera del Tabs (al pie, común a todo).
+- Mejora 3b — EcommerceView refactorizado a tabs:
+  - Agregado import de `Tabs, TabsList, TabsTrigger, TabsContent`.
+  - Envuelto en `<Tabs defaultValue="config">` con 4 triggers:
+    - Configuración, Opciones de Sync, Sync Manual, Historial
+  - Cada Card envuelta en su `<TabsContent>`.
+- Verificación:
+  - `npx tsc --noEmit` sin errores en `src/` (solo errors en `skills/` y `examples/` que están fuera de scope).
+  - `bun run lint` limpio.
+  - Dev server corriendo en :3000, compila sin errores.
+
+Stage Summary:
+- 3 mejoras UX aplicadas:
+  1. App abre directamente en POS (modulo principal de operación diaria).
+  2. Sidebar con 5 categorías colapsables: Operaciones, Ventas, Catálogo y Stock, Gestión Comercial, Sistema. La categoría activa siempre queda abierta; las demás se pueden colapsar.
+  3. SettingsView y EcommerceView ahora usan tabs en lugar de scroll infinito de Cards. Settings tiene 7 tabs, Ecommerce tiene 4.
+- Cambios mínimos, sin tocar lógica de negocio ni APIs. Solo reorganización visual.
+- Pattern de tabs consistente: `flex w-full flex-wrap h-auto justify-start gap-1 bg-muted/40 p-1` para el TabsList.

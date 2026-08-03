@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -198,6 +199,15 @@ export function EcommerceView() {
         </p>
       </div>
 
+      <Tabs defaultValue="config" className="w-full">
+        <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 bg-muted/40 p-1">
+          <TabsTrigger value="config" className="text-xs">Configuración</TabsTrigger>
+          <TabsTrigger value="opciones" className="text-xs">Opciones de Sync</TabsTrigger>
+          <TabsTrigger value="manual" className="text-xs">Sync Manual</TabsTrigger>
+          <TabsTrigger value="historial" className="text-xs">Historial</TabsTrigger>
+        </TabsList>
+
+      <TabsContent value="config" className="mt-4">
       {/* CONFIGURACIÓN */}
       <Card>
         <CardHeader>
@@ -325,7 +335,9 @@ export function EcommerceView() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="opciones" className="mt-4">
       {/* OPCIONES DE SYNC */}
       <Card>
         <CardHeader>
@@ -379,7 +391,9 @@ export function EcommerceView() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="manual" className="mt-4">
       {/* ACCIONES DE SYNC */}
       <Card>
         <CardHeader>
@@ -428,7 +442,9 @@ export function EcommerceView() {
           </Button>
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="historial" className="mt-4">
       {/* LOGS */}
       <Card>
         <CardHeader>
@@ -495,6 +511,8 @@ export function EcommerceView() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }
