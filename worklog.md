@@ -224,3 +224,21 @@ Stage Summary:
 - E-commerce: 4 adaptadores (TiendaNube, WooCommerce, MercadoLibre, Shopify). Sync OUTBOUND de productos/stock/precios, INBOUND de pedidos (crea clientes y productos si no existen). Webhook handler con validación de secret. Log de auditoría por operación.
 - Comisiones: 4 tipos de regla (PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO con tramos). Generación automática al cerrar venta. Estados PENDIENTE/PAGADA/ANULADA. Batch actions para marcar pagadas/anular. Resumen por vendedor.
 - Sistema actualizado a versión v4.0.
+
+---
+Task ID: fix-reports-linechart
+Agent: main
+Task: Corregir error de render en LineChart del reporte de ventas (reports-view.tsx)
+
+Work Log:
+- Detectado error en runtime: el componente `<LineChart data={data.series}>` en `src/components/views/reports-view.tsx` línea 279 rompía al renderizar.
+- Causa raíz: la segunda `<Line>` tenía `yAxisId="count"` pero NO existía un `<YAxis yAxisId="count" />` asociado. Recharts lanza error cuando un eje referenciado por id no existe.
+- Fix: removido el prop `yAxisId="count"` de la segunda `<Line>` (línea 288). La línea sigue oculta con `hide`, ya que solo se usa para exponer el valor de "Cantidad" en el tooltip al hacer hover.
+- Verificado que no quedan otros `yAxisId` huérfanos en el archivo.
+- `npx tsc --noEmit` y `bun run lint` ambos limpios en `src/`.
+- Dev server corriendo en :3000, APIs de reportes respondiendo 200 OK.
+
+Stage Summary:
+- Bug visual del tab "Ventas" del módulo Reportes corregido.
+- Cambio mínimo de 1 línea, sin afectar otras funcionalidades.
+- Fase 4 sigue completa y operativa en v4.0.

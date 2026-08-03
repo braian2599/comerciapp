@@ -285,7 +285,7 @@ function SalesReport({ data, symbol }: { data: any; symbol: string }) {
               />
               <Legend />
               <Line type="monotone" dataKey="total" stroke="#10b981" strokeWidth={2} name="Total" />
-              <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={1} name="Cantidad" yAxisId="count" hide />
+              <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={1} name="Cantidad" hide />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
