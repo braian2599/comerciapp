@@ -84,7 +84,9 @@ export function ReportsView() {
     setData(null); // reset para que no se renderice data de otro tab
     try {
       const params = new URLSearchParams({ from, to });
-      const { ok, data: json, error } = await safeFetchJSON<any>(`/api/reports/${tab}?${params}`);
+      // El tab "cashflow" mapea a la ruta API "cash-flow"
+      const apiPath = tab === "cashflow" ? "cash-flow" : tab;
+      const { ok, data: json, error } = await safeFetchJSON<any>(`/api/reports/${apiPath}?${params}`);
       if (!ok) {
         toast.error(error || "Error cargando reporte");
         return;
