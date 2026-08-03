@@ -1,12 +1,12 @@
 export const RUBROS: { value: string; label: string; icon: string }[] = [
-  { value: "TIENDA_BARRIO", label: "Tienda de barrio / Almacén", icon: "🏪" },
-  { value: "MINIMARKET", label: "Minimarket", icon: "🛒" },
-  { value: "VERDULERIA", label: "Verdulería", icon: "🥬" },
-  { value: "CARNICERIA", label: "Carnicería", icon: "🥩" },
-  { value: "PANADERIA", label: "Panadería", icon: "🍞" },
-  { value: "KIOSCO", label: "Kiosco", icon: "🍭" },
-  { value: "FERRETERIA", label: "Ferretería", icon: "🔧" },
-  { value: "OTRO", label: "Otro", icon: "📦" },
+  { value: "TIENDA_BARRIO", label: "Tienda de barrio / Almacén", icon: "store" },
+  { value: "MINIMARKET", label: "Minimarket", icon: "cart" },
+  { value: "VERDULERIA", label: "Verdulería", icon: "leaf" },
+  { value: "CARNICERIA", label: "Carnicería", icon: "beef" },
+  { value: "PANADERIA", label: "Panadería", icon: "croissant" },
+  { value: "KIOSCO", label: "Kiosco", icon: "candy" },
+  { value: "FERRETERIA", label: "Ferretería", icon: "wrench" },
+  { value: "OTRO", label: "Otro", icon: "package" },
 ];
 
 export const UNITS = [
@@ -26,12 +26,12 @@ export const PAYMENT_METHODS = [
 
 // Tipos de método de pago configurables por tienda
 export const PAYMENT_METHOD_TYPES = [
-  { value: "EFECTIVO", label: "Efectivo", icon: "💵", defaultSurcharge: 0 },
-  { value: "TARJETA_DEBITO", label: "Tarjeta de débito", icon: "💳", defaultSurcharge: 0 },
-  { value: "TARJETA_CREDITO", label: "Tarjeta de crédito", icon: "💳", defaultSurcharge: 10 },
-  { value: "TRANSFERENCIA", label: "Transferencia", icon: "🏦", defaultSurcharge: 0 },
-  { value: "CUENTA", label: "Cuenta corriente", icon: "📋", defaultSurcharge: 0 },
-  { value: "OTRO", label: "Otro", icon: "📦", defaultSurcharge: 0 },
+  { value: "EFECTIVO", label: "Efectivo", icon: "banknote", defaultSurcharge: 0 },
+  { value: "TARJETA_DEBITO", label: "Tarjeta de débito", icon: "credit_card", defaultSurcharge: 0 },
+  { value: "TARJETA_CREDITO", label: "Tarjeta de crédito", icon: "credit_card", defaultSurcharge: 10 },
+  { value: "TRANSFERENCIA", label: "Transferencia", icon: "landmark", defaultSurcharge: 0 },
+  { value: "CUENTA", label: "Cuenta corriente", icon: "clipboard_list", defaultSurcharge: 0 },
+  { value: "OTRO", label: "Otro", icon: "package", defaultSurcharge: 0 },
 ];
 
 export function paymentTypeLabel(value: string) {
@@ -39,7 +39,7 @@ export function paymentTypeLabel(value: string) {
 }
 
 export function paymentTypeIcon(value: string) {
-  return PAYMENT_METHOD_TYPES.find((t) => t.value === value)?.icon || "📦";
+  return PAYMENT_METHOD_TYPES.find((t) => t.value === value)?.icon || "package";
 }
 
 // Métodos por defecto que se crean al registrar una nueva tienda
@@ -82,7 +82,7 @@ export function rubroLabel(value: string) {
 }
 
 export function rubroIcon(value: string) {
-  return RUBROS.find((r) => r.value === value)?.icon || "📦";
+  return RUBROS.find((r) => r.value === value)?.icon || "package";
 }
 
 export function unitLabel(value: string) {

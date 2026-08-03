@@ -499,3 +499,50 @@ Stage Summary:
 - Variables CSS de tema (light + dark) actualizadas para que `--primary`, `--ring`, `--chart-1`, `--sidebar-*` usen indigo.
 - Assets PWA (manifest.json, offline.html) actualizados a `#4f46e5` (indigo-600).
 - Identificadores internos "emerald" renombrados a "indigo" en colorMaps de StatCard.
+
+---
+Task ID: feat-replace-all-emojis-with-icons
+Agent: main
+Task: Reemplazar todos los emojis del sistema por iconos Lucide
+
+Work Log:
+- Detectados 29 emojis en 5 archivos:
+  - src/lib/constants.ts (16 emojis en RUBROS y PAYMENT_METHOD_TYPES)
+  - src/components/views/expenses-view.tsx (7 emojis en EXPENSE_CATEGORIES)
+  - src/components/views/ecommerce-view.tsx (4 emojis en PLATFORMS)
+  - src/components/views/settings-view.tsx (1 emoji 💡 en nota informativa)
+  - src/components/views/pos-view.tsx (1 caracter ★ en SelectItem de sucursal)
+- Creado `src/lib/icons.tsx` con:
+  - `ICON_MAP`: mapa de nombres string → componentes Lucide (21 entradas)
+  - Componente `<Icon name="..." />` que renderiza el icono por nombre, con fallback a `Package`
+- Mapeo de emojis a nombres de icono:
+  - **Rubros**: 🏪→store, 🛒→cart, 🥬→leaf, 🥩→beef, 🍞→croissant, 🍭→candy, 🔧→wrench, 📦→package
+  - **Pagos**: 💵→banknote, 💳→credit_card, 🏦→landmark, 📋→clipboard_list, 📦→package
+  - **Gastos**: 🏠→home, 💡→lightbulb, 👥→users, 📦→package, 🧾→receipt_text, 🚚→truck
+  - **E-commerce**: 🛍️→shopping_bag, 🛒→cart, 🟡→tag, 🟢→globe
+- `src/lib/constants.ts`: cambiados emojis por nombres string en RUBROS y PAYMENT_METHOD_TYPES. Las funciones `rubroIcon` y `paymentTypeIcon` siguen devolviendo strings (ahora nombres de icono en lugar de emojis).
+- `app-shell.tsx`: agregado import de `Icon`, actualizado header para renderizar `<Icon name={rubroIcon(storeRubro)} />` en lugar del emoji string.
+- `settings-view.tsx`: 
+  - Agregado import de `Icon` y `Lightbulb`
+  - `paymentTypeIcon(m.type)` ahora se renderiza vía `<Icon name={...} className="w-3.5 h-3.5 text-slate-500" />`
+  - Emoji 💡 reemplazado por `<Lightbulb className="w-3.5 h-3.5 text-amber-500" />` con layout flex
+- `expenses-view.tsx`:
+  - Agregado import de `Icon`
+  - EXPENSE_CATEGORIES: emojis → nombres string
+  - 4 sitios de consumo actualizados (Card stats, Select filter, Badge en tabla, Select en form)
+- `ecommerce-view.tsx`:
+  - Agregado import de `Icon`
+  - PLATFORMS: emojis → nombres string
+  - SelectItem actualizado para renderizar `<Icon name={p.icon} />`
+- `pos-view.tsx`:
+  - Agregado `Star` a imports de lucide-react
+  - Reemplazado `"★ "` (carácter Unicode) por `<Star className="w-3 h-3 fill-amber-400 text-amber-400" />` con renderizado condicional
+- Verificación final con script Python: **0 emojis restantes** en src/ (.tsx y .ts)
+- `tsc --noEmit` limpio. `eslint` limpio. Dev server OK sin errores.
+
+Stage Summary:
+- Sistema unificado de iconos: helper `<Icon name="..." />` permite referenciar iconos por string.
+- 29 emojis eliminados de 5 archivos, reemplazados por iconos Lucide consistentes con la paleta visual.
+- API de `constants.ts` preservada (las funciones siguen devolviendo strings, ahora nombres de icono en lugar de emojis).
+- Icono de sucursal principal ahora es una estrella Lucide con fill amber en lugar de carácter ★.
+- Nota informativa en settings ahora tiene icono Lightbulb con color amber en lugar de emoji 💡.

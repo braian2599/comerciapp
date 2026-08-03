@@ -64,6 +64,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { rubroIcon } from "@/lib/constants";
+import { Icon } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -262,8 +263,8 @@ export function AppShell() {
             </div>
             <div className="hidden sm:block min-w-0 leading-tight">
               <p className="text-sm font-semibold text-slate-900 truncate">{storeName}</p>
-              <p className="text-[11px] text-slate-500 truncate">
-                {rubroIcon(storeRubro)} {currentItem?.label}
+              <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
+                <Icon name={rubroIcon(storeRubro)} className="w-3 h-3 inline" /> {currentItem?.label}
               </p>
             </div>
             <div className="hidden sm:block w-px h-8 bg-slate-200 ml-1" />

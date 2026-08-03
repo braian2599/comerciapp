@@ -34,6 +34,7 @@ import {
   Printer,
   X,
   QrCode,
+  Star,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
@@ -459,7 +460,10 @@ export function PosView() {
                   .filter((b) => b.active)
                   .map((b) => (
                     <SelectItem key={b.id} value={b.id}>
-                      {b.isMain ? "★ " : ""}{b.name} ({b.code})
+                      <span className="inline-flex items-center gap-1.5">
+                        {b.isMain && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+                        {b.name} ({b.code})
+                      </span>
                     </SelectItem>
                   ))}
               </SelectContent>

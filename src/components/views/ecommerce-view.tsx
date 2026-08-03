@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatDateTime } from "@/lib/constants";
+import { Icon } from "@/lib/icons";
 
 interface EcommerceConfig {
   id: string;
@@ -71,10 +72,10 @@ interface SyncLog {
 }
 
 const PLATFORMS = [
-  { value: "TIENDA_NUBE", label: "TiendaNube", icon: "🛍️" },
-  { value: "WOOCOMMERCE", label: "WooCommerce (WordPress)", icon: "🛒" },
-  { value: "MERCADOLIBRE", label: "MercadoLibre", icon: "🟡" },
-  { value: "SHOPIFY", label: "Shopify", icon: "🟢" },
+  { value: "TIENDA_NUBE", label: "TiendaNube", icon: "shopping_bag" },
+  { value: "WOOCOMMERCE", label: "WooCommerce (WordPress)", icon: "cart" },
+  { value: "MERCADOLIBRE", label: "MercadoLibre", icon: "tag" },
+  { value: "SHOPIFY", label: "Shopify", icon: "globe" },
 ];
 
 export function EcommerceView() {
@@ -229,7 +230,7 @@ export function EcommerceView() {
                 <SelectContent>
                   {PLATFORMS.map((p) => (
                     <SelectItem key={p.value} value={p.value}>
-                      {p.icon} {p.label}
+                      <span className="inline-flex items-center gap-1.5"><Icon name={p.icon} className="w-3.5 h-3.5" /> {p.label}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>

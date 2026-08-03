@@ -16,9 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard, FileText, QrCode, Award } from "lucide-react";
+import { Loader2, Save, Store, Plus, Trash2, Pencil, CreditCard, FileText, QrCode, Award, Lightbulb } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { RUBROS, PAYMENT_METHOD_TYPES, paymentTypeLabel, paymentTypeIcon } from "@/lib/constants";
+import { Icon } from "@/lib/icons";
 import {
   Dialog,
   DialogContent,
@@ -612,7 +613,10 @@ export function SettingsView() {
                   {methods.map((m) => (
                     <TableRow key={m.id} className={!m.active ? "opacity-50" : ""}>
                       <TableCell className="font-medium">
-                        {paymentTypeIcon(m.type)} {m.name}
+                        <span className="inline-flex items-center gap-1.5">
+                          <Icon name={paymentTypeIcon(m.type)} className="w-3.5 h-3.5 text-slate-500" />
+                          {m.name}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
@@ -670,10 +674,11 @@ export function SettingsView() {
               </Table>
             </div>
           )}
-          <div className="p-3 border-t bg-muted/30 text-xs text-muted-foreground">
-            💡 El recargo se aplica sobre el subtotal menos descuento más
+          <div className="p-3 border-t bg-muted/30 text-xs text-muted-foreground flex items-start gap-1.5">
+            <Lightbulb className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-500" />
+            <span>El recargo se aplica sobre el subtotal menos descuento más
             impuestos. El método predeterminado es el que aparece seleccionado
-            por defecto al cobrar en el POS.
+            por defecto al cobrar en el POS.</span>
           </div>
         </CardContent>
       </Card>

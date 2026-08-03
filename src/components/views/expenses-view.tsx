@@ -51,15 +51,16 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDate } from "@/lib/constants";
+import { Icon } from "@/lib/icons";
 
 export const EXPENSE_CATEGORIES = [
-  { value: "ALQUILER", label: "Alquiler", icon: "🏠" },
-  { value: "SERVICIOS", label: "Servicios (luz, agua, gas)", icon: "💡" },
-  { value: "SUELDOS", label: "Sueldos", icon: "👥" },
-  { value: "INSUMOS", label: "Insumos", icon: "📦" },
-  { value: "IMPUESTOS", label: "Impuestos", icon: "🧾" },
-  { value: "TRANSPORTE", label: "Transporte", icon: "🚚" },
-  { value: "OTROS", label: "Otros", icon: "📦" },
+  { value: "ALQUILER", label: "Alquiler", icon: "home" },
+  { value: "SERVICIOS", label: "Servicios (luz, agua, gas)", icon: "lightbulb" },
+  { value: "SUELDOS", label: "Sueldos", icon: "users" },
+  { value: "INSUMOS", label: "Insumos", icon: "package" },
+  { value: "IMPUESTOS", label: "Impuestos", icon: "receipt_text" },
+  { value: "TRANSPORTE", label: "Transporte", icon: "truck" },
+  { value: "OTROS", label: "Otros", icon: "package" },
 ];
 
 export function ExpensesView() {
@@ -179,8 +180,8 @@ export function ExpensesView() {
         {EXPENSE_CATEGORIES.slice(0, 3).map((cat) => (
           <Card key={cat.value}>
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">
-                {cat.icon} {cat.label}
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Icon name={cat.icon} className="w-3 h-3" /> {cat.label}
               </p>
               <p className="text-lg font-bold">
                 {formatCurrency(porCategoria[cat.value] || 0, symbol)}
@@ -203,7 +204,7 @@ export function ExpensesView() {
                 <SelectItem value="all">Todas</SelectItem>
                 {EXPENSE_CATEGORIES.map((c) => (
                   <SelectItem key={c.value} value={c.value}>
-                    {c.icon} {c.label}
+                    <span className="inline-flex items-center gap-1.5"><Icon name={c.icon} className="w-3.5 h-3.5" /> {c.label}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -281,8 +282,8 @@ export function ExpensesView() {
                           {formatDate(e.date)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">
-                            {cat?.icon} {cat?.label || e.category}
+                          <Badge variant="outline" className="inline-flex items-center gap-1">
+                            <Icon name={cat?.icon || 'package'} className="w-3 h-3" /> {cat?.label || e.category}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">{e.description}</TableCell>
@@ -337,7 +338,7 @@ export function ExpensesView() {
                 <SelectContent>
                   {EXPENSE_CATEGORIES.map((c) => (
                     <SelectItem key={c.value} value={c.value}>
-                      {c.icon} {c.label}
+                      <span className="inline-flex items-center gap-1.5"><Icon name={c.icon} className="w-3.5 h-3.5" /> {c.label}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
