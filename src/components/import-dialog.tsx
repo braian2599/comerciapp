@@ -375,7 +375,7 @@ export function ImportDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5 text-indigo-600" />
             Importar {entityLabelPlural}
@@ -479,7 +479,7 @@ export function ImportDialog({
         {/* ════════════════════════════════════════════════════════════════════════
                 PASO 2: MAPEAR COLUMNAS                                                 */}
         {(phase === "mapping" || phase === "previewing") && parsed && (
-          <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
+          <div className="space-y-3 flex-1 overflow-hidden flex flex-col min-h-0">
             <div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="flex items-center gap-2 text-xs">
                 <Badge variant="outline" className="bg-muted/50">
@@ -533,7 +533,7 @@ export function ImportDialog({
             )}
 
             {/* Lista de campos a mapear */}
-            <ScrollArea className="flex-1 border rounded-md">
+            <ScrollArea className="flex-1 border rounded-md min-h-0">
               <div className="p-3 space-y-2">
                 {fields.map((field) => {
                   const idx = columnMapping[field.key];
@@ -709,7 +709,7 @@ export function ImportDialog({
         {/* ════════════════════════════════════════════════════════════════════════
                 PASO 3: PREVIEW DE ITEMS                                                 */}
         {phase === "preview" && preview && (
-          <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
+          <div className="space-y-3 flex-1 overflow-hidden flex flex-col min-h-0">
             <div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
@@ -740,7 +740,7 @@ export function ImportDialog({
               </div>
             </div>
 
-            <ScrollArea className="flex-1 border rounded-md">
+            <ScrollArea className="flex-1 border rounded-md min-h-0">
               <Table>
                 <TableHeader>
                   <TableRow>
