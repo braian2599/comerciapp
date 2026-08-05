@@ -73,10 +73,10 @@ export const PRODUCT_IMPORT_FIELDS: ImportField[] = [
   {
     key: "salePrice",
     label: "Precio de venta",
-    required: true,
     type: "number",
     aliases: ["saleprice", "precio", "precio_venta", "precio_de_venta", "precioventa"],
     defaultValue: 0,
+    hint: "Opcional: si no lo mapeás, se calcula automáticamente desde el precio de costo",
   },
   {
     key: "stock",
