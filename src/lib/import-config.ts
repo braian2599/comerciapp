@@ -40,7 +40,7 @@ export const PRODUCT_IMPORT_FIELDS: ImportField[] = [
     label: "Nombre",
     required: true,
     type: "text",
-    aliases: ["name", "nombre", "producto", "descripcion_corta", "articulo"],
+    aliases: ["name", "nombre", "producto", "descripcion_corta", "articulo", "item", "denominacion"],
     hint: "Nombre del producto (obligatorio)",
   },
   {
@@ -212,6 +212,9 @@ export function normalizeHeader(h: string): string {
   return String(h || "")
     .toLowerCase()
     .trim()
+    // Quitar acentos/diacríticos: "Código" → "codigo", "Categoría" → "categoria"
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "_");
 }
 
