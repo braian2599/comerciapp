@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  CUSTOMER_IMPORT_FIELDS,
+  suggestColumnMapping,
+} from "@/lib/import-config";
 
 /**
  * Importación masiva de clientes.
@@ -9,18 +13,9 @@ import { db } from "@/lib/db";
  * Mismo flujo que /api/products/import:
  *   1) mode: "preview" → mapea + detecta duplicados por cuit/email/phone
  *   2) mode: "commit"  → inserta/actualiza
+ *
+ * columnMapping (opcional): { fieldKey: columnIndex } explícito del cliente.
  */
-
-const FIELD_ALIASES: Record<string, string[]> = {
-  name: ["name", "nombre", "razon_social", "razonsocial", "cliente"],
-  phone: ["phone", "telefono", "tel", "celular", "movil", "móvil"],
-  email: ["email", "correo", "mail", "e_mail"],
-  address: ["address", "direccion", "domicilio", "dir"],
-  cuit: ["cuit", "cuil", "dni", "documento"],
-  taxType: ["taxtype", "tax_type", "condicion_fiscal", "condicionfiscal", "tipo_fiscal"],
-  creditLimit: ["creditlimit", "credit_limit", "limite_credito", "limitecredito", "limite"],
-  notes: ["notes", "notas", "observaciones", "obs"],
-};
 
 const VALID_TAX_TYPES = [
   "CONSUMIDOR_FINAL",
@@ -29,39 +24,22 @@ const VALID_TAX_TYPES = [
   "EXENTO",
 ];
 
-// Aliases comunes para tipos fiscales en español
 const TAX_TYPE_ALIASES: Record<string, string> = {
-  "consumidor_final": "CONSUMIDOR_FINAL",
+  consumidor_final: "CONSUMIDOR_FINAL",
   "consumidor final": "CONSUMIDOR_FINAL",
-  "cf": "CONSUMIDOR_FINAL",
-  "monotributo": "MONOTRIBUTO",
-  "mono": "MONOTRIBUTO",
-  "mt": "MONOTRIBUTO",
-  "responsable_inscripto": "RESPONSABLE_INSCRIPTO",
+  cf: "CONSUMIDOR_FINAL",
+  monotributo: "MONOTRIBUTO",
+  mono: "MONOTRIBUTO",
+  mt: "MONOTRIBUTO",
+  responsable_inscripto: "RESPONSABLE_INSCRIPTO",
   "responsable inscripto": "RESPONSABLE_INSCRIPTO",
-  "ri": "RESPONSABLE_INSCRIPTO",
-  "responsable": "RESPONSABLE_INSCRIPTO",
-  "exento": "EXENTO",
-  "exenta": "EXENTO",
+  ri: "RESPONSABLE_INSCRIPTO",
+  responsable: "RESPONSABLE_INSCRIPTO",
+  exento: "EXENTO",
+  exenta: "EXENTO",
 };
 
-function normalizeHeader(h: string): string {
-  return h.toLowerCase().trim().replace(/\s+/g, "_");
-}
-
-function buildHeaderMap(headers: string[]): Record<string, number> {
-  const map: Record<string, number> = {};
-  headers.forEach((h, idx) => {
-    const norm = normalizeHeader(h);
-    for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
-      if (aliases.includes(norm)) {
-        if (!(field in map)) map[field] = idx;
-        break;
-      }
-    }
-  });
-  return map;
-}
+// ===== Helpers de parseo =====
 
 function toNumber(v: unknown, fallback = 0): number {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -91,7 +69,6 @@ function toStr(v: unknown): string | null {
 function normalizeCuit(v: unknown): string | null {
   const s = toStr(v);
   if (!s) return null;
-  // Quitar guiones, puntos, espacios
   return s.replace(/[^0-9]/g, "");
 }
 
@@ -99,11 +76,11 @@ function normalizeTaxType(v: unknown): string | null {
   const s = toStr(v);
   if (!s) return null;
   const lower = s.toLowerCase().trim();
-  // Caso directo (ya viene en formato interno)
   if (VALID_TAX_TYPES.includes(s.toUpperCase())) return s.toUpperCase();
-  // Caso alias
   if (TAX_TYPE_ALIASES[lower]) return TAX_TYPE_ALIASES[lower];
-  if (TAX_TYPE_ALIASES[lower.replace(/\s+/g, "_")]) return TAX_TYPE_ALIASES[lower.replace(/\s+/g, "_")];
+  if (TAX_TYPE_ALIASES[lower.replace(/\s+/g, "_")]) {
+    return TAX_TYPE_ALIASES[lower.replace(/\s+/g, "_")];
+  }
   return null;
 }
 
@@ -121,12 +98,12 @@ interface MappedCustomer {
 
 function mapRow(
   row: (string | number | null)[],
-  headerMap: Record<string, number>,
+  columnMapping: Record<string, number>,
   rowIndex: number
 ): MappedCustomer {
   const get = (field: string) => {
-    const idx = headerMap[field];
-    return idx === undefined ? null : row[idx];
+    const idx = columnMapping[field];
+    return idx === undefined || idx < 0 ? null : row[idx];
   };
 
   return {
@@ -141,6 +118,8 @@ function mapRow(
     _rowIndex: rowIndex,
   };
 }
+
+// ===== Endpoints =====
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -176,18 +155,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const headerMap = buildHeaderMap(headers);
-    if (!("name" in headerMap)) {
+    // Resolver mapeo: explícito del cliente o auto-detección (fallback)
+    let columnMapping: Record<string, number>;
+    if (
+      body.columnMapping &&
+      typeof body.columnMapping === "object" &&
+      !Array.isArray(body.columnMapping)
+    ) {
+      columnMapping = {};
+      for (const [key, idx] of Object.entries(body.columnMapping)) {
+        const numIdx = Number(idx);
+        if (Number.isFinite(numIdx) && numIdx >= 0 && numIdx < headers.length) {
+          columnMapping[key] = Math.floor(numIdx);
+        }
+      }
+    } else {
+      columnMapping = suggestColumnMapping(headers, CUSTOMER_IMPORT_FIELDS);
+    }
+
+    if (!("name" in columnMapping)) {
       return NextResponse.json(
         {
           error:
-            "No se encontró la columna 'name' / 'nombre' en el archivo. Es obligatoria.",
+            "No se mapeó ninguna columna al campo 'Nombre'. Es obligatorio. Asigná una columna en el paso de mapeo.",
         },
         { status: 400 }
       );
     }
 
-    const mapped: MappedCustomer[] = rows.map((r, i) => mapRow(r, headerMap, i + 2));
+    const mapped: MappedCustomer[] = rows.map((r, i) =>
+      mapRow(r, columnMapping, i + 2)
+    );
 
     // Buscar duplicados por cuit/email/phone dentro del store
     const cuits = mapped.map((m) => m.cuit).filter((c): c is string => !!c);
@@ -225,7 +223,6 @@ export async function POST(req: NextRequest) {
           error: "Falta el nombre (columna obligatoria)",
         };
       }
-      // Prioridad: cuit > email > phone
       const matchedByCuit = m.cuit && byCuit.get(m.cuit);
       const matchedByEmail = m.email && byEmail.get(m.email);
       const matchedByPhone = m.phone && byPhone.get(m.phone);
@@ -263,7 +260,7 @@ export async function POST(req: NextRequest) {
       error: items.filter((i) => i.action === "error").length,
     };
 
-    return NextResponse.json({ items, summary });
+    return NextResponse.json({ items, summary, columnMapping });
   }
 
   // ----- Fase 2: COMMIT -----

@@ -65,6 +65,7 @@ import { ImportDialog } from "@/components/import-dialog";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, UNITS } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
+import { PRODUCT_IMPORT_FIELDS } from "@/lib/import-config";
 
 interface Product {
   id: string;
@@ -370,6 +371,7 @@ export function ProductsView() {
         open={importOpen}
         onOpenChange={setImportOpen}
         endpoint="/api/products/import"
+        fields={PRODUCT_IMPORT_FIELDS}
         templateHeaders={[
           "name",
           "barcode",

@@ -849,3 +849,54 @@ Stage Summary:
 - Añadidas funcionalidades robustas: debounce, navegación por teclado, atajos globales (F2/F4/F9), productos recientes, cap de resultados, match exacto de barcode.
 - Archivo modificado: `src/components/views/pos-view.tsx` (rewrite completo, ~1100 líneas).
 - Build OK, server OK, listo para que el usuario pruebe.
+
+---
+Task ID: import-column-mapping
+Agent: main
+Task: Rediseñar la importación de productos (y clientes): que el sistema detecte automáticamente las columnas de la planilla y el usuario elija qué columna va en cada campo del sistema. Solución robusta, sin romper comunicación entre módulos, eliminando código muerto.
+
+Work Log:
+- Auditado el sistema actual de importación:
+    - `src/lib/file-parser.ts`: parser CSV/Excel/JSON → `{ headers, rows }`. Funciona bien, no se toca.
+    - `src/components/import-dialog.tsx`: dialog reutilizable con flujo subir → preview → commit. Problema: el mapeo columnas→campos se hace solo en el servidor con `FIELD_ALIASES`, el usuario no tiene control.
+    - `src/app/api/products/import/route.ts`: define `FIELD_ALIASES` localmente, hace `buildHeaderMap()` y mapea automáticamente. Si una columna no matchea un alias, se descarta silenciosamente → productos se importan con campos vacíos o mal asignados.
+    - `src/app/api/customers/import/route.ts`: mismo patrón, mismo problema. Duplica la lógica de `toNumber`, `toStr`, `normalizeHeader`, `buildHeaderMap`.
+    - `products-view.tsx` y `customers-view.tsx`: usan `ImportDialog` con `templateHeaders` y `entityLabel` pero NO pasan info de campos disponibles.
+- Creado `src/lib/import-config.ts` (nuevo módulo compartido cliente/servidor):
+    - Define `ImportField` interface: `{ key, label, required, aliases, type, hint, defaultValue }`.
+    - `PRODUCT_IMPORT_FIELDS`: 16 campos (name, barcode, sku, category, costPrice, salePrice, stock, minStock, unit, active, brand, description, labels, ingredients, allergens, imageUrl) con sus alias.
+    - `CUSTOMER_IMPORT_FIELDS`: 8 campos (name, phone, email, address, cuit, taxType, creditLimit, notes) con sus alias.
+    - `suggestColumnMapping(headers, fields)`: auto-detección basada en alias. Devuelve `{ fieldKey: columnIndex }`. Mismo algoritmo que el viejo `buildHeaderMap` pero reutilizable y testable.
+    - `normalizeHeader(h)`: lowercase + trim + spaces→underscores.
+    - `getImportFields(entity)`: helper para obtener campos por entidad.
+- Refactorizado `src/app/api/products/import/route.ts`:
+    - Eliminado `FIELD_ALIASES` local (ahora vive en `import-config.ts`).
+    - Eliminado `buildHeaderMap()` local (ahora usa `suggestColumnMapping`).
+    - Eliminado `normalizeHeader()` local (ahora usa el de `import-config.ts`).
+    - Eliminado `toUnit()` inline duplicado (consolidado en `mapRow`).
+    - El endpoint `mode: "preview"` ahora acepta `columnMapping` explícito del cliente. Si no viene, hace fallback a `suggestColumnMapping` (compatibilidad con scripts externos).
+    - Validación: índices de columnMapping deben ser números finitos, ≥0, < headers.length. Sino se ignoran silenciosamente.
+    - Devuelve `columnMapping` en la respuesta (para que el cliente pueda confirmar qué se aplicó).
+    - Mensaje de error mejorado si no se mapeó `name`: "Asigná una columna en el paso de mapeo" en vez del viejo "No se encontró la columna 'name'".
+    - Toda la lógica de commit (creación/update de productos, stock movements, categorías) sin cambios — no romper comunicación con módulos existentes.
+- Refactorizado `src/app/api/customers/import/route.ts`: mismo tratamiento. Mantiene `VALID_TAX_TYPES` y `TAX_TYPE_ALIASES` locales (especificos de customers, no aplican a products). Eliminado `FIELD_ALIASES` local, `buildHeaderMap` local, `normalizeHeader` local.
+- Reescrito `src/components/import-dialog.tsx` con wizard de 4 pasos:
+    - **Paso 1 (idle)**: input de archivo + plantilla. Igual que antes.
+    - **Paso 2 (mapping)** — NUEVO: muestra todos los campos disponibles del sistema con sus labels, tipo, hint. Para cada campo, un Select con TODAS las columnas del archivo + opción "— No mapear —". Las columnas ya usadas por otro campo se deshabilitan en el Select. Cada campo muestra el valor de muestra (primeras 3 filas) de la columna mapeada. Badge con stats: "X mapeadas, Y/Z obligatorias". Botones "Auto-detectar" (vuelve a correr suggestColumnMapping) y "Limpiar" (vacia el mapeo). Vista preview abajo con primeras 3 filas mapeadas. Validación: no puede continuar si faltan obligatorios.
+    - **Paso 3 (preview)**: tabla de items create/update/error con checkboxes. Selectores Todos / Solo nuevos / Ninguno. Cap 200 items visibles con indicador si hay más. Botón "Volver al mapeo" para corregir.
+    - **Paso 4 (done)**: estadísticas created/updated/errors + lista de errores scrollable.
+    - Indicador visual de pasos (StepBadge) arriba del contenido.
+    - Props: reemplazado `templateHeaders` implícito por `fields: ImportField[]` explícito — el componente ahora sabe qué campos puede mapear, no los asume.
+- Actualizado `src/components/views/products-view.tsx`: importa `PRODUCT_IMPORT_FIELDS` de `@/lib/import-config` y lo pasa como prop `fields` al `ImportDialog`.
+- Actualizado `src/components/views/customers-view.tsx`: importa `CUSTOMER_IMPORT_FIELDS` y lo pasa como prop `fields`.
+- Build: `bun run build` → "Compiled successfully" sin errores ni warnings.
+- Server reiniciado: PID 3514, HTTP 200, API responde correctamente (401 sin auth, JSON válido sin crashes incluso con columnMapping inválido).
+
+Stage Summary:
+- Nuevo módulo `src/lib/import-config.ts` centraliza la configuración de campos importables (productos y clientes) + alias para auto-detección + helper `suggestColumnMapping`. Compartido entre cliente y servidor — single source of truth.
+- API routes (`/api/products/import` y `/api/customers/import`) ahora aceptan `columnMapping` explícito del cliente. Fallback a auto-detección si no viene. Eliminados ~80 líneas de código duplicado (FIELD_ALIASES, buildHeaderMap, normalizeHeader, toStr, toNumber duplicados entre los dos routes).
+- `ImportDialog` rediseñado con wizard de 4 pasos: subir → mapear columnas manualmente → preview → resultado. El usuario ve TODAS las columnas del archivo y decide qué columna va a cada campo del sistema. Auto-detección sugerida al cargar el archivo, editable.
+- Eliminado el modo silencioso de "columna no reconocida se descarta" — ahora el usuario tiene control total y feedback visual inmediato (samples de cada columna mapeada).
+- Sin cambios en la lógica de commit (crear productos, stock movements, categorías, etc.) — comunicación entre módulos intacta.
+- Archivos modificados: `src/lib/import-config.ts` (nuevo), `src/app/api/products/import/route.ts`, `src/app/api/customers/import/route.ts`, `src/components/import-dialog.tsx`, `src/components/views/products-view.tsx`, `src/components/views/customers-view.tsx`.
+- Build OK, server OK, listo para probar.

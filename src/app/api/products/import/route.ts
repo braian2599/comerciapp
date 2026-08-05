@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  PRODUCT_IMPORT_FIELDS,
+  suggestColumnMapping,
+  normalizeHeader,
+  type ImportField,
+} from "@/lib/import-config";
 
 /**
  * Importación masiva de productos.
  *
  * Flujo:
- *   1) mode: "preview" → el cliente envía { rows, headers }
+ *   1) mode: "preview" → el cliente envía { headers, rows, columnMapping? }
  *      El servidor mapea cada fila a un producto, detecta duplicados
  *      (por barcode/sku) y devuelve un array de items con la acción
  *      sugerida: "create" | "update" | "error".
@@ -15,57 +21,15 @@ import { db } from "@/lib/db";
  *      El servidor inserta/actualiza en una transacción y devuelve
  *      estadísticas finales.
  *
- * El cliente decide en el medio qué hacer con los duplicados (gracias a
- * la fase preview).
+ * columnMapping (opcional): { fieldKey: columnIndex } explícito del cliente.
+ * Si no viene, se auto-detecta con `suggestColumnMapping` (compatibilidad).
  */
 
-// ===== Helpers de mapeo =====
-
-// Alias aceptados para cada campo. Sirve para que el CSV/Excel use
-// nombres en español sin que el usuario tenga que respetar el nombre
-// exacto del campo interno.
-const FIELD_ALIASES: Record<string, string[]> = {
-  name: ["name", "nombre", "producto", "descripcion_corta"],
-  description: ["description", "descripcion", "detalle", "notas"],
-  barcode: ["barcode", "codigo_de_barras", "codigo_barras", "codigobarras", "ean", "upc"],
-  sku: ["sku", "codigo_interno", "cod_interno", "codigo"],
-  category: ["category", "categoria", "rubro"],
-  costPrice: ["costprice", "costo", "precio_costo", "precio_de_costo", "preciocosto"],
-  salePrice: ["saleprice", "precio", "precio_venta", "precio_de_venta", "precioventa"],
-  stock: ["stock", "cantidad", "existencia", "existencias", "inventario"],
-  minStock: ["minstock", "stock_minimo", "stockminimo", "minimo"],
-  unit: ["unit", "unidad", "umedida", "u_medida"],
-  active: ["active", "activo", "habilitado", "estado"],
-  brand: ["brand", "marca"],
-  labels: ["labels", "etiquetas", "tags"],
-  ingredients: ["ingredients", "ingredientes"],
-  allergens: ["allergens", "alergenos", "alergenos", "alérgenos"],
-  imageUrl: ["imageurl", "imagen", "img", "foto", "image_url", "imagen_url"],
-};
-
-function normalizeHeader(h: string): string {
-  return h.toLowerCase().trim().replace(/\s+/g, "_");
-}
-
-function buildHeaderMap(headers: string[]): Record<string, number> {
-  const map: Record<string, number> = {};
-  headers.forEach((h, idx) => {
-    const norm = normalizeHeader(h);
-    for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
-      if (aliases.includes(norm)) {
-        // La primera vez que aparece gana; duplicados se ignoran
-        if (!(field in map)) map[field] = idx;
-        break;
-      }
-    }
-  });
-  return map;
-}
+// ===== Helpers de parseo =====
 
 function toNumber(v: unknown, fallback = 0): number {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
-    // Aceptar "1.234,56" (formato AR) y "1234.56" (formato US)
     const cleaned = v
       .replace(/\s/g, "")
       .replace(/\$/g, "")
@@ -101,6 +65,15 @@ function toBool(v: unknown, fallback = true): boolean {
 
 const VALID_UNITS = ["UNIDAD", "KG", "LITRO", "METRO", "PACK"];
 
+function toUnit(v: unknown, fallback = "UNIDAD"): string {
+  const s = toStr(v);
+  if (!s) return fallback;
+  const up = s.toUpperCase();
+  return VALID_UNITS.includes(up) ? up : fallback;
+}
+
+// ===== Mapeo de fila usando columnMapping explícito =====
+
 interface MappedProduct {
   name: string;
   description: string | null;
@@ -123,31 +96,25 @@ interface MappedProduct {
 
 function mapRow(
   row: (string | number | null)[],
-  headerMap: Record<string, number>,
+  columnMapping: Record<string, number>,
   rowIndex: number
 ): MappedProduct {
   const get = (field: string) => {
-    const idx = headerMap[field];
-    return idx === undefined ? null : row[idx];
+    const idx = columnMapping[field];
+    return idx === undefined || idx < 0 ? null : row[idx];
   };
 
-  const name = toStr(get("name")) || "";
-  const unitRaw = toStr(get("unit")) || "UNIDAD";
-  const unit = VALID_UNITS.includes(unitRaw.toUpperCase())
-    ? unitRaw.toUpperCase()
-    : "UNIDAD";
-
   return {
-    name,
+    name: toStr(get("name")) || "",
     description: toStr(get("description")),
     barcode: toStr(get("barcode")),
     sku: toStr(get("sku")),
     category: toStr(get("category")),
-    costPrice: toNumber(get("costPrice")),
-    salePrice: toNumber(get("salePrice")),
-    stock: toNumber(get("stock")),
+    costPrice: toNumber(get("costPrice"), 0),
+    salePrice: toNumber(get("salePrice"), 0),
+    stock: toNumber(get("stock"), 0),
     minStock: toNumber(get("minStock"), 5),
-    unit,
+    unit: toUnit(get("unit"), "UNIDAD"),
     active: toBool(get("active"), true),
     brand: toStr(get("brand")),
     labels: toStr(get("labels")),
@@ -194,26 +161,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const headerMap = buildHeaderMap(headers);
-    if (!("name" in headerMap)) {
+    // Resolución del mapeo:
+    //   1. Si el cliente envía `columnMapping`, usarlo tal cual.
+    //   2. Sino, auto-detectar (fallback para llamadas directas a la API).
+    let columnMapping: Record<string, number>;
+    if (
+      body.columnMapping &&
+      typeof body.columnMapping === "object" &&
+      !Array.isArray(body.columnMapping)
+    ) {
+      // Validar que los índices sean números válidos
+      columnMapping = {};
+      for (const [key, idx] of Object.entries(body.columnMapping)) {
+        const numIdx = Number(idx);
+        if (Number.isFinite(numIdx) && numIdx >= 0 && numIdx < headers.length) {
+          columnMapping[key] = Math.floor(numIdx);
+        }
+      }
+    } else {
+      columnMapping = suggestColumnMapping(headers, PRODUCT_IMPORT_FIELDS);
+    }
+
+    if (!("name" in columnMapping)) {
       return NextResponse.json(
         {
           error:
-            "No se encontró la columna 'name' / 'nombre' en el archivo. Es obligatoria.",
+            "No se mapeó ninguna columna al campo 'Nombre'. Es obligatorio. Asigná una columna en el paso de mapeo.",
         },
         { status: 400 }
       );
     }
 
-    const mapped: MappedProduct[] = rows.map((r, i) => mapRow(r, headerMap, i + 2));
+    const mapped: MappedProduct[] = rows.map((r, i) =>
+      mapRow(r, columnMapping, i + 2)
+    );
 
     // Buscar duplicados por barcode/sku dentro del store
-    const barcodes = mapped
-      .map((m) => m.barcode)
-      .filter((b): b is string => !!b);
-    const skus = mapped
-      .map((m) => m.sku)
-      .filter((s): s is string => !!s);
+    const barcodes = mapped.map((m) => m.barcode).filter((b): b is string => !!b);
+    const skus = mapped.map((m) => m.sku).filter((s): s is string => !!s);
 
     const existing = await db.product.findMany({
       where: {
@@ -278,7 +263,7 @@ export async function POST(req: NextRequest) {
       error: items.filter((i) => i.action === "error").length,
     };
 
-    return NextResponse.json({ items, summary });
+    return NextResponse.json({ items, summary, columnMapping });
   }
 
   // ----- Fase 2: COMMIT -----
@@ -299,8 +284,6 @@ export async function POST(req: NextRequest) {
     const catByName = new Map(
       categories.map((c) => [c.name.toLowerCase().trim(), c.id])
     );
-
-    // Crear categorías nuevas bajo demanda
     const createdCatNames = new Map<string, string>();
 
     let created = 0;
@@ -320,7 +303,7 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        // Resolver categoría
+        // Resolver categoría por nombre (crear si no existe)
         let categoryId: string | null = null;
         if (data.category) {
           const key = data.category.toLowerCase().trim();
@@ -437,10 +420,9 @@ export async function POST(req: NextRequest) {
           updated++;
         }
       } catch (e: any) {
-        const msg =
-          e?.message?.includes("Unique constraint")
-            ? "Conflicto de código de barras o SKU (duplicado)"
-            : e?.message || "Error al guardar";
+        const msg = e?.message?.includes("Unique constraint")
+          ? "Conflicto de código de barras o SKU (duplicado)"
+          : e?.message || "Error al guardar";
         errors.push({
           rowIndex: data._rowIndex,
           name: data.name,

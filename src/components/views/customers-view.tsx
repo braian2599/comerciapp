@@ -64,6 +64,7 @@ import { ImportDialog } from "@/components/import-dialog";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime, PAYMENT_METHOD_TYPES } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
+import { CUSTOMER_IMPORT_FIELDS } from "@/lib/import-config";
 
 interface Customer {
   id: string;
@@ -331,6 +332,7 @@ export function CustomersView() {
         open={importOpen}
         onOpenChange={setImportOpen}
         endpoint="/api/customers/import"
+        fields={CUSTOMER_IMPORT_FIELDS}
         templateHeaders={[
           "name",
           "phone",
