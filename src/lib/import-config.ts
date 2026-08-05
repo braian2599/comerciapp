@@ -114,6 +114,13 @@ export const PRODUCT_IMPORT_FIELDS: ImportField[] = [
     aliases: ["brand", "marca"],
   },
   {
+    key: "supplier",
+    label: "Proveedor",
+    type: "text",
+    aliases: ["supplier", "proveedor", "provider", "razon_social_proveedor"],
+    hint: "Se crea el proveedor si no existe (match por nombre)",
+  },
+  {
     key: "description",
     label: "Descripción",
     type: "text",
@@ -202,6 +209,49 @@ export const CUSTOMER_IMPORT_FIELDS: ImportField[] = [
   },
 ];
 
+// ─── Proveedores ──────────────────────────────────────────────────────────────
+
+export const SUPPLIER_IMPORT_FIELDS: ImportField[] = [
+  {
+    key: "name",
+    label: "Nombre / Razón social",
+    required: true,
+    type: "text",
+    aliases: ["name", "nombre", "razon_social", "razonsocial", "proveedor", "provider"],
+    hint: "Nombre del proveedor (obligatorio)",
+  },
+  {
+    key: "contactName",
+    label: "Contacto",
+    type: "text",
+    aliases: ["contactname", "contact_name", "contacto", "persona_contacto"],
+  },
+  {
+    key: "phone",
+    label: "Teléfono",
+    type: "text",
+    aliases: ["phone", "telefono", "tel", "celular", "movil"],
+  },
+  {
+    key: "email",
+    label: "Email",
+    type: "text",
+    aliases: ["email", "correo", "mail", "e_mail"],
+  },
+  {
+    key: "address",
+    label: "Dirección",
+    type: "text",
+    aliases: ["address", "direccion", "domicilio", "dir"],
+  },
+  {
+    key: "notes",
+    label: "Notas",
+    type: "text",
+    aliases: ["notes", "notas", "observaciones", "obs"],
+  },
+];
+
 // ─── Helpers de auto-detección (compartidos cliente/servidor) ─────────────────
 
 /**
@@ -249,6 +299,8 @@ export function suggestColumnMapping(
 /**
  * Devuelve los campos válidos para una entidad dada.
  */
-export function getImportFields(entity: "product" | "customer"): ImportField[] {
-  return entity === "product" ? PRODUCT_IMPORT_FIELDS : CUSTOMER_IMPORT_FIELDS;
+export function getImportFields(entity: "product" | "customer" | "supplier"): ImportField[] {
+  if (entity === "product") return PRODUCT_IMPORT_FIELDS;
+  if (entity === "customer") return CUSTOMER_IMPORT_FIELDS;
+  return SUPPLIER_IMPORT_FIELDS;
 }

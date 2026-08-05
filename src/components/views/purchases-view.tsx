@@ -43,10 +43,13 @@ import {
   X,
   CheckCircle2,
   Clock,
+  Upload,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
+import { ImportDialog } from "@/components/import-dialog";
+import { SUPPLIER_IMPORT_FIELDS } from "@/lib/import-config";
 
 interface Supplier {
   id: string;
@@ -114,6 +117,7 @@ export function PurchasesView() {
   const [supForm, setSupForm] = useState<any>(emptySupplier);
   const [supSaving, setSupSaving] = useState(false);
   const [deleteSupId, setDeleteSupId] = useState<string | null>(null);
+  const [supImportOpen, setSupImportOpen] = useState(false);
 
   // Órdenes
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -453,6 +457,12 @@ export function PurchasesView() {
                 className="bg-indigo-600 hover:bg-indigo-700"
               >
                 <Plus className="w-4 h-4 mr-2" /> Nuevo proveedor
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSupImportOpen(true)}
+              >
+                <Upload className="w-4 h-4 mr-2" /> Importar
               </Button>
             </CardContent>
           </Card>
@@ -806,6 +816,19 @@ export function PurchasesView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de importación masiva de proveedores */}
+      <ImportDialog
+        open={supImportOpen}
+        onOpenChange={setSupImportOpen}
+        endpoint="/api/suppliers/import"
+        fields={SUPPLIER_IMPORT_FIELDS}
+        templateHeaders={["Nombre", "Contacto", "Teléfono", "Email", "Dirección", "Notas"]}
+        templateName="plantilla_proveedores.csv"
+        entityLabel="proveedor"
+        entityLabelPlural="proveedores"
+        onImported={loadSuppliers}
+      />
     </div>
   );
 }

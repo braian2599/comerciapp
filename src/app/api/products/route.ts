@@ -44,7 +44,7 @@ export async function GET() {
   try {
     const products = await db.product.findMany({
       where: { storeId },
-      include: { category: true },
+      include: { category: true, supplier: true },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });
     return NextResponse.json(products);
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
         barcode: toOptionalString(body.barcode),
         sku: toOptionalString(body.sku),
         categoryId: body.categoryId || null,
+        supplierId: body.supplierId || null,
         storeId,
         costPrice: Math.max(0, toNumber(body.costPrice)),
         salePrice,
@@ -197,6 +198,7 @@ export async function PUT(req: NextRequest) {
         barcode: toOptionalString(body.barcode),
         sku: toOptionalString(body.sku),
         categoryId: body.categoryId || null,
+        supplierId: body.supplierId || null,
         costPrice: Math.max(0, toNumber(body.costPrice)),
         salePrice: Math.max(0, toNumber(body.salePrice)),
         stock: newStock,

@@ -75,6 +75,8 @@ interface Product {
   sku?: string;
   categoryId?: string;
   category?: { id: string; name: string };
+  supplierId?: string;
+  supplier?: { id: string; name: string };
   costPrice: number;
   salePrice: number;
   stock: number;
@@ -94,6 +96,14 @@ interface Category {
   _count?: { products: number };
 }
 
+interface Supplier {
+  id: string;
+  name: string;
+  contactName?: string;
+  phone?: string;
+  active: boolean;
+}
+
 const emptyForm = {
   id: "",
   name: "",
@@ -101,6 +111,7 @@ const emptyForm = {
   barcode: "",
   sku: "",
   categoryId: "",
+  supplierId: "",
   costPrice: 0,
   salePrice: 0,
   stock: 0,
@@ -118,6 +129,7 @@ export function ProductsView() {
   const { store } = useAppStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
@@ -225,16 +237,19 @@ export function ProductsView() {
   async function load() {
     setLoading(true);
     try {
-      const [p, c] = await Promise.all([
+      const [p, c, s] = await Promise.all([
         safeFetchArray<Product>("/api/products"),
         safeFetchArray<Category>("/api/categories"),
+        safeFetchArray<Supplier>("/api/suppliers"),
       ]);
       setProducts(p);
       setCategories(c);
+      setSuppliers(s);
     } catch {
       toast.error("No se pudieron cargar los productos");
       setProducts([]);
       setCategories([]);
+      setSuppliers([]);
     } finally {
       setLoading(false);
     }
@@ -761,6 +776,30 @@ export function ProductsView() {
                       {c.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="supplier">Proveedor</Label>
+              <Select
+                value={form.supplierId || "none"}
+                onValueChange={(v) =>
+                  setForm({ ...form, supplierId: v === "none" ? null : v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin proveedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin proveedor</SelectItem>
+                  {suppliers
+                    .filter((s) => s.active)
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                        {s.contactName ? ` · ${s.contactName}` : ""}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

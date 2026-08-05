@@ -105,6 +105,7 @@ model Product {
   barcode     String?
   sku         String?
   categoryId  String?
+  supplierId  String?
   storeId     String
   costPrice   Float    @default(0)
   salePrice   Float    @default(0)
@@ -127,6 +128,7 @@ model Product {
 
   store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier        Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   saleItems       SaleItem[]
   stockMovements  StockMovement[]
   purchaseItems   PurchaseOrderItem[]
@@ -334,6 +336,7 @@ model Supplier {
 
   store          Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   purchaseOrders PurchaseOrder[]
+  products       Product[]
 
   @@index([storeId, active])
 }

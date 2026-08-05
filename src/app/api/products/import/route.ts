@@ -80,6 +80,7 @@ interface MappedProduct {
   barcode: string | null;
   sku: string | null;
   category: string | null;
+  supplier: string | null;
   costPrice: number;
   salePrice: number;
   stock: number;
@@ -110,6 +111,7 @@ function mapRow(
     barcode: toStr(get("barcode")),
     sku: toStr(get("sku")),
     category: toStr(get("category")),
+    supplier: toStr(get("supplier")),
     costPrice: toNumber(get("costPrice"), 0),
     salePrice: toNumber(get("salePrice"), 0),
     stock: toNumber(get("stock"), 0),
@@ -277,6 +279,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Pre-cargar categorías del store para resolver por nombre
+    // Resolución de categorías por nombre (crear si no existe)
     const categories = await db.category.findMany({
       where: { storeId: u.storeId },
       select: { id: true, name: true },
@@ -285,6 +288,16 @@ export async function POST(req: NextRequest) {
       categories.map((c) => [c.name.toLowerCase().trim(), c.id])
     );
     const createdCatNames = new Map<string, string>();
+
+    // Resolución de proveedores por nombre (crear si no existe)
+    const suppliers = await db.supplier.findMany({
+      where: { storeId: u.storeId },
+      select: { id: true, name: true },
+    });
+    const supByName = new Map(
+      suppliers.map((s) => [s.name.toLowerCase().trim(), s.id])
+    );
+    const createdSupNames = new Map<string, string>();
 
     let created = 0;
     let updated = 0;
@@ -321,6 +334,24 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Resolver proveedor por nombre (crear si no existe)
+        let supplierId: string | null = null;
+        if (data.supplier) {
+          const key = data.supplier.toLowerCase().trim();
+          if (supByName.has(key)) {
+            supplierId = supByName.get(key)!;
+          } else if (createdSupNames.has(key)) {
+            supplierId = createdSupNames.get(key)!;
+          } else {
+            const sup = await db.supplier.create({
+              data: { name: data.supplier.trim(), storeId: u.storeId },
+            });
+            supByName.set(key, sup.id);
+            createdSupNames.set(key, sup.id);
+            supplierId = sup.id;
+          }
+        }
+
         if (action === "create") {
           const product = await db.product.create({
             data: {
@@ -329,6 +360,7 @@ export async function POST(req: NextRequest) {
               barcode: data.barcode,
               sku: data.sku,
               categoryId,
+              supplierId,
               storeId: u.storeId,
               costPrice: Math.max(0, data.costPrice),
               salePrice: Math.max(0, data.salePrice),
@@ -390,6 +422,7 @@ export async function POST(req: NextRequest) {
               barcode: data.barcode,
               sku: data.sku,
               categoryId,
+              supplierId,
               costPrice: Math.max(0, data.costPrice),
               salePrice: Math.max(0, data.salePrice),
               stock: Math.max(0, data.stock),
