@@ -794,3 +794,58 @@ Stage Summary:
   3. Array.isArray guards / typeof object guards antes de setear estado
 - Build OK, server arranca OK, comportamiento verificado.
 - Estado del sistema: robusto ante cualquier fallo de red, de auth, o de DB. El usuario verá un toast claro con el error y la UI no se romperá.
+
+---
+Task ID: pos-redesign-unified-layout
+Agent: main
+Task: Rediseñar el POS: eliminar la ventana lateral (Sheet) de checkout, ocultar la lista infinita de productos (solo aparecen al buscar), unificar buscador + carrito + confirmación en una sola pestaña. Layout: productos <50% izquierda, carrito+checkout >50% derecha. Robusto y complejo.
+
+Work Log:
+- Leído `src/components/views/pos-view.tsx` (1363 líneas): identificado el problema — lista infinita de productos en grid (`max-h-[60vh] overflow-y-auto` con grid de 4 columnas) + checkout en `Sheet` lateral (panel deslizante que el usuario encontró feo).
+- Diseñado nuevo layout unificado en una sola pestaña:
+    - Grid `lg:grid-cols-5`: columna izquierda `col-span-2` (40%, productos) + columna derecha `col-span-3` (60%, carrito+checkout).
+    - Altura fija `h-[calc(100vh-6.5rem)]` con `flex flex-col min-h-0` para que cada panel scrollee internamente sin romper el layout.
+- Columna izquierda (productos) rediseñada:
+    - Barra de búsqueda grande con icono de barcode + botón X para limpiar.
+    - Chips de categoría en scroll horizontal (más compactos que botones).
+    - **Modo default (sin búsqueda)**: muestra "Productos recientes" (últimos 10 agregados al carrito) + toggle "Ver todos" que expande hasta 60 productos. No carga la lista completa por defecto → performance.
+    - **Modo búsqueda**: filtra con debounce 180ms, muestra máx 24 resultados con indicador "Mostrando primeros 24" si hay más.
+    - Cada producto es una fila compacta (no card): imagen 44x44, nombre, precio+categoría, stock con color (rojo/ámbar/gris), hover effect.
+    - Footer con hints de teclado: ↑↓ navegar, Enter agregar, Esc limpiar.
+- Columna derecha (carrito+checkout) rediseñada — TODO INLINE, NO Sheet:
+    - Header: "Carrito (N) · M unidades" + botón "Vaciar".
+    - Lista de items scrolleable: cada fila con nombre, precio unitario, qty controls (- [input] + [x]), total de la línea, badges de labels/alérgenos, warning de stock máximo.
+    - Panel de checkout fijo abajo (max-h 55vh, scrolleable si necesario):
+        - Cliente + Método de pago en grid de 2 columnas.
+        - Warnings inline para cuenta corriente (rojo si falta cliente, ámbar si está OK).
+        - Promociones disponibles como botones chips.
+        - Puntos de fidelización (si hay cliente + programa activo).
+        - Sección colapsable "Descuento, notas y pago QR" (Collapsible de Radix) — F4 toggles.
+        - Totales: subtotal, promo, descuento manual, puntos, impuesto, recargo.
+        - Total grande + botón "Cobrar $X" (height 48px, indigo, con icono Zap).
+- Reemplazado el `Sheet` de confirmación por un `Dialog` compacto (max-w-md):
+    - Muestra resumen de totales, método, cliente.
+    - Botones Cancelar / Confirmar venta.
+    - Se abre al hacer click en "Cobrar" o presionar F9.
+- Funcionalidades robustas añadidas:
+    1. **Debounce de búsqueda** (180ms) — no filtra en cada keystroke.
+    2. **Navegación por teclado**: ↑↓ mueve selección en resultados, Enter agrega (exact match barcode/SKU → 1 resultado → selección actual), Esc limpia.
+    3. **Atajos globales**: F2 enfoca búsqueda, F4 toggle opciones avanzadas, F9 cobrar.
+    4. **Productos recientes**: tracking de últimos 12 productos agregados (dedup), muestra 10 cuando no hay búsqueda.
+    5. **Cap de resultados**: máx 24 en búsqueda, 60 en "ver todos" → evita renderizar miles de nodos.
+    6. **Match exacto por barcode/SKU** (scanner): si el término matchea exacto, agrega directo y limpia.
+    7. **Sub-componentes `ProductRow` y `CartRow`** extraídos fuera del componente principal para evitar re-creación en cada render.
+    8. **Empty states** informativos: carrito vacío con instrucciones, búsqueda sin resultados con sugerencias.
+    9. **Botón cobrar deshabilitado** con mensaje contextual si no se puede cobrar (falta cliente para cuenta corriente, falta método de pago).
+    10. **Estado `canCheckout`** derivado que valida condiciones antes de habilitar el botón.
+- Conservado: Sheet de recibo post-venta (diferente concern), Dialog de QR Mercado Pago, toda la lógica de promociones/puntos/fidelización/cuenta corriente.
+- Build: `bun run build` → "Compiled successfully" sin errores ni warnings.
+- Server reiniciado: kill todos los procesos bun, copia fresh de `.next/static` + `public` a standalone, `setsid bash scripts/start-server.sh`. Server corriendo en PID 2711, HTTP 200, title correcto, sin errores en log.
+
+Stage Summary:
+- POS completamente rediseñado en una sola pestaña: productos (izquierda, 40%) + carrito+checkout (derecha, 60%).
+- Eliminada la ventana lateral (Sheet) de checkout — ahora todo está inline en el panel derecho.
+- Eliminada la lista infinita de productos — ahora solo aparecen al buscar (con debounce) o al toggle "Ver todos" (cap 60).
+- Añadidas funcionalidades robustas: debounce, navegación por teclado, atajos globales (F2/F4/F9), productos recientes, cap de resultados, match exacto de barcode.
+- Archivo modificado: `src/components/views/pos-view.tsx` (rewrite completo, ~1100 líneas).
+- Build OK, server OK, listo para que el usuario pruebe.

@@ -1,0 +1,1364 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useEffect, useState, useMemo, useCallback } from "react";
+     4→     4→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+     5→     5→import { Button } from "@/components/ui/button";
+     6→     6→import { Input } from "@/components/ui/input";
+     7→     7→import { Label } from "@/components/ui/label";
+     8→     8→import { Badge } from "@/components/ui/badge";
+     9→     9→import {
+    10→    10→  Select,
+    11→    11→  SelectContent,
+    12→    12→  SelectItem,
+    13→    13→  SelectTrigger,
+    14→    14→  SelectValue,
+    15→    15→} from "@/components/ui/select";
+    16→    16→import {
+    17→    17→  Sheet,
+    18→    18→  SheetContent,
+    19→    19→  SheetDescription,
+    20→    20→  SheetFooter,
+    21→    21→  SheetHeader,
+    22→    22→  SheetTitle,
+    23→    23→} from "@/components/ui/sheet";
+    24→    24→import { toast } from "sonner";
+    25→    25→import {
+    26→    26→  Search,
+    27→    27→  ShoppingCart,
+    28→    28→  Trash2,
+    29→    29→  Plus,
+    30→    30→  Minus,
+    31→    31→  Barcode,
+    32→    32→  Loader2,
+    33→    33→  CheckCircle2,
+    34→    34→  Printer,
+    35→    35→  X,
+    36→    36→  QrCode,
+    37→    37→  Star,
+    38→    38→} from "lucide-react";
+    39→    39→import { useAppStore } from "@/store/app-store";
+    40→    40→import { formatCurrency, unitLabel } from "@/lib/constants";
+    41→    41→import { calculateMaxRedeemablePoints, pointsToCurrency } from "@/lib/loyalty";
+    42→    42→import { safeFetchJSON } from "@/lib/fetch";
+    43→    43→import {
+    44→    44→  Dialog,
+    45→    45→  DialogContent,
+    46→    46→  DialogDescription,
+    47→    47→  DialogHeader,
+    48→    48→  DialogTitle,
+    49→    49→} from "@/components/ui/dialog";
+    50→    50→
+    51→    51→interface Product {
+    52→    52→  id: string;
+    53→    53→  name: string;
+    54→    54→  barcode?: string;
+    55→    55→  sku?: string;
+    56→    56→  salePrice: number;
+    57→    57→  stock: number;
+    58→    58→  unit: string;
+    59→    59→  active: boolean;
+    60→    60→  category?: { id: string; name: string };
+    61→    61→  categoryId?: string;
+    62→    62→  brand?: string;
+    63→    63→  labels?: string;
+    64→    64→  allergens?: string;
+    65→    65→  ingredients?: string;
+    66→    66→  imageUrl?: string;
+    67→    67→}
+    68→    68→
+    69→    69→interface CartItem {
+    70→    70→  product: Product;
+    71→    71→  qty: number;
+    72→    72→}
+    73→    73→
+    74→    74→interface Customer {
+    75→    75→  id: string;
+    76→    76→  name: string;
+    77→    77→  phone?: string;
+    78→    78→  loyaltyPoints?: number;
+    79→    79→  loyaltyTier?: string;
+    80→    80→  totalSpent?: number;
+    81→    81→}
+    82→    82→
+    83→    83→interface Branch {
+    84→    84→  id: string;
+    85→    85→  name: string;
+    86→    86→  code: string;
+    87→    87→  isMain: boolean;
+    88→    88→  active: boolean;
+    89→    89→}
+    90→    90→
+    91→    91→interface AppliedPromotion {
+    92→    92→  promotionId: string;
+    93→    93→  promotionName: string;
+    94→    94→  type: string;
+    95→    95→  discountAmount: number;
+    96→    96→  description: string;
+    97→    97→}
+    98→    98→
+    99→    99→interface PaymentMethod {
+   100→   100→  id: string;
+   101→   101→  name: string;
+   102→   102→  type: string;
+   103→   103→  surcharge: number;
+   104→   104→  active: boolean;
+   105→   105→  isDefault: boolean;
+   106→   106→}
+   107→   107→
+   108→   108→export function PosView() {
+   109→   109→  const { store, user } = useAppStore();
+   110→   110→  const [products, setProducts] = useState<Product[]>([]);
+   111→   111→  const [categories, setCategories] = useState<any[]>([]);
+   112→   112→  const [customers, setCustomers] = useState<Customer[]>([]);
+   113→   113→  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+   114→   114→  const [branches, setBranches] = useState<Branch[]>([]);
+   115→   115→  const [branchId, setBranchId] = useState<string>("");
+   116→   116→  const [loyaltyProgram, setLoyaltyProgram] = useState<any>(null);
+   117→   117→  const [loading, setLoading] = useState(true);
+   118→   118→  const [search, setSearch] = useState("");
+   119→   119→  const [filterCat, setFilterCat] = useState("all");
+   120→   120→  const [cart, setCart] = useState<CartItem[]>([]);
+   121→   121→  const [customerId, setCustomerId] = useState<string>("");
+   122→   122→  const [discount, setDiscount] = useState(0);
+   123→   123→  const [paymentMethodId, setPaymentMethodId] = useState<string>("");
+   124→   124→  const [notes, setNotes] = useState("");
+   125→   125→  const [checkoutOpen, setCheckoutOpen] = useState(false);
+   126→   126→  const [processing, setProcessing] = useState(false);
+   127→   127→  const [lastSale, setLastSale] = useState<any>(null);
+   128→   128→  const [receiptOpen, setReceiptOpen] = useState(false);
+   129→   129→  // Mercado Pago QR
+   130→   130→  const [mpConfig, setMpConfig] = useState<any>(null);
+   131→   131→  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+   132→   132→  const [qrData, setQrData] = useState<any>(null);
+   133→   133→  const [qrLoading, setQrLoading] = useState(false);
+   134→   134→  const [qrPolling, setQrPolling] = useState(false);
+   135→   135→  // Promociones
+   136→   136→  const [appliedPromotion, setAppliedPromotion] = useState<AppliedPromotion | null>(null);
+   137→   137→  const [availablePromotions, setAvailablePromotions] = useState<AppliedPromotion[]>([]);
+   138→   138→  // Puntos de fidelización
+   139→   139→  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+   140→   140→
+   141→   141→  const symbol = store?.currencySymbol || "$";
+   142→   142→  const taxEnabled = store?.taxEnabled;
+   143→   143→  const taxRate = store?.taxRate || 0;
+   144→   144→  const isCajero = user?.role === "CAJERO";
+   145→   145→
+   146→   146→  useEffect(() => {
+   147→   147→    // Carga inicial: usamos safeFetchJSON para no romper si algún endpoint
+   148→   148→    // devuelve un cuerpo vacío o HTML (típico de errores 500 no manejados).
+   149→   149→    Promise.all([
+   150→   150→      safeFetchJSON<Product[]>("/api/products"),
+   151→   151→      safeFetchJSON<Category[]>("/api/categories"),
+   152→   152→      safeFetchJSON<Customer[]>("/api/customers"),
+   153→   153→      safeFetchJSON<PaymentMethod[]>("/api/payment-methods"),
+   154→   154→      safeFetchJSON<any>("/api/mercadopago/config"),
+   155→   155→      safeFetchJSON<Branch[]>("/api/branches"),
+   156→   156→      safeFetchJSON<any>("/api/loyalty"),
+   157→   157→    ])
+   158→   158→      .then(([pRes, cRes, custRes, pmRes, mpRes, brsRes, loyRes]) => {
+   159→   159→        const p = Array.isArray(pRes.data) ? pRes.data : [];
+   160→   160→        const c = Array.isArray(cRes.data) ? cRes.data : [];
+   161→   161→        const cust = Array.isArray(custRes.data) ? custRes.data : [];
+   162→   162→        const pm = Array.isArray(pmRes.data) ? pmRes.data : [];
+   163→   163→        const brs = Array.isArray(brsRes.data) ? brsRes.data : [];
+   164→   164→        setProducts(p.filter((x: Product) => x.active));
+   165→   165→        setCategories(c);
+   166→   166→        setCustomers(cust);
+   167→   167→        const activePM = pm.filter((m: PaymentMethod) => m.active);
+   168→   168→        setPaymentMethods(activePM);
+   169→   169→        const def = activePM.find((m) => m.isDefault) || activePM[0];
+   170→   170→        if (def) setPaymentMethodId(def.id);
+   171→   171→        setMpConfig(mpRes.data);
+   172→   172→        setBranches(brs);
+   173→   173→        // Seleccionar sucursal principal por defecto
+   174→   174→        const main = brs.find((b: Branch) => b.isMain && b.active);
+   175→   175→        if (main) setBranchId(main.id);
+   176→   176→        setLoyaltyProgram(loyRes.data);
+   177→   177→        setLoading(false);
+   178→   178→      })
+   179→   179→      .catch(() => {
+   180→   180→        toast.error("No se pudieron cargar los datos del POS");
+   181→   181→        setLoading(false);
+   182→   182→      });
+   183→   183→  }, []);
+   184→   184→
+   185→   185→  const selectedCustomer = customers.find((c) => c.id === customerId);
+   186→   186→
+   187→   187→  const filtered = useMemo(() => {
+   188→   188→    return products.filter((p) => {
+   189→   189→      const matchSearch =
+   190→   190→        !search ||
+   191→   191→        p.name.toLowerCase().includes(search.toLowerCase()) ||
+   192→   192→        p.barcode?.includes(search);
+   193→   193→      const matchCat = filterCat === "all" || p.categoryId === filterCat;
+   194→   194→      return matchSearch && matchCat;
+   195→   195→    });
+   196→   196→  }, [products, search, filterCat]);
+   197→   197→
+   198→   198→  const addToCart = useCallback((product: Product) => {
+   199→   199→    setCart((prev) => {
+   200→   200→      const existing = prev.find((i) => i.product.id === product.id);
+   201→   201→      if (existing) {
+   202→   202→        if (existing.qty >= product.stock) {
+   203→   203→          toast.error(`Stock máximo alcanzado para ${product.name}`);
+   204→   204→          return prev;
+   205→   205→        }
+   206→   206→        return prev.map((i) =>
+   207→   207→          i.product.id === product.id ? { ...i, qty: i.qty + 1 } : i
+   208→   208→        );
+   209→   209→      }
+   210→   210→      if (product.stock <= 0) {
+   211→   211→        toast.error(`${product.name} sin stock`);
+   212→   212→        return prev;
+   213→   213→      }
+   214→   214→      return [...prev, { product, qty: 1 }];
+   215→   215→    });
+   216→   216→  }, []);
+   217→   217→
+   218→   218→  // Atajo: Enter en el buscador
+   219→   219→  // 1. Si el texto matchea exacto el barcode/SKU de un producto, lo agrega directo (scanner)
+   220→   220→  // 2. Si solo hay 1 resultado filtrado, lo agrega
+   221→   221→  function handleSearchEnter(e: React.KeyboardEvent) {
+   222→   222→    if (e.key !== "Enter") return;
+   223→   223→    const term = search.trim();
+   224→   224→    if (!term) return;
+   225→   225→    // Match exacto por barcode o SKU
+   226→   226→    const exact = products.find(
+   227→   227→      (p) => p.barcode === term || (p.sku && p.sku.toLowerCase() === term.toLowerCase())
+   228→   228→    );
+   229→   229→    if (exact) {
+   230→   230→      addToCart(exact);
+   231→   231→      setSearch("");
+   232→   232→      return;
+   233→   233→    }
+   234→   234→    // Un solo resultado filtrado → agregar
+   235→   235→    if (filtered.length === 1) {
+   236→   236→      addToCart(filtered[0]);
+   237→   237→      setSearch("");
+   238→   238→    }
+   239→   239→  }
+   240→   240→
+   241→   241→  function updateQty(productId: string, delta: number) {
+   242→   242→    setCart((prev) =>
+   243→   243→      prev
+   244→   244→        .map((i) => {
+   245→   245→          if (i.product.id !== productId) return i;
+   246→   246→          const nextQty = i.qty + delta;
+   247→   247→          if (nextQty > i.product.stock) {
+   248→   248→            toast.error(`Solo hay ${i.product.stock} ${unitLabel(i.product.unit).toLowerCase()}s disponibles`);
+   249→   249→            return i;
+   250→   250→          }
+   251→   251→          return { ...i, qty: nextQty };
+   252→   252→        })
+   253→   253→        .filter((i) => i.qty > 0)
+   254→   254→    );
+   255→   255→  }
+   256→   256→
+   257→   257→  function setQty(productId: string, qty: number) {
+   258→   258→    setCart((prev) =>
+   259→   259→      prev
+   260→   260→        .map((i) =>
+   261→   261→          i.product.id === productId
+   262→   262→            ? { ...i, qty: Math.max(0, Math.min(qty, i.product.stock)) }
+   263→   263→            : i
+   264→   264→        )
+   265→   265→        .filter((i) => i.qty > 0)
+   266→   266→    );
+   267→   267→  }
+   268→   268→
+   269→   269→  function removeItem(productId: string) {
+   270→   270→    setCart((prev) => prev.filter((i) => i.product.id !== productId));
+   271→   271→  }
+   272→   272→
+   273→   273→  function clearCart() {
+   274→   274→    setCart([]);
+   275→   275→    setCustomerId("");
+   276→   276→    setDiscount(0);
+   277→   277→    setNotes("");
+   278→   278→  }
+   279→   279→
+   280→   280→  const subtotal = cart.reduce((s, i) => s + i.product.salePrice * i.qty, 0);
+   281→   281→
+   282→   282→  // Promoción aplicada (descuento automático)
+   283→   283→  const promotionDiscount = appliedPromotion?.discountAmount || 0;
+   284→   284→  // Puntos a canjear (validar máximo permitido)
+   285→   285→  const maxRedeemablePoints =
+   286→   286→    selectedCustomer && loyaltyProgram?.enabled
+   287→   287→      ? calculateMaxRedeemablePoints(
+   288→   288→          selectedCustomer.loyaltyPoints || 0,
+   289→   289→          subtotal - promotionDiscount,
+   290→   290→          {
+   291→   291→            ...loyaltyProgram,
+   292→   292→            enabled: true,
+   293→   293→            roundMode: loyaltyProgram.roundMode as any,
+   294→   294→          }
+   295→   295→        )
+   296→   296→      : 0;
+   297→   297→  const effectivePointsToRedeem = Math.min(pointsToRedeem, maxRedeemablePoints);
+   298→   298→  const pointsCurrencyDiscount =
+   299→   299→    effectivePointsToRedeem > 0 && loyaltyProgram?.enabled
+   300→   300→      ? pointsToCurrency(effectivePointsToRedeem, {
+   301→   301→          ...loyaltyProgram,
+   302→   302→          enabled: true,
+   303→   303→          roundMode: loyaltyProgram.roundMode as any,
+   304→   304→        })
+   305→   305→      : 0;
+   306→   306→
+   307→   307→  const manualDiscount = Math.min(discount, subtotal);
+   308→   308→  const totalDiscount = manualDiscount + promotionDiscount + pointsCurrencyDiscount;
+   309→   309→  const taxable = Math.max(0, subtotal - totalDiscount);
+   310→   310→  const taxAmount = taxEnabled ? taxable * (taxRate / 100) : 0;
+   311→   311→  const selectedMethod = paymentMethods.find((m) => m.id === paymentMethodId);
+   312→   312→  const surchargeRate = selectedMethod?.surcharge || 0;
+   313→   313→  const surchargeAmount = (taxable + taxAmount) * (surchargeRate / 100);
+   314→   314→  const total = taxable + taxAmount + surchargeAmount;
+   315→   315→
+   316→   316→  // Evaluar promociones disponibles (al cambiar carrito)
+   317→   317→  useEffect(() => {
+   318→   318→    if (cart.length === 0) {
+   319→   319→      setAvailablePromotions([]);
+   320→   320→      setAppliedPromotion(null);
+   321→   321→      return;
+   322→   322→    }
+   323→   323→    let cancelled = false;
+   324→   324→    fetch("/api/promotions/evaluate", {
+   325→   325→      method: "POST",
+   326→   326→      headers: { "Content-Type": "application/json" },
+   327→   327→      body: JSON.stringify({
+   328→   328→        items: cart.map((i) => ({
+   329→   329→          productId: i.product.id,
+   330→   330→          categoryId: i.product.categoryId || null,
+   331→   331→          name: i.product.name,
+   332→   332→          quantity: i.qty,
+   333→   333→          unitPrice: i.product.salePrice,
+   334→   334→        })),
+   335→   335→      }),
+   336→   336→    })
+   337→   337→      .then((r) => r.json())
+   338→   338→      .then((data) => {
+   339→   339→        if (cancelled) return;
+   340→   340→        setAvailablePromotions(data.applicable || []);
+   341→   341→        // Auto-aplicar la mejor
+   342→   342→        if (data.best && !appliedPromotion) {
+   343→   343→          setAppliedPromotion(data.best);
+   344→   344→        } else if (!data.best) {
+   345→   345→          setAppliedPromotion(null);
+   346→   346→        }
+   347→   347→      })
+   348→   348→      .catch(() => {});
+   349→   349→    return () => {
+   350→   350→      cancelled = true;
+   351→   351→    };
+   352→   352→  }, [cart]);
+   353→   353→
+   354→   354→  // Resetear puntos a canjear si cambia el cliente
+   355→   355→  useEffect(() => {
+   356→   356→    setPointsToRedeem(0);
+   357→   357→  }, [customerId]);
+   358→   358→
+   359→   359→  async function printThermalSale() {
+   360→   360→    if (!lastSale?.id) return;
+   361→   361→    try {
+   362→   362→      const printRes = await safeFetchJSON<any>("/api/print", {
+   363→   363→        method: "POST",
+   364→   364→        body: JSON.stringify({ type: "TICKET", saleId: lastSale.id }),
+   365→   365→      });
+   366→   366→      if (!printRes.ok) throw new Error(printRes.error);
+   367→   367→
+   368→   368→      // Descargar binario .bin que se puede enviar a impresora USB
+   369→   369→      const blobRes = await fetch("/api/print", {
+   370→   370→        method: "POST",
+   371→   371→        headers: { "Content-Type": "application/json" },
+   372→   372→        body: JSON.stringify({
+   373→   373→          type: "TICKET",
+   374→   374→          saleId: lastSale.id,
+   375→   375→          returnFormat: "blob",
+   376→   376→        }),
+   377→   377→      });
+   378→   378→      if (!blobRes.ok) {
+   379→   379→        throw new Error("No se pudo generar el archivo del ticket");
+   380→   380→      }
+   381→   381→      const blob = await blobRes.blob();
+   382→   382→      const url = URL.createObjectURL(blob);
+   383→   383→      const a = document.createElement("a");
+   384→   384→      a.href = url;
+   385→   385→      a.download = `ticket-${lastSale.id.slice(-6)}.bin`;
+   386→   386→      document.body.appendChild(a);
+   387→   387→      a.click();
+   388→   388→      document.body.removeChild(a);
+   389→   389→      URL.revokeObjectURL(url);
+   390→   390→
+   391→   391→      toast.success("Ticket generado (archivo .bin)");
+   392→   392→    } catch (e: any) {
+   393→   393→      toast.error("Error al imprimir", { description: e.message });
+   394→   394→    }
+   395→   395→  }
+   396→   396→
+   397→   397→  async function processSale() {
+   398→   398→    if (cart.length === 0) {
+   399→   399→      toast.error("El carrito está vacío");
+   400→   400→      return;
+   401→   401→    }
+   402→   402→    if (!paymentMethodId) {
+   403→   403→      toast.error("Seleccioná un método de pago");
+   404→   404→      return;
+   405→   405→    }
+   406→   406→    if (selectedMethod?.type === "CUENTA" && !customerId) {
+   407→   407→      toast.error("Para cuenta corriente tenés que seleccionar un cliente");
+   408→   408→      return;
+   409→   409→    }
+   410→   410→    setProcessing(true);
+   411→   411→    try {
+   412→   412→      const saleRes = await safeFetchJSON<any>("/api/sales", {
+   413→   413→        method: "POST",
+   414→   414→        body: JSON.stringify({
+   415→   415→          items: cart.map((i) => ({
+   416→   416→            productId: i.product.id,
+   417→   417→            quantity: i.qty,
+   418→   418→          })),
+   419→   419→          customerId: customerId || null,
+   420→   420→          discount: manualDiscount,
+   421→   421→          paymentMethodId,
+   422→   422→          notes,
+   423→   423→          taxRate: taxEnabled ? taxRate : 0,
+   424→   424→          branchId: branchId || null,
+   425→   425→          promotionId: appliedPromotion?.promotionId || null,
+   426→   426→          promotionDiscount: appliedPromotion?.discountAmount || 0,
+   427→   427→          loyaltyPointsUsed: effectivePointsToRedeem || 0,
+   428→   428→        }),
+   429→   429→      });
+   430→   430→      if (!saleRes.ok || !saleRes.data) {
+   431→   431→        throw new Error(saleRes.error || "No se pudo registrar la venta");
+   432→   432→      }
+   433→   433→      const data = saleRes.data;
+   434→   434→      toast.success("Venta registrada!");
+   435→   435→      setLastSale({
+   436→   436→        ...data,
+   437→   437→        items: cart,
+   438→   438→        customer: customers.find((c) => c.id === customerId),
+   439→   439→        paymentMethod: selectedMethod,
+   440→   440→        discount: totalDiscount,
+   441→   441→        tax: taxAmount,
+   442→   442→        surcharge: surchargeAmount,
+   443→   443→        total,
+   444→   444→        subtotal,
+   445→   445→        appliedPromotion,
+   446→   446→        pointsUsed: effectivePointsToRedeem,
+   447→   447→        pointsEarned: data.loyaltyPointsEarned || 0,
+   448→   448→      });
+   449→   449→      setCheckoutOpen(false);
+   450→   450→      setReceiptOpen(true);
+   451→   451→      clearCart();
+   452→   452→      setAppliedPromotion(null);
+   453→   453→      setPointsToRedeem(0);
+   454→   454→      // Refrescar stock y clientes en paralelo, sin romper si fallan
+   455→   455→      // (la venta ya se registró, no queremos que el cajero vea un error
+   456→   456→      // acá y crea que la venta no se hizo).
+   457→   457→      try {
+   458→   458→        const [refreshedRes, refreshedCustRes] = await Promise.all([
+   459→   459→          safeFetchJSON<Product[]>("/api/products"),
+   460→   460→          safeFetchJSON<Customer[]>("/api/customers"),
+   461→   461→        ]);
+   462→   462→        const refreshed = Array.isArray(refreshedRes.data) ? refreshedRes.data : [];
+   463→   463→        setProducts(refreshed.filter((x: Product) => x.active));
+   464→   464→        if (Array.isArray(refreshedCustRes.data)) {
+   465→   465→          setCustomers(refreshedCustRes.data);
+   466→   466→        }
+   467→   467→      } catch {
+   468→   468→        // Silencioso: el refresh es best-effort.
+   469→   469→      }
+   470→   470→    } catch (e: any) {
+   471→   471→      toast.error(e.message);
+   472→   472→    } finally {
+   473→   473→      setProcessing(false);
+   474→   474→    }
+   475→   475→  }
+   476→   476→
+   477→   477→  return (
+   478→   478→    <div className="space-y-4 h-full">
+   479→   479→      <div className="flex items-end justify-between flex-wrap gap-3">
+   480→   480→        <div>
+   481→   481→          <h1 className="text-2xl font-bold tracking-tight">Punto de Venta</h1>
+   482→   482→          <p className="text-sm text-muted-foreground">
+   483→   483→            Buscá productos, agregalos al carrito y registrá la venta
+   484→   484→          </p>
+   485→   485→        </div>
+   486→   486→        {branches.length > 1 && (
+   487→   487→          <div className="flex items-center gap-2">
+   488→   488→            <Label className="text-xs text-muted-foreground">Sucursal:</Label>
+   489→   489→            <Select value={branchId} onValueChange={setBranchId}>
+   490→   490→              <SelectTrigger className="w-48 h-9">
+   491→   491→                <SelectValue />
+   492→   492→              </SelectTrigger>
+   493→   493→              <SelectContent>
+   494→   494→                {branches
+   495→   495→                  .filter((b) => b.active)
+   496→   496→                  .map((b) => (
+   497→   497→                    <SelectItem key={b.id} value={b.id}>
+   498→   498→                      <span className="inline-flex items-center gap-1.5">
+   499→   499→                        {b.isMain && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+   500→   500→                        {b.name} ({b.code})
+   501→   501→                      </span>
+   502→   502→                    </SelectItem>
+   503→   503→                  ))}
+   504→   504→              </SelectContent>
+   505→   505→            </Select>
+   506→   506→          </div>
+   507→   507→        )}
+   508→   508→      </div>
+   509→   509→
+   510→   510→      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+   511→   511→        {/* Productos - 3 cols */}
+   512→   512→        <div className="lg:col-span-3 space-y-3">
+   513→   513→          <Card>
+   514→   514→            <CardContent className="p-3 space-y-2">
+   515→   515→              <div className="relative">
+   516→   516→                <Barcode className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   517→   517→                <Input
+   518→   518→                  placeholder="Escanear código o buscar producto..."
+   519→   519→                  value={search}
+   520→   520→                  onChange={(e) => setSearch(e.target.value)}
+   521→   521→                  onKeyDown={handleSearchEnter}
+   522→   522→                  className="pl-9 h-11 text-base"
+   523→   523→                  autoFocus
+   524→   524→                />
+   525→   525→              </div>
+   526→   526→              <div className="flex gap-2 overflow-x-auto pb-1">
+   527→   527→                <Button
+   528→   528→                  variant={filterCat === "all" ? "default" : "outline"}
+   529→   529→                  size="sm"
+   530→   530→                  onClick={() => setFilterCat("all")}
+   531→   531→                  className={
+   532→   532→                    filterCat === "all" ? "bg-indigo-600 hover:bg-indigo-700" : ""
+   533→   533→                  }
+   534→   534→                >
+   535→   535→                  Todos
+   536→   536→                </Button>
+   537→   537→                {categories.map((c) => (
+   538→   538→                  <Button
+   539→   539→                    key={c.id}
+   540→   540→                    variant={filterCat === c.id ? "default" : "outline"}
+   541→   541→                    size="sm"
+   542→   542→                    onClick={() => setFilterCat(c.id)}
+   543→   543→                    className={
+   544→   544→                      filterCat === c.id ? "bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap" : "whitespace-nowrap"
+   545→   545→                    }
+   546→   546→                  >
+   547→   547→                    {c.name}
+   548→   548→                  </Button>
+   549→   549→                ))}
+   550→   550→              </div>
+   551→   551→            </CardContent>
+   552→   552→          </Card>
+   553→   553→
+   554→   554→          {loading ? (
+   555→   555→            <div className="p-12 text-center">
+   556→   556→              <Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600" />
+   557→   557→            </div>
+   558→   558→          ) : (
+   559→   559→            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto pr-1">
+   560→   560→              {filtered.map((p) => {
+   561→   561→                const labels = p.labels
+   562→   562→                  ? p.labels.split(",").map((s) => s.trim()).filter(Boolean)
+   563→   563→                  : [];
+   564→   564→                const allergens = p.allergens
+   565→   565→                  ? p.allergens.split(",").map((s) => s.trim()).filter(Boolean)
+   566→   566→                  : [];
+   567→   567→                return (
+   568→   568→                <button
+   569→   569→                  key={p.id}
+   570→   570→                  onClick={() => addToCart(p)}
+   571→   571→                  disabled={p.stock <= 0}
+   572→   572→                  className="group text-left p-3 rounded-lg border border-indigo-100 bg-white hover:border-indigo-400 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+   573→   573→                >
+   574→   574→                  {p.imageUrl && (
+   575→   575→                    // eslint-disable-next-line @next/next/no-img-element
+   576→   576→                    <img
+   577→   577→                      src={p.imageUrl}
+   578→   578→                      alt=""
+   579→   579→                      className="w-full h-16 object-cover rounded-md mb-2 bg-muted"
+   580→   580→                      onError={(e) => {
+   581→   581→                        (e.currentTarget as HTMLImageElement).style.display = "none";
+   582→   582→                      }}
+   583→   583→                    />
+   584→   584→                  )}
+   585→   585→                  <p className="text-sm font-medium line-clamp-2 min-h-[2.5rem]">
+   586→   586→                    {p.name}
+   587→   587→                  </p>
+   588→   588→                  <p className="text-sm font-bold text-indigo-700 mt-1">
+   589→   589→                    {formatCurrency(p.salePrice, symbol)}
+   590→   590→                  </p>
+   591→   591→                  <p
+   592→   592→                    className={`text-xs mt-0.5 ${
+   593→   593→                      p.stock <= 0
+   594→   594→                        ? "text-red-600"
+   595→   595→                        : p.stock <= 5
+   596→   596→                        ? "text-amber-600"
+   597→   597→                        : "text-muted-foreground"
+   598→   598→                    }`}
+   599→   599→                  >
+   600→   600→                    {p.stock <= 0
+   601→   601→                      ? "Sin stock"
+   602→   602→                      : `${p.stock} ${p.unit === "KG" ? "kg" : "u"}`}
+   603→   603→                  </p>
+   604→   604→                  {(labels.length > 0 || allergens.length > 0) && (
+   605→   605→                    <div className="flex flex-wrap gap-0.5 mt-1.5">
+   606→   606→                      {labels.slice(0, 2).map((l) => (
+   607→   607→                        <span
+   608→   608→                          key={`l-${l}`}
+   609→   609→                          className="text-[9px] py-0 px-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200"
+   610→   610→                        >
+   611→   611→                          {l}
+   612→   612→                        </span>
+   613→   613→                      ))}
+   614→   614→                      {allergens.slice(0, 2).map((a) => (
+   615→   615→                        <span
+   616→   616→                          key={`a-${a}`}
+   617→   617→                          className="text-[9px] py-0 px-1 rounded bg-red-50 text-red-700 border border-red-200"
+   618→   618→                        >
+   619→   619→                          ⚠ {a}
+   620→   620→                        </span>
+   621→   621→                      ))}
+   622→   622→                    </div>
+   623→   623→                  )}
+   624→   624→                </button>
+   625→   625→                );
+   626→   626→              })}
+   627→   627→              {filtered.length === 0 && (
+   628→   628→                <div className="col-span-full p-8 text-center text-muted-foreground">
+   629→   629→                  <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+   630→   630→                  <p className="text-sm">No se encontraron productos</p>
+   631→   631→                </div>
+   632→   632→              )}
+   633→   633→            </div>
+   634→   634→          )}
+   635→   635→        </div>
+   636→   636→
+   637→   637→        {/* Carrito - 2 cols */}
+   638→   638→        <div className="lg:col-span-2">
+   639→   639→          <Card className="sticky top-20">
+   640→   640→            <CardHeader className="pb-3">
+   641→   641→              <div className="flex items-center justify-between">
+   642→   642→                <CardTitle className="text-base flex items-center gap-2">
+   643→   643→                  <ShoppingCart className="w-4 h-4" />
+   644→   644→                  Carrito ({cart.length})
+   645→   645→                </CardTitle>
+   646→   646→                {cart.length > 0 && (
+   647→   647→                  <Button variant="ghost" size="sm" onClick={clearCart}>
+   648→   648→                    Vaciar
+   649→   649→                  </Button>
+   650→   650→                )}
+   651→   651→              </div>
+   652→   652→            </CardHeader>
+   653→   653→            <CardContent className="space-y-3">
+   654→   654→              {cart.length === 0 ? (
+   655→   655→                <div className="py-12 text-center text-muted-foreground">
+   656→   656→                  <ShoppingCart className="w-10 h-10 mx-auto opacity-30 mb-2" />
+   657→   657→                  <p className="text-sm">Agregá productos al carrito</p>
+   658→   658→                </div>
+   659→   659→              ) : (
+   660→   660→                <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+   661→   661→                  {cart.map((i) => {
+   662→   662→                    const labels = i.product.labels
+   663→   663→                      ? i.product.labels.split(",").map((s) => s.trim()).filter(Boolean)
+   664→   664→                      : [];
+   665→   665→                    const allergens = i.product.allergens
+   666→   666→                      ? i.product.allergens.split(",").map((s) => s.trim()).filter(Boolean)
+   667→   667→                      : [];
+   668→   668→                    return (
+   669→   669→                    <div
+   670→   670→                      key={i.product.id}
+   671→   671→                      className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+   672→   672→                    >
+   673→   673→                      <div className="flex-1 min-w-0">
+   674→   674→                        <p className="text-sm font-medium truncate">{i.product.name}</p>
+   675→   675→                        <p className="text-xs text-muted-foreground">
+   676→   676→                          {formatCurrency(i.product.salePrice, symbol)} ·{" "}
+   677→   677→                          {i.product.unit === "KG" ? "kg" : "u"}
+   678→   678→                          {i.product.brand && ` · ${i.product.brand}`}
+   679→   679→                        </p>
+   680→   680→                        {(labels.length > 0 || allergens.length > 0) && (
+   681→   681→                          <div className="flex flex-wrap gap-1 mt-1">
+   682→   682→                            {labels.slice(0, 3).map((l) => (
+   683→   683→                              <Badge
+   684→   684→                                key={`l-${l}`}
+   685→   685→                                variant="outline"
+   686→   686→                                className="text-[10px] py-0 px-1.5 h-4 bg-indigo-50 text-indigo-700 border-indigo-200"
+   687→   687→                              >
+   688→   688→                                {l}
+   689→   689→                              </Badge>
+   690→   690→                            ))}
+   691→   691→                            {allergens.slice(0, 3).map((a) => (
+   692→   692→                              <Badge
+   693→   693→                                key={`a-${a}`}
+   694→   694→                                variant="outline"
+   695→   695→                                className="text-[10px] py-0 px-1.5 h-4 bg-red-50 text-red-700 border-red-200"
+   696→   696→                              >
+   697→   697→                                ⚠ {a}
+   698→   698→                              </Badge>
+   699→   699→                            ))}
+   700→   700→                          </div>
+   701→   701→                        )}
+   702→   702→                      </div>
+   703→   703→                      <div className="flex items-center gap-1">
+   704→   704→                        <Button
+   705→   705→                          variant="outline"
+   706→   706→                          size="icon"
+   707→   707→                          className="h-7 w-7"
+   708→   708→                          onClick={() => updateQty(i.product.id, -1)}
+   709→   709→                        >
+   710→   710→                          <Minus className="w-3 h-3" />
+   711→   711→                        </Button>
+   712→   712→                        <Input
+   713→   713→                          type="number"
+   714→   714→                          value={i.qty}
+   715→   715→                          onChange={(e) =>
+   716→   716→                            setQty(i.product.id, Number(e.target.value))
+   717→   717→                          }
+   718→   718→                          className="h-7 w-12 text-center px-1"
+   719→   719→                        />
+   720→   720→                        <Button
+   721→   721→                          variant="outline"
+   722→   722→                          size="icon"
+   723→   723→                          className="h-7 w-7"
+   724→   724→                          onClick={() => updateQty(i.product.id, 1)}
+   725→   725→                        >
+   726→   726→                          <Plus className="w-3 h-3" />
+   727→   727→                        </Button>
+   728→   728→                        <Button
+   729→   729→                          variant="ghost"
+   730→   730→                          size="icon"
+   731→   731→                          className="h-7 w-7 text-red-600"
+   732→   732→                          onClick={() => removeItem(i.product.id)}
+   733→   733→                        >
+   734→   734→                          <X className="w-3 h-3" />
+   735→   735→                        </Button>
+   736→   736→                      </div>
+   737→   737→                      <p className="text-sm font-semibold w-20 text-right">
+   738→   738→                        {formatCurrency(i.product.salePrice * i.qty, symbol)}
+   739→   739→                      </p>
+   740→   740→                    </div>
+   741→   741→                    );
+   742→   742→                  })}
+   743→   743→                </div>
+   744→   744→              )}
+   745→   745→
+   746→   746→              {cart.length > 0 && (
+   747→   747→                <div className="space-y-2 pt-3 border-t">
+   748→   748→                  <div className="flex justify-between text-sm">
+   749→   749→                    <span className="text-muted-foreground">Subtotal</span>
+   750→   750→                    <span>{formatCurrency(subtotal, symbol)}</span>
+   751→   751→                  </div>
+   752→   752→                  {/* Promociones disponibles */}
+   753→   753→                  {availablePromotions.length > 0 && (
+   754→   754→                    <div className="space-y-1">
+   755→   755→                      <p className="text-xs text-muted-foreground">Promociones</p>
+   756→   756→                      <div className="flex flex-wrap gap-1">
+   757→   757→                        {availablePromotions.map((p) => (
+   758→   758→                          <button
+   759→   759→                            key={p.promotionId}
+   760→   760→                            onClick={() =>
+   761→   761→                              setAppliedPromotion(
+   762→   762→                                appliedPromotion?.promotionId === p.promotionId
+   763→   763→                                  ? null
+   764→   764→                                  : p
+   765→   765→                              )
+   766→   766→                            }
+   767→   767→                            className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+   768→   768→                              appliedPromotion?.promotionId === p.promotionId
+   769→   769→                                ? "bg-indigo-600 text-white border-indigo-600"
+   770→   770→                                : "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+   771→   771→                            }`}
+   772→   772→                          >
+   773→   773→                            {p.promotionName} · −{formatCurrency(p.discountAmount, symbol)}
+   774→   774→                          </button>
+   775→   775→                        ))}
+   776→   776→                      </div>
+   777→   777→                    </div>
+   778→   778→                  )}
+   779→   779→                  {promotionDiscount > 0 && (
+   780→   780→                    <div className="flex justify-between text-sm text-indigo-700">
+   781→   781→                      <span>Promo aplicada</span>
+   782→   782→                      <span>−{formatCurrency(promotionDiscount, symbol)}</span>
+   783→   783→                    </div>
+   784→   784→                  )}
+   785→   785→                  <div className="flex justify-between text-sm items-center">
+   786→   786→                    <span className="text-muted-foreground">Descuento manual</span>
+   787→   787→                    <Input
+   788→   788→                      type="number"
+   789→   789→                      value={discount || ""}
+   790→   790→                      placeholder="0"
+   791→   791→                      onChange={(e) => setDiscount(Number(e.target.value))}
+   792→   792→                      className="h-7 w-24 text-right"
+   793→   793→                    />
+   794→   794→                  </div>
+   795→   795→                  {/* Puntos de fidelización */}
+   796→   796→                  {loyaltyProgram?.enabled && selectedCustomer && (
+   797→   797→                    <div className="rounded-md border border-purple-200 bg-purple-50 p-2 space-y-1">
+   798→   798→                      <div className="flex justify-between text-xs">
+   799→   799→                        <span className="text-purple-700">
+   800→   800→                          Puntos disponibles ({selectedCustomer.loyaltyTier || "BRONCE"})
+   801→   801→                        </span>
+   802→   802→                        <span className="font-medium text-purple-800">
+   803→   803→                          {Math.floor(selectedCustomer.loyaltyPoints || 0)}
+   804→   804→                        </span>
+   805→   805→                      </div>
+   806→   806→                      <div className="flex items-center gap-2">
+   807→   807→                        <Input
+   808→   808→                          type="number"
+   809→   809→                          min={0}
+   810→   810→                          max={maxRedeemablePoints}
+   811→   811→                          value={pointsToRedeem || ""}
+   812→   812→                          onChange={(e) =>
+   813→   813→                            setPointsToRedeem(
+   814→   814→                              Math.min(
+   815→   815→                                maxRedeemablePoints,
+   816→   816→                                Math.max(0, Number(e.target.value) || 0)
+   817→   817→                              )
+   818→   818→                            )
+   819→   819→                          }
+   820→   820→                          placeholder="0"
+   821→   821→                          className="h-7 w-24 text-right"
+   822→   822→                        />
+   823→   823→                        <span className="text-xs text-purple-700">
+   824→   824→                          = −{formatCurrency(pointsCurrencyDiscount, symbol)}
+   825→   825→                        </span>
+   826→   826→                        <Button
+   827→   827→                          type="button"
+   828→   828→                          size="sm"
+   829→   829→                          variant="outline"
+   830→   830→                          className="h-7 ml-auto"
+   831→   831→                          onClick={() => setPointsToRedeem(maxRedeemablePoints)}
+   832→   832→                        >
+   833→   833→                          Máx
+   834→   834→                        </Button>
+   835→   835→                      </div>
+   836→   836→                    </div>
+   837→   837→                  )}
+   838→   838→                  {taxEnabled && taxRate > 0 && (
+   839→   839→                    <div className="flex justify-between text-sm">
+   840→   840→                      <span className="text-muted-foreground">
+   841→   841→                        Impuesto ({taxRate}%)
+   842→   842→                      </span>
+   843→   843→                      <span>{formatCurrency(taxAmount, symbol)}</span>
+   844→   844→                    </div>
+   845→   845→                  )}
+   846→   846→                  {surchargeAmount > 0 && (
+   847→   847→                    <div className="flex justify-between text-sm text-amber-700">
+   848→   848→                      <span>
+   849→   849→                        Recargo {selectedMethod?.name} ({surchargeRate}%)
+   850→   850→                      </span>
+   851→   851→                      <span>+{formatCurrency(surchargeAmount, symbol)}</span>
+   852→   852→                    </div>
+   853→   853→                  )}
+   854→   854→                  <div className="flex justify-between text-lg font-bold pt-2 border-t">
+   855→   855→                    <span>Total</span>
+   856→   856→                    <span className="text-indigo-700">
+   857→   857→                      {formatCurrency(total, symbol)}
+   858→   858→                    </span>
+   859→   859→                  </div>
+   860→   860→
+   861→   861→                  <Button
+   862→   862→                    className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 text-base"
+   863→   863→                    onClick={() => setCheckoutOpen(true)}
+   864→   864→                  >
+   865→   865→                    Cobrar {formatCurrency(total, symbol)}
+   866→   866→                  </Button>
+   867→   867→                </div>
+   868→   868→              )}
+   869→   869→            </CardContent>
+   870→   870→          </Card>
+   871→   871→        </div>
+   872→   872→      </div>
+   873→   873→
+   874→   874→      {/* Checkout sheet */}
+   875→   875→      <Sheet open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+   876→   876→        <SheetContent className="sm:max-w-md overflow-y-auto">
+   877→   877→          <SheetHeader>
+   878→   878→            <SheetTitle>Confirmar venta</SheetTitle>
+   879→   879→            <SheetDescription>
+   880→   880→              Revisá los detalles y registrá la venta
+   881→   881→            </SheetDescription>
+   882→   882→          </SheetHeader>
+   883→   883→
+   884→   884→          <div className="space-y-4 py-4">
+   885→   885→            <div className="space-y-2">
+   886→   886→              <Label>Cliente {selectedMethod?.type === "CUENTA" && "*"}</Label>
+   887→   887→              <Select
+   888→   888→                value={customerId || "none"}
+   889→   889→                onValueChange={(v) =>
+   890→   890→                  setCustomerId(v === "none" ? "" : v)
+   891→   891→                }
+   892→   892→              >
+   893→   893→                <SelectTrigger>
+   894→   894→                  <SelectValue placeholder="Cliente mostrador" />
+   895→   895→                </SelectTrigger>
+   896→   896→                <SelectContent>
+   897→   897→                  <SelectItem value="none">Cliente mostrador</SelectItem>
+   898→   898→                  {customers.map((c) => (
+   899→   899→                    <SelectItem key={c.id} value={c.id}>
+   900→   900→                      {c.name} {c.phone && `(${c.phone})`}
+   901→   901→                    </SelectItem>
+   902→   902→                  ))}
+   903→   903→                </SelectContent>
+   904→   904→              </Select>
+   905→   905→              {selectedMethod?.type === "CUENTA" && !customerId && (
+   906→   906→                <p className="text-xs text-red-600">
+   907→   907→                  Para vender en cuenta corriente tenés que seleccionar un cliente.
+   908→   908→                </p>
+   909→   909→              )}
+   910→   910→              {selectedMethod?.type === "CUENTA" && customerId && (
+   911→   911→                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+   912→   912→                  Esta venta se registrará en la <strong>cuenta corriente</strong> de
+   913→   913→                  este cliente. El saldo se podrá saldar desde Clientes → Cuenta.
+   914→   914→                </p>
+   915→   915→              )}
+   916→   916→            </div>
+   917→   917→
+   918→   918→            <div className="space-y-2">
+   919→   919→              <div className="flex items-center justify-between">
+   920→   920→                <Label>Método de pago</Label>
+   921→   921→                {mpConfig?.active && mpConfig?.qrEnabled && (
+   922→   922→                  <Button
+   923→   923→                    type="button"
+   924→   924→                    variant="outline"
+   925→   925→                    size="sm"
+   926→   926→                    onClick={() => setQrDialogOpen(true)}
+   927→   927→                    className="text-xs h-7"
+   928→   928→                  >
+   929→   929→                    <QrCode className="w-3 h-3 mr-1" />
+   930→   930→                    Pago QR (MP)
+   931→   931→                  </Button>
+   932→   932→                )}
+   933→   933→              </div>
+   934→   934→              <Select
+   935→   935→                value={paymentMethodId}
+   936→   936→                onValueChange={setPaymentMethodId}
+   937→   937→              >
+   938→   938→                <SelectTrigger>
+   939→   939→                  <SelectValue placeholder="Seleccionar método..." />
+   940→   940→                </SelectTrigger>
+   941→   941→                <SelectContent>
+   942→   942→                  {paymentMethods.map((m) => (
+   943→   943→                    <SelectItem key={m.id} value={m.id}>
+   944→   944→                      {m.name}
+   945→   945→                      {m.surcharge > 0 && ` (+${m.surcharge}%)`}
+   946→   946→                      {m.isDefault && " · predeterminado"}
+   947→   947→                    </SelectItem>
+   948→   948→                  ))}
+   949→   949→                </SelectContent>
+   950→   950→              </Select>
+   951→   951→              {paymentMethods.length === 0 && (
+   952→   952→                <p className="text-xs text-amber-600">
+   953→   953→                  No hay métodos de pago configurados. Pedile al admin que los
+   954→   954→                  cargue en Configuración.
+   955→   955→                </p>
+   956→   956→              )}
+   957→   957→            </div>
+   958→   958→
+   959→   959→            {/* Dialog de Pago QR Mercado Pago */}
+   960→   960→            <Dialog open={qrDialogOpen} onOpenChange={(v) => {
+   961→   961→              setQrDialogOpen(v);
+   962→   962→              if (!v) {
+   963→   963→                setQrData(null);
+   964→   964→                setQrPolling(false);
+   965→   965→              }
+   966→   966→            }}>
+   967→   967→              <DialogContent>
+   968→   968→                <DialogHeader>
+   969→   969→                  <DialogTitle className="flex items-center gap-2">
+   970→   970→                    <QrCode className="w-5 h-5 text-blue-600" />
+   971→   971→                    Pago con QR - Mercado Pago
+   972→   972→                  </DialogTitle>
+   973→   973→                  <DialogDescription>
+   974→   974→                    Generá un código QR para que el cliente pague escaneando con su app.
+   975→   975→                  </DialogDescription>
+   976→   976→                </DialogHeader>
+   977→   977→
+   978→   978→                <div className="space-y-3 py-2">
+   979→   979→                  <div className="bg-muted/50 rounded-md p-3 text-center">
+   980→   980→                    <p className="text-xs text-muted-foreground">Total a cobrar</p>
+   981→   981→                    <p className="text-2xl font-bold text-indigo-700">
+   982→   982→                      {formatCurrency(total, symbol)}
+   983→   983→                    </p>
+   984→   984→                  </div>
+   985→   985→
+   986→   986→                  {!qrData && (
+   987→   987→                    <Button
+   988→   988→                      onClick={async () => {
+   989→   989→                        setQrLoading(true);
+   990→   990→                        try {
+   991→   991→                          // 1. Crear la venta primero (sin cobrar todavía)
+   992→   992→                          const saleResponse = await safeFetchJSON<any>(
+   993→   993→                            "/api/sales",
+   994→   994→                            {
+   995→   995→                              method: "POST",
+   996→   996→                              body: JSON.stringify({
+   997→   997→                                items: cart.map((i) => ({
+   998→   998→                                  productId: i.product.id,
+   999→   999→                                  quantity: i.qty,
+  1000→  1000→                                })),
+  1001→  1001→                                customerId: customerId || null,
+  1002→  1002→                                discount: manualDiscount,
+  1003→  1003→                                paymentMethodId,
+  1004→  1004→                                notes,
+  1005→  1005→                                taxRate: taxEnabled ? taxRate : 0,
+  1006→  1006→                                branchId: branchId || null,
+  1007→  1007→                                promotionId: appliedPromotion?.promotionId || null,
+  1008→  1008→                                promotionDiscount: appliedPromotion?.discountAmount || 0,
+  1009→  1009→                                loyaltyPointsUsed: effectivePointsToRedeem || 0,
+  1010→  1010→                              }),
+  1011→  1011→                            }
+  1012→  1012→                          );
+  1013→  1013→                          if (!saleResponse.ok || !saleResponse.data) {
+  1014→  1014→                            throw new Error(
+  1015→  1015→                              saleResponse.error || "No se pudo crear la venta"
+  1016→  1016→                            );
+  1017→  1017→                          }
+  1018→  1018→                          const saleData = saleResponse.data;
+  1019→  1019→
+  1020→  1020→                          // 2. Crear orden QR en Mercado Pago
+  1021→  1021→                          const qrResponse = await safeFetchJSON<any>(
+  1022→  1022→                            "/api/mercadopago/create-order",
+  1023→  1023→                            {
+  1024→  1024→                              method: "POST",
+  1025→  1025→                              body: JSON.stringify({
+  1026→  1026→                                saleId: saleData.id,
+  1027→  1027→                                amount: total,
+  1028→  1028→                                description: `Compra ${store?.name || ""} #${saleData.id.slice(-6).toUpperCase()}`,
+  1029→  1029→                                externalReference: saleData.id,
+  1030→  1030→                              }),
+  1031→  1031→                            }
+  1032→  1032→                          );
+  1033→  1033→                          if (!qrResponse.ok || !qrResponse.data) {
+  1034→  1034→                            throw new Error(
+  1035→  1035→                              qrResponse.error || "No se pudo generar el QR"
+  1036→  1036→                            );
+  1037→  1037→                          }
+  1038→  1038→                          setQrData({ ...qrResponse.data, saleId: saleData.id });
+  1039→  1039→                        } catch (e: any) {
+  1040→  1040→                          toast.error("Error al generar QR", {
+  1041→  1041→                            description: e.message,
+  1042→  1042→                          });
+  1043→  1043→                        } finally {
+  1044→  1044→                          setQrLoading(false);
+  1045→  1045→                        }
+  1046→  1046→                      }}
+  1047→  1047→                      disabled={qrLoading || cart.length === 0}
+  1048→  1048→                      className="w-full bg-blue-600 hover:bg-blue-700"
+  1049→  1049→                    >
+  1050→  1050→                      {qrLoading ? (
+  1051→  1051→                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+  1052→  1052→                      ) : (
+  1053→  1053→                        <QrCode className="w-4 h-4 mr-2" />
+  1054→  1054→                      )}
+  1055→  1055→                      Generar QR de pago
+  1056→  1056→                    </Button>
+  1057→  1057→                  )}
+  1058→  1058→
+  1059→  1059→                  {qrData && (
+  1060→  1060→                    <>
+  1061→  1061→                      <div className="flex flex-col items-center gap-2">
+  1062→  1062→                        {qrData.qrImageUrl && (
+  1063→  1063→                          <img
+  1064→  1064→                            src={qrData.qrImageUrl}
+  1065→  1065→                            alt="QR de pago"
+  1066→  1066→                            className="w-64 h-64 border rounded-lg"
+  1067→  1067→                          />
+  1068→  1068→                        )}
+  1069→  1069→                        <p className="text-xs text-muted-foreground text-center">
+  1070→  1070→                          Pedile al cliente que escanee este QR con su app de Mercado Pago
+  1071→  1071→                        </p>
+  1072→  1072→                        {qrData.qrCode && (
+  1073→  1073→                          <details className="w-full">
+  1074→  1074→                            <summary className="text-xs cursor-pointer text-muted-foreground">
+  1075→  1075→                              Ver código copia y pega
+  1076→  1076→                            </summary>
+  1077→  1077→                            <Input
+  1078→  1078→                              readOnly
+  1079→  1079→                              value={qrData.qrCode}
+  1080→  1080→                              className="mt-1 text-xs font-mono"
+  1081→  1081→                              onClick={(e) => (e.target as HTMLInputElement).select()}
+  1082→  1082→                            />
+  1083→  1083→                          </details>
+  1084→  1084→                        )}
+  1085→  1085→                      </div>
+  1086→  1086→
+  1087→  1087→                      <div className="flex gap-2">
+  1088→  1088→                        <Button
+  1089→  1089→                          variant="outline"
+  1090→  1090→                          className="flex-1"
+  1091→  1091→                          disabled={qrPolling}
+  1092→  1092→                          onClick={async () => {
+  1093→  1093→                            setQrPolling(true);
+  1094→  1094→                            try {
+  1095→  1095→                              const statusRes = await safeFetchJSON<any>(
+  1096→  1096→                                `/api/mercadopago/status?id=${qrData.paymentId}`
+  1097→  1097→                              );
+  1098→  1098→                              if (!statusRes.ok || !statusRes.data) {
+  1099→  1099→                                throw new Error(
+  1100→  1100→                                  statusRes.error || "No se pudo consultar el estado del pago"
+  1101→  1101→                                );
+  1102→  1102→                              }
+  1103→  1103→                              const data = statusRes.data;
+  1104→  1104→                              if (data.status === "APPROVED") {
+  1105→  1105→                                toast.success("Pago aprobado!");
+  1106→  1106→                                setLastSale({
+  1107→  1107→                                  id: qrData.saleId,
+  1108→  1108→                                  createdAt: new Date().toISOString(),
+  1109→  1109→                                  items: cart,
+  1110→  1110→                                  customer: customers.find((c) => c.id === customerId),
+  1111→  1111→                                  paymentMethod: { name: "Mercado Pago QR" },
+  1112→  1112→                                  discount: totalDiscount,
+  1113→  1113→                                  tax: taxAmount,
+  1114→  1114→                                  surcharge: surchargeAmount,
+  1115→  1115→                                  total,
+  1116→  1116→                                  subtotal,
+  1117→  1117→                                  appliedPromotion,
+  1118→  1118→                                  pointsUsed: effectivePointsToRedeem,
+  1119→  1119→                                });
+  1120→  1120→                                setQrDialogOpen(false);
+  1121→  1121→                                setCheckoutOpen(false);
+  1122→  1122→                                setReceiptOpen(true);
+  1123→  1123→                                clearCart();
+  1124→  1124→                                setQrData(null);
+  1125→  1125→                                try {
+  1126→  1126→                                  const refreshedRes = await safeFetchJSON<Product[]>(
+  1127→  1127→                                    "/api/products"
+  1128→  1128→                                  );
+  1129→  1129→                                  const refreshed = Array.isArray(refreshedRes.data)
+  1130→  1130→                                    ? refreshedRes.data
+  1131→  1131→                                    : [];
+  1132→  1132→                                  setProducts(refreshed.filter((x: Product) => x.active));
+  1133→  1133→                                } catch {
+  1134→  1134→                                  // best-effort
+  1135→  1135→                                }
+  1136→  1136→                              } else if (data.status === "REJECTED" || data.status === "CANCELLED") {
+  1137→  1137→                                toast.error(`Pago ${data.status.toLowerCase()}`);
+  1138→  1138→                              } else {
+  1139→  1139→                                toast.info(`Estado: ${data.status || "PENDIENTE"}`);
+  1140→  1140→                              }
+  1141→  1141→                            } catch (e: any) {
+  1142→  1142→                              toast.error("Error al consultar el pago", {
+  1143→  1143→                                description: e.message,
+  1144→  1144→                              });
+  1145→  1145→                            } finally {
+  1146→  1146→                              setQrPolling(false);
+  1147→  1147→                            }
+  1148→  1148→                          }}
+  1149→  1149→                        >
+  1150→  1150→                          {qrPolling ? (
+  1151→  1151→                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+  1152→  1152→                          ) : (
+  1153→  1153→                            <CheckCircle2 className="w-4 h-4 mr-2" />
+  1154→  1154→                          )}
+  1155→  1155→                          Verificar pago
+  1156→  1156→                        </Button>
+  1157→  1157→                        <Button
+  1158→  1158→                          variant="outline"
+  1159→  1159→                          onClick={() => {
+  1160→  1160→                            setQrData(null);
+  1161→  1161→                          }}
+  1162→  1162→                        >
+  1163→  1163→                          Cancelar
+  1164→  1164→                        </Button>
+  1165→  1165→                      </div>
+  1166→  1166→                      <p className="text-xs text-muted-foreground text-center">
+  1167→  1167→                        El pago se confirma automáticamente cuando se acredite.
+  1168→  1168→                        También podés verificar manualmente.
+  1169→  1169→                      </p>
+  1170→  1170→                    </>
+  1171→  1171→                  )}
+  1172→  1172→                </div>
+  1173→  1173→              </DialogContent>
+  1174→  1174→            </Dialog>
+  1175→  1175→
+  1176→  1176→            <div className="space-y-2">
+  1177→  1177→              <Label>Notas (opcional)</Label>
+  1178→  1178→              <Input
+  1179→  1179→                value={notes}
+  1180→  1180→                onChange={(e) => setNotes(e.target.value)}
+  1181→  1181→                placeholder="Ej: Entrega parcial, pedido especial..."
+  1182→  1182→              />
+  1183→  1183→            </div>
+  1184→  1184→
+  1185→  1185→            <div className="p-3 rounded-md bg-muted/50 space-y-1 text-sm">
+  1186→  1186→              <div className="flex justify-between">
+  1187→  1187→                <span className="text-muted-foreground">Subtotal</span>
+  1188→  1188→                <span>{formatCurrency(subtotal, symbol)}</span>
+  1189→  1189→              </div>
+  1190→  1190→              {totalDiscount > 0 && (
+  1191→  1191→                <div className="flex justify-between">
+  1192→  1192→                  <span className="text-muted-foreground">Descuento</span>
+  1193→  1193→                  <span>-{formatCurrency(totalDiscount, symbol)}</span>
+  1194→  1194→                </div>
+  1195→  1195→              )}
+  1196→  1196→              {taxAmount > 0 && (
+  1197→  1197→                <div className="flex justify-between">
+  1198→  1198→                  <span className="text-muted-foreground">
+  1199→  1199→                    Impuesto ({taxRate}%)
+  1200→  1200→                  </span>
+  1201→  1201→                  <span>{formatCurrency(taxAmount, symbol)}</span>
+  1202→  1202→                </div>
+  1203→  1203→              )}
+  1204→  1204→              {surchargeAmount > 0 && (
+  1205→  1205→                <div className="flex justify-between text-amber-700">
+  1206→  1206→                  <span>
+  1207→  1207→                    Recargo {selectedMethod?.name} ({surchargeRate}%)
+  1208→  1208→                  </span>
+  1209→  1209→                  <span>+{formatCurrency(surchargeAmount, symbol)}</span>
+  1210→  1210→                </div>
+  1211→  1211→              )}
+  1212→  1212→              <div className="flex justify-between text-base font-bold pt-1 border-t">
+  1213→  1213→                <span>Total</span>
+  1214→  1214→                <span className="text-indigo-700">
+  1215→  1215→                  {formatCurrency(total, symbol)}
+  1216→  1216→                </span>
+  1217→  1217→              </div>
+  1218→  1218→            </div>
+  1219→  1219→          </div>
+  1220→  1220→
+  1221→  1221→          <SheetFooter>
+  1222→  1222→            <Button
+  1223→  1223→              variant="outline"
+  1224→  1224→              onClick={() => setCheckoutOpen(false)}
+  1225→  1225→            >
+  1226→  1226→              Cancelar
+  1227→  1227→            </Button>
+  1228→  1228→            <Button
+  1229→  1229→              onClick={processSale}
+  1230→  1230→              disabled={processing}
+  1231→  1231→              className="bg-indigo-600 hover:bg-indigo-700"
+  1232→  1232→            >
+  1233→  1233→              {processing ? (
+  1234→  1234→                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+  1235→  1235→              ) : (
+  1236→  1236→                <CheckCircle2 className="w-4 h-4 mr-2" />
+  1237→  1237→              )}
+  1238→  1238→              Confirmar venta
+  1239→  1239→            </Button>
+  1240→  1240→          </SheetFooter>
+  1241→  1241→        </SheetContent>
+  1242→  1242→      </Sheet>
+  1243→  1243→
+  1244→  1244→      {/* Receipt sheet */}
+  1245→  1245→      <Sheet open={receiptOpen} onOpenChange={setReceiptOpen}>
+  1246→  1246→        <SheetContent className="sm:max-w-md overflow-y-auto">
+  1247→  1247→          <SheetHeader>
+  1248→  1248→            <div className="flex items-center gap-2">
+  1249→  1249→              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+  1250→  1250→                <CheckCircle2 className="w-6 h-6 text-indigo-600" />
+  1251→  1251→              </div>
+  1252→  1252→              <div>
+  1253→  1253→                <SheetTitle>¡Venta registrada!</SheetTitle>
+  1254→  1254→                <SheetDescription>
+  1255→  1255→                  Comprobante #{lastSale?.id?.slice(-6).toUpperCase()}
+  1256→  1256→                </SheetDescription>
+  1257→  1257→              </div>
+  1258→  1258→            </div>
+  1259→  1259→          </SheetHeader>
+  1260→  1260→
+  1261→  1261→          {lastSale && (
+  1262→  1262→            <div className="py-4 space-y-3">
+  1263→  1263→              <div className="text-center pb-3 border-b">
+  1264→  1264→                <p className="font-semibold">{store?.name}</p>
+  1265→  1265→                {store?.address && (
+  1266→  1266→                  <p className="text-xs text-muted-foreground">{store.address}</p>
+  1267→  1267→                )}
+  1268→  1268→                {store?.phone && (
+  1269→  1269→                  <p className="text-xs text-muted-foreground">Tel: {store.phone}</p>
+  1270→  1270→                )}
+  1271→  1271→                <p className="text-xs text-muted-foreground mt-1">
+  1272→  1272→                  {new Date(lastSale.createdAt).toLocaleString("es-AR")}
+  1273→  1273→                </p>
+  1274→  1274→              </div>
+  1275→  1275→
+  1276→  1276→              {lastSale.customer && (
+  1277→  1277→                <p className="text-sm">
+  1278→  1278→                  Cliente: <strong>{lastSale.customer.name}</strong>
+  1279→  1279→                </p>
+  1280→  1280→              )}
+  1281→  1281→
+  1282→  1282→              <div className="space-y-1">
+  1283→  1283→                {lastSale.items.map((i: CartItem) => (
+  1284→  1284→                  <div key={i.product.id} className="flex justify-between text-sm">
+  1285→  1285→                    <span>
+  1286→  1286→                      {i.qty} x {i.product.name}
+  1287→  1287→                    </span>
+  1288→  1288→                    <span>{formatCurrency(i.product.salePrice * i.qty, symbol)}</span>
+  1289→  1289→                  </div>
+  1290→  1290→                ))}
+  1291→  1291→              </div>
+  1292→  1292→
+  1293→  1293→              <div className="border-t pt-2 space-y-1 text-sm">
+  1294→  1294→                <div className="flex justify-between">
+  1295→  1295→                  <span>Subtotal</span>
+  1296→  1296→                  <span>{formatCurrency(lastSale.subtotal, symbol)}</span>
+  1297→  1297→                </div>
+  1298→  1298→                {lastSale.discount > 0 && (
+  1299→  1299→                  <div className="flex justify-between">
+  1300→  1300→                    <span>Descuento</span>
+  1301→  1301→                    <span>-{formatCurrency(lastSale.discount, symbol)}</span>
+  1302→  1302→                  </div>
+  1303→  1303→                )}
+  1304→  1304→                {lastSale.tax > 0 && (
+  1305→  1305→                  <div className="flex justify-between">
+  1306→  1306→                    <span>Impuesto</span>
+  1307→  1307→                    <span>{formatCurrency(lastSale.tax, symbol)}</span>
+  1308→  1308→                  </div>
+  1309→  1309→                )}
+  1310→  1310→                {lastSale.surcharge > 0 && (
+  1311→  1311→                  <div className="flex justify-between text-amber-700">
+  1312→  1312→                    <span>
+  1313→  1313→                      Recargo {lastSale.paymentMethod?.name}
+  1314→  1314→                      {lastSale.paymentMethod?.surcharge
+  1315→  1315→                        ? ` (${lastSale.paymentMethod.surcharge}%)`
+  1316→  1316→                        : ""}
+  1317→  1317→                    </span>
+  1318→  1318→                    <span>+{formatCurrency(lastSale.surcharge, symbol)}</span>
+  1319→  1319→                  </div>
+  1320→  1320→                )}
+  1321→  1321→                <div className="flex justify-between font-bold text-base pt-1 border-t">
+  1322→  1322→                  <span>TOTAL</span>
+  1323→  1323→                  <span>{formatCurrency(lastSale.total, symbol)}</span>
+  1324→  1324→                </div>
+  1325→  1325→                <p className="text-xs text-muted-foreground pt-1">
+  1326→  1326→                  Pagado con: {lastSale.paymentMethod?.name || "—"}
+  1327→  1327→                </p>
+  1328→  1328→              </div>
+  1329→  1329→            </div>
+  1330→  1330→          )}
+  1331→  1331→
+  1332→  1332→          <SheetFooter className="flex-col gap-2">
+  1333→  1333→            <div className="flex gap-2 w-full">
+  1334→  1334→              <Button
+  1335→  1335→                variant="outline"
+  1336→  1336→                className="flex-1"
+  1337→  1337→                onClick={() => window.print()}
+  1338→  1338→              >
+  1339→  1339→                <Printer className="w-4 h-4 mr-2" />
+  1340→  1340→                Imprimir
+  1341→  1341→              </Button>
+  1342→  1342→              <Button
+  1343→  1343→                variant="outline"
+  1344→  1344→                className="flex-1"
+  1345→  1345→                onClick={printThermalSale}
+  1346→  1346→                title="Genera un archivo .bin con comandos ESC/POS para impresora térmica"
+  1347→  1347→              >
+  1348→  1348→                <Printer className="w-4 h-4 mr-2" />
+  1349→  1349→                Térmica
+  1350→  1350→              </Button>
+  1351→  1351→            </div>
+  1352→  1352→            <Button
+  1353→  1353→              className="w-full bg-indigo-600 hover:bg-indigo-700"
+  1354→  1354→              onClick={() => setReceiptOpen(false)}
+  1355→  1355→            >
+  1356→  1356→              Nueva venta
+  1357→  1357→            </Button>
+  1358→  1358→          </SheetFooter>
+  1359→  1359→        </SheetContent>
+  1360→  1360→      </Sheet>
+  1361→  1361→    </div>
+  1362→  1362→  );
+  1363→  1363→}
+  1364→  1364→
