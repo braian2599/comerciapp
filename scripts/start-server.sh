@@ -15,11 +15,18 @@ echo "NEXTAUTH_SECRET is set (length: ${#NEXTAUTH_SECRET})"
 echo "DATABASE_URL: $DATABASE_URL"
 
 # Copy static assets to standalone (Next.js doesn't include them in standalone)
-if [ -d ".next/static" ] && [ ! -d ".next/standalone/.next/static" ]; then
+# IMPORTANT: clean first to avoid stale chunks from previous builds
+if [ -d ".next/standalone/.next/static" ]; then
+  rm -rf .next/standalone/.next/static
+fi
+if [ -d ".next/standalone/public" ]; then
+  rm -rf .next/standalone/public
+fi
+if [ -d ".next/static" ]; then
   cp -r .next/static .next/standalone/.next/static
   echo "Copied .next/static to standalone"
 fi
-if [ -d "public" ] && [ ! -d ".next/standalone/public" ]; then
+if [ -d "public" ]; then
   cp -r public .next/standalone/public
   echo "Copied public to standalone"
 fi
