@@ -536,7 +536,7 @@ export function CustomersView() {
 
       {/* Diálogo cuenta corriente */}
       <Dialog open={accountOpen} onOpenChange={setAccountOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ReceiptText className="w-5 h-5 text-indigo-600" />
@@ -825,7 +825,7 @@ export function CustomersView() {
 
       {/* Diálogo puntos de fidelización */}
       <Dialog open={pointsOpen} onOpenChange={setPointsOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Award className="w-5 h-5 text-indigo-600" />

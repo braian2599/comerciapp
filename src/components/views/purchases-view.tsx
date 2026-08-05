@@ -534,7 +534,7 @@ export function PurchasesView() {
 
       {/* Diálogo nueva OC */}
       <Dialog open={ocOpen} onOpenChange={setOcOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nueva orden de compra</DialogTitle>
             <DialogDescription>
@@ -681,7 +681,7 @@ export function PurchasesView() {
 
       {/* Diálogo detalle orden */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               Orden {detailOrder?.orderNumber}

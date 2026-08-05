@@ -606,7 +606,7 @@ export function CommissionsView() {
 
       {/* Modal editar/crear regla */}
       <Dialog open={!!editingRule} onOpenChange={(o) => !o && setEditingRule(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingRule?.id ? "Editar regla de comisión" : "Nueva regla de comisión"}

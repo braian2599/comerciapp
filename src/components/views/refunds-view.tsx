@@ -350,7 +350,7 @@ export function RefundsView() {
 
       {/* Modal búsqueda de venta */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Buscar venta para devolver</DialogTitle>
             <DialogDescription>
@@ -423,7 +423,7 @@ export function RefundsView() {
 
       {/* Modal detalle de devolución */}
       <Dialog open={!!detailRefund} onOpenChange={(o) => !o && setDetailRefund(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Detalle de devolución {detailRefund?.refundNumber}</DialogTitle>
           </DialogHeader>
@@ -507,7 +507,7 @@ export function RefundsView() {
 
       {/* Modal nueva devolución */}
       <Dialog open={!!selectedSale} onOpenChange={(o) => !o && setSelectedSale(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Procesar devolución</DialogTitle>
             <DialogDescription>

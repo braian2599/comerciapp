@@ -303,7 +303,7 @@ export function PrintTemplatesView() {
 
       {/* Modal editar */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editing?.id ? "Editar plantilla" : "Nueva plantilla"}

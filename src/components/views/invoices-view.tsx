@@ -519,7 +519,7 @@ export function InvoicesView() {
 
       {/* Modal Detalle */}
       <Dialog open={openDetail} onOpenChange={setOpenDetail}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Detalle de Factura</DialogTitle>
             <DialogDescription>

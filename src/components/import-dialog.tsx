@@ -374,7 +374,7 @@ export function ImportDialog({
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5 text-indigo-600" />
@@ -546,7 +546,7 @@ export function ImportDialog({
                   return (
                     <div
                       key={field.key}
-                      className={`rounded-md border p-2.5 transition-colors ${
+                      className={`rounded-md border p-3 transition-colors ${
                         isMapped
                           ? "border-indigo-200 bg-indigo-50/30"
                           : field.required
@@ -554,12 +554,13 @@ export function ImportDialog({
                           : "border-border bg-background"
                       }`}
                     >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      {/* Fila 1: label + tipo + estado (sin truncate, permite wrap) */}
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           {field.required && (
-                            <span className="text-amber-600 text-xs">*</span>
+                            <span className="text-amber-600 text-sm font-bold">*</span>
                           )}
-                          <Label className="text-sm font-medium truncate">
+                          <Label className="text-sm font-medium">
                             {field.label}
                           </Label>
                           {field.type !== "text" && (
@@ -567,67 +568,67 @@ export function ImportDialog({
                               {field.type}
                             </Badge>
                           )}
-                          {field.hint && (
-                            <span className="text-[10px] text-muted-foreground hidden sm:inline">
-                              · {field.hint}
-                            </span>
-                          )}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isMapped ? (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs"
+                        {isMapped ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs shrink-0"
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                            {columnLabel(idx)}
+                          </Badge>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground italic shrink-0">
+                            sin mapear
+                          </span>
+                        )}
+                      </div>
+                      {/* Hint (siempre visible, no truncado) */}
+                      {field.hint && (
+                        <p className="text-[10px] text-muted-foreground mb-2">
+                          {field.hint}
+                        </p>
+                      )}
+                      {/* Fila 2: Select ancho */}
+                      <Select
+                        value={isMapped ? String(idx) : "none"}
+                        onValueChange={(v) =>
+                          setFieldMapping(
+                            field.key,
+                            v === "none" ? -1 : Number(v)
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-9 w-full text-sm">
+                          <SelectValue placeholder="Elegir columna del archivo…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">
+                            <span className="text-muted-foreground italic">
+                              — No mapear —
+                            </span>
+                          </SelectItem>
+                          {parsed.headers.map((h, i) => (
+                            <SelectItem
+                              key={i}
+                              value={String(i)}
+                              disabled={usedColumnIndices.includes(i)}
                             >
-                              <CheckCircle2 className="w-3 h-3 mr-0.5" />
-                              {columnLabel(idx)}
-                            </Badge>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground italic">
-                              sin mapear
-                            </span>
-                          )}
-                        </div>
-                        <Select
-                          value={isMapped ? String(idx) : "none"}
-                          onValueChange={(v) =>
-                            setFieldMapping(
-                              field.key,
-                              v === "none" ? -1 : Number(v)
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-48 text-xs">
-                            <SelectValue placeholder="Elegir columna…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">
-                              <span className="text-muted-foreground italic">
-                                — No mapear —
+                              <span className={usedColumnIndices.includes(i) ? "opacity-50" : ""}>
+                                {h || `(columna ${i + 1})`}
                               </span>
                             </SelectItem>
-                            {parsed.headers.map((h, i) => (
-                              <SelectItem
-                                key={i}
-                                value={String(i)}
-                                disabled={usedColumnIndices.includes(i)}
-                              >
-                                <span className={usedColumnIndices.includes(i) ? "opacity-50" : ""}>
-                                  {h || `(columna ${i + 1})`}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       {/* Sample values preview */}
                       {isMapped && samples.length > 0 && (
-                        <div className="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
                           <span className="shrink-0">Ejemplos:</span>
                           {samples.map((s, i) => (
                             <code
                               key={i}
-                              className="px-1 py-0.5 bg-muted rounded truncate max-w-[120px]"
+                              className="px-1.5 py-0.5 bg-muted rounded truncate max-w-[200px]"
                             >
                               {s}
                             </code>

@@ -336,7 +336,7 @@ export function SalesView() {
 
       {/* Detalle */}
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetContent className="sm:max-w-xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Detalle de venta</SheetTitle>
             <SheetDescription>

@@ -565,7 +565,7 @@ export function CashRegisterView() {
 
       {/* Diálogo cerrar caja (arqueo) */}
       <AlertDialog open={closeDlg} onOpenChange={setCloseDlg}>
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Cerrar caja - Arqueo</AlertDialogTitle>
             <AlertDialogDescription>

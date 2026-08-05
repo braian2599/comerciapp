@@ -900,3 +900,56 @@ Stage Summary:
 - Sin cambios en la lógica de commit (crear productos, stock movements, categorías, etc.) — comunicación entre módulos intacta.
 - Archivos modificados: `src/lib/import-config.ts` (nuevo), `src/app/api/products/import/route.ts`, `src/app/api/customers/import/route.ts`, `src/components/import-dialog.tsx`, `src/components/views/products-view.tsx`, `src/components/views/customers-view.tsx`.
 - Build OK, server OK, listo para probar.
+
+---
+Task ID: widen-all-dialogs
+Agent: main
+Task: Ampliar todas las ventanas emergentes (dialogs, sheets, drawers) porque los campos/datos no se ven. Solución robusta y profunda, no superficial.
+
+Work Log:
+- Analizado screenshot del usuario con VLM: confirmó que en el dialog "Importar productos" las etiquetas de campos se truncaban ("* Nor..." en vez de "Nombre del producto (obligatorio)", "Código c..." en vez de "Código [EAN/UPC] para escanear en POS", "Categ..." en vez de "Categoría"). El problema era layout interno (label + badge + select en una fila con Select fijo en w-48) + ancho total del dialog insuficiente.
+- Auditado TODOS los DialogContent/SheetContent/AlertDialogContent/DrawerContent del proyecto:
+    - Base UI components (dialog.tsx, sheet.tsx, alert-dialog.tsx, drawer.tsx): defaults demasiado chicos.
+    - 17 ubicaciones con widths explícitos en views.
+    - 6 views con DialogContent sin clase (usan default).
+
+- CAMBIOS EN BASE UI COMPONENTS (afectan a TODOS los dialogs/sheets del sistema):
+    - `src/components/ui/dialog.tsx`: default `sm:max-w-lg` (32rem) → `sm:max-w-2xl md:max-w-3xl` (42rem en sm, 48rem en md+). También `max-w-[calc(100%-2rem)]` → `max-w-[calc(100vw-2rem)]` para mejor soporte mobile.
+    - `src/components/ui/alert-dialog.tsx`: default `sm:max-w-lg` → `sm:max-w-xl` (36rem).
+    - `src/components/ui/sheet.tsx`: `sm:max-w-sm` (24rem) → `sm:max-w-lg md:max-w-xl lg:max-w-2xl` (responsive, hasta 42rem en desktop).
+    - `src/components/ui/drawer.tsx`: mismo cambio que sheet para direcciones left/right.
+
+- CAMBIOS EN VIEWS (widths explícitos ampliados):
+    - `pos-view.tsx`: Dialog confirmar `max-w-md` → `max-w-lg`; Sheet recibo `sm:max-w-md` → `sm:max-w-xl`.
+    - `sales-view.tsx`: Sheet detalle `sm:max-w-md` → `sm:max-w-xl`.
+    - `refunds-view.tsx`: 3 dialogs `max-w-2xl` → `max-w-3xl`, `max-w-3xl` → `max-w-4xl`.
+    - `purchases-view.tsx`: `max-w-2xl` → `max-w-3xl`, `max-w-xl` → `max-w-2xl`.
+    - `promotions-view.tsx`: `max-w-2xl` → `max-w-3xl`.
+    - `invoices-view.tsx`: `max-w-2xl` → `max-w-3xl`.
+    - `customers-view.tsx`: 2 dialogs `max-w-3xl` → `max-w-4xl`.
+    - `print-templates-view.tsx`: `sm:max-w-2xl` → `sm:max-w-3xl`.
+    - `commissions-view.tsx`: `sm:max-w-2xl` → `sm:max-w-3xl`.
+    - `cash-register-view.tsx`: AlertDialog `max-w-md` → `max-w-lg`.
+    - `products-view.tsx`: `sm:max-w-4xl` → `sm:max-w-5xl`.
+    - `import-dialog.tsx`: `max-w-4xl` → `max-w-5xl w-[95vw]`.
+
+- REDESIGN DEL LAYOUT DE MAPEO EN import-dialog.tsx (el problema específico del screenshot):
+    - Antes: cada campo era una fila horizontal con `flex items-center gap-2 flex-wrap` → Label (con `truncate`!) + Badge de tipo + hint + Badge de estado + Select fijo `w-48`. En pantallas chicas o con labels largos, todo se comprimía y el `truncate` cortaba el texto.
+    - Ahora: layout vertical en 2 filas:
+        - Fila 1: Label (SIN truncate, permite wrap natural) + Badge de tipo + Badge de estado (mapeada/sin mapear).
+        - Hint en línea separada, siempre visible (antes estaba hidden en sm).
+        - Fila 2: Select a `w-full` (ocupa todo el ancho del card).
+        - Sample values con `max-w-[200px]` (antes 120px).
+    - Padding aumentado de `p-2.5` a `p-3` para mejor respiración visual.
+    - Select height de `h-8` a `h-9`, text-xs a text-sm para mejor legibilidad.
+
+- Build: `bun run build` → "✓ Compiled successfully in 19.5s" sin errores ni warnings.
+- Server reiniciado: PID 2106, HTTP 200 en root y API.
+
+Stage Summary:
+- Solución profunda de 2 capas:
+    1. Base UI components con defaults más anchos → TODOS los dialogs/sheets del sistema ahora son más anchos por defecto, incluso los que no tenían clase explícita (settings-view, branches-view, expenses-view, inventory-view).
+    2. Widths explícitos en cada view ampliados al siguiente breakpoint.
+- Layout del paso de mapeo de ImportDialog rediseñado: labels ya NO se truncarán porque se eliminó `truncate` y el layout pasó de horizontal (todo en una fila) a vertical (label arriba, select abajo a full width).
+- 14 archivos modificados: dialog.tsx, alert-dialog.tsx, sheet.tsx, drawer.tsx (base), pos-view, sales-view, refunds-view, purchases-view, promotions-view, invoices-view, customers-view, print-templates-view, commissions-view, cash-register-view, products-view, import-dialog.
+- Build OK, server OK.

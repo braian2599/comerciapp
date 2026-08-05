@@ -1357,7 +1357,7 @@ export function PosView() {
 
       {/* ─── Dialog de confirmación (compacto, NO Sheet) ──────────────────────── */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-indigo-600" />
@@ -1672,7 +1672,7 @@ export function PosView() {
 
       {/* ─── Sheet de recibo (post-venta) ─────────────────────────────────────── */}
       <Sheet open={receiptOpen} onOpenChange={setReceiptOpen}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetContent className="sm:max-w-xl overflow-y-auto">
           <SheetHeader>
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">

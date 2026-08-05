@@ -420,7 +420,7 @@ export function PromotionsView() {
 
       {/* Modal alta/edición */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Editar promoción" : "Nueva promoción"}
