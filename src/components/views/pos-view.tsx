@@ -47,6 +47,9 @@ import {
   ChevronDown,
   Package,
   User,
+  AlertCircle,
+  Check,
+  Save,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
@@ -56,66 +59,19 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-interface Product {
-  id: string;
-  name: string;
-  barcode?: string;
-  sku?: string;
-  salePrice: number;
-  stock: number;
-  unit: string;
-  active: boolean;
-  category?: { id: string; name: string };
-  categoryId?: string;
-  brand?: string;
-  labels?: string;
-  allergens?: string;
-  ingredients?: string;
-  imageUrl?: string;
-}
-
-interface CartItem {
-  product: Product;
-  qty: number;
-}
-
-interface Customer {
-  id: string;
-  name: string;
-  phone?: string;
-  loyaltyPoints?: number;
-  loyaltyTier?: string;
-  totalSpent?: number;
-}
-
-interface Branch {
-  id: string;
-  name: string;
-  code: string;
-  isMain: boolean;
-  active: boolean;
-}
-
-interface AppliedPromotion {
-  promotionId: string;
-  promotionName: string;
-  type: string;
-  discountAmount: number;
-  description: string;
-}
-
-interface PaymentMethod {
-  id: string;
-  name: string;
-  type: string;
-  surcharge: number;
-  active: boolean;
-  isDefault: boolean;
-}
+import { usePersistentCart } from "@/hooks/use-persistent-cart";
+import type {
+  Product,
+  CartItem,
+  Customer,
+  Branch,
+  AppliedPromotion,
+  PaymentMethod,
+} from "@/lib/types";
 
 // ─── Sub-componentes de fila (memoizados fuera del render principal) ──────────
 
@@ -349,6 +305,41 @@ export function PosView() {
   const [lastSale, setLastSale] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
 
+  // ─── Persistencia del carrito (IndexedDB) ───────────────────────────────────
+  // El hook restaura el carrito guardado al montar y auto-guarda cambios.
+  // reconcileInfo se usa para mostrar un modal al usuario informando qué
+  // productos fueron ajustados (stock/precio cambiado) o quitados (ya no existen).
+  const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+  const cartPersistence = usePersistentCart({
+    storeId: store?.id,
+    userId: user?.id,
+    cart,
+    customerId,
+    discount,
+    paymentMethodId,
+    notes,
+    branchId,
+    products,
+    onRestore: (data) => {
+      setCart(data.items);
+      setCustomerId(data.customerId);
+      setDiscount(data.discount);
+      setPaymentMethodId(data.paymentMethodId);
+      setNotes(data.notes);
+      if (data.branchId) setBranchId(data.branchId);
+    },
+  });
+
+  // Mostrar modal de reconciliación cuando hay info y terminó de restaurar
+  useEffect(() => {
+    if (cartPersistence.reconcileInfo && !cartPersistence.isRestoring) {
+      const info = cartPersistence.reconcileInfo;
+      if (info.removedCount > 0 || info.adjustedCount > 0) {
+        setReconcileModalOpen(true);
+      }
+    }
+  }, [cartPersistence.reconcileInfo, cartPersistence.isRestoring]);
+
   // Mercado Pago QR
   const [mpConfig, setMpConfig] = useState<any>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
@@ -521,6 +512,8 @@ export function PosView() {
     setAppliedPromotion(null);
     setPointsToRedeem(0);
     setShowAdvanced(false);
+    // Limpiar el draft persistido (la venta se completó o el usuario vació el carrito)
+    cartPersistence.clearPersisted();
   }
 
   // ─── Navegación por teclado en resultados ───────────────────────────────────
@@ -801,6 +794,33 @@ export function PosView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Indicador de carrito guardado automáticamente */}
+          {cart.length > 0 && (
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border transition-opacity ${
+                cartPersistence.isSaved
+                  ? "opacity-100 text-emerald-700 bg-emerald-50 border-emerald-200"
+                  : "opacity-50 text-muted-foreground bg-muted/50 border-transparent"
+              }`}
+              title={
+                cartPersistence.isSaved
+                  ? "Carrito guardado localmente. Se recuperará si recargás la página."
+                  : "Guardando cambios…"
+              }
+            >
+              {cartPersistence.isSaved ? (
+                <>
+                  <Check className="w-3 h-3" />
+                  <span>Guardado</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3 h-3 animate-pulse" />
+                  <span>Guardando…</span>
+                </>
+              )}
+            </span>
+          )}
           <div className="hidden md:flex items-center gap-1.5 text-[10px] text-muted-foreground mr-2">
             <kbd className="px-1.5 py-0.5 bg-muted rounded border">F2</kbd> buscar
             <kbd className="px-1.5 py-0.5 bg-muted rounded border">F4</kbd> opciones
@@ -1794,6 +1814,96 @@ export function PosView() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          MODAL DE RECONCILIACIÓN DE CARRITO
+          Se muestra cuando se recuperó un carrito guardado pero algunos
+          productos ya no existen o cambiaron de stock/precio desde que se guardó. */}
+      <Dialog open={reconcileModalOpen} onOpenChange={setReconcileModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              Carrito recuperado con cambios
+            </DialogTitle>
+            <DialogDescription>
+              Detectamos que tenías una venta en curso guardada del{" "}
+              {cartPersistence.reconcileInfo
+                ? new Date(
+                    cartPersistence.reconcileInfo.items[0]?.product?.id
+                      ? Date.now()
+                      : Date.now()
+                  ).toLocaleString("es-AR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })
+                : ""}
+              . Algunos productos cambiaron desde entonces y los ajustamos
+              automáticamente:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {cartPersistence.reconcileInfo?.removedCount &&
+            cartPersistence.reconcileInfo.removedCount > 0 ? (
+              <div className="rounded-md bg-red-50 border border-red-200 p-3">
+                <p className="text-sm font-medium text-red-800 mb-1">
+                  {cartPersistence.reconcileInfo.removedCount} producto
+                  {cartPersistence.reconcileInfo.removedCount === 1
+                    ? " quitado"
+                    : " quitados"}
+                </p>
+                <p className="text-xs text-red-700">
+                  {cartPersistence.reconcileInfo.removedProductNames
+                    .slice(0, 5)
+                    .join(", ")}
+                  {cartPersistence.reconcileInfo.removedProductNames.length >
+                    5 && "…"}
+                </p>
+              </div>
+            ) : null}
+            {cartPersistence.reconcileInfo?.adjustedCount &&
+            cartPersistence.reconcileInfo.adjustedCount > 0 ? (
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                <p className="text-sm font-medium text-amber-800">
+                  {cartPersistence.reconcileInfo.adjustedCount} producto
+                  {cartPersistence.reconcileInfo.adjustedCount === 1
+                    ? " ajustado"
+                    : " ajustados"}
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Cambió el precio o el stock disponible desde tu última sesión.
+                  Las cantidades fueron limitadas al stock actual.
+                </p>
+              </div>
+            ) : null}
+            <div className="rounded-md bg-emerald-50 border border-emerald-200 p-3">
+              <p className="text-sm font-medium text-emerald-800">
+                Carrito restaurado:{" "}
+                {cartPersistence.reconcileInfo?.items.length || 0} productos
+                listos para cobrar
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                cartPersistence.discardPersisted();
+                clearCart();
+                setReconcileModalOpen(false);
+              }}
+            >
+              Descartar y empezar de cero
+            </Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => setReconcileModalOpen(false)}
+            >
+              Continuar con este carrito
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
