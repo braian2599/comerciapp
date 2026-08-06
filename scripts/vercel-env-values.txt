@@ -1,0 +1,18 @@
+# Values generated: Thu Aug  6 19:10:44 UTC 2026
+# Paste each value into Vercel: Project Settings > Environment Variables
+# Set each one for: Production, Preview, AND Development environments.
+
+# 1. DATABASE_URL (Neon pooled)
+DATABASE_URL=postgresql://neondb_owner:npg_iYK7HVPGF6EQ@ep-morning-salad-ayds6j3v-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connect_timeout=15
+
+# 2. DIRECT_DATABASE_URL (Neon direct, for migrations)
+DIRECT_DATABASE_URL=postgresql://neondb_owner:npg_iYK7HVPGF6EQ@ep-morning-salad-ayds6j3v.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require
+
+# 3. NEXTAUTH_SECRET (freshly generated)
+NEXTAUTH_SECRET=6ywEj5ZMF5AbLKeolbroxosXf4HDklpZgKXQJAlYWfE=
+
+# 4. NEXTAUTH_URL (replace TU-DOMINIO with your actual Vercel domain)
+NEXTAUTH_URL=https://TU-DOMINIO.vercel.app
+
+# 5. SEED_TOKEN (freshly generated, optional but recommended)
+SEED_TOKEN=15a98cb1bbda8efffe2f02a1e7808cdfbb34f9577e48837683f4efe02667e662
