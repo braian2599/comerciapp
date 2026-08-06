@@ -36,6 +36,19 @@ export async function GET(req: NextRequest) {
         paymentMethodRef: true,
         branch: { select: { id: true, name: true, code: true } },
         promotion: { select: { id: true, name: true } },
+        // Incluimos la factura para que refunds-view pueda decidir si ofrecer
+        // emitir NC al procesar una devolución (solo se ofrece si la venta
+        // tiene factura con CAE).
+        invoice: {
+          select: {
+            id: true,
+            numeroCompleto: true,
+            tipo: true,
+            cae: true,
+            status: true,
+            comprobanteSubtipo: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: limit,

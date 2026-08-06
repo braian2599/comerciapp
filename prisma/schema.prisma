@@ -1,7 +1,7 @@
 // Prisma schema - Gestor de Ventas para Comercios
 
 generator client {
-  provider        = "prisma-client-js"
+  provider      = "prisma-client-js"
   // binaryTargets cubre:
   //  - "native": desarrollo local (Linux/macOS/Windows detectado automáticamente)
   //  - "debian-openssl-3.0.x": Vercel build image y Amazon Linux 2023 lambdas
@@ -12,8 +12,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   // directUrl se usa para migraciones (conexión directa, sin pgbouncer).
   // Si no está definido, Prisma usa `url` para todo (incluido migrate),
   // lo cual falla contra el pooler de Neon porque pgbouncer no soporta
@@ -25,50 +25,50 @@ datasource db {
 
 // ===== TIENDA / COMERCIO =====
 model Store {
-  id            String   @id @default(cuid())
-  name          String
-  slug          String   @unique
-  rubro         String   // TIENDA_BARRIO, MINIMARKET, VERDULERIA, CARNICERIA, PANADERIA, KIOSCO, FERRETERIA, OTRO
-  currency      String   @default("ARS")
-  currencySymbol String  @default("$")
-  taxEnabled    Boolean  @default(false)
-  taxRate       Float    @default(0) // porcentaje 0-100
-  address       String?
-  phone         String?
-  logoUrl       String?
-  lowStockThreshold Int  @default(5)
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  rubro             String // TIENDA_BARRIO, MINIMARKET, VERDULERIA, CARNICERIA, PANADERIA, KIOSCO, FERRETERIA, OTRO
+  currency          String   @default("ARS")
+  currencySymbol    String   @default("$")
+  taxEnabled        Boolean  @default(false)
+  taxRate           Float    @default(0) // porcentaje 0-100
+  address           String?
+  phone             String?
+  logoUrl           String?
+  lowStockThreshold Int      @default(5)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  users         User[]
-  categories    Category[]
-  products      Product[]
-  customers     Customer[]
-  sales         Sale[]
-  stockMovements StockMovement[]
-  paymentMethods PaymentMethod[]
-  cashRegisters CashRegister[]
-  cashMovements CashMovement[]
-  suppliers     Supplier[]
-  purchaseOrders PurchaseOrder[]
-  expenses      Expense[]
-  customerPayments CustomerPayment[]
-  invoices      Invoice[]
-  taxConfig     TaxConfig?
-  mercadoPagoConfig MercadoPagoConfig?
+  users               User[]
+  categories          Category[]
+  products            Product[]
+  customers           Customer[]
+  sales               Sale[]
+  stockMovements      StockMovement[]
+  paymentMethods      PaymentMethod[]
+  cashRegisters       CashRegister[]
+  cashMovements       CashMovement[]
+  suppliers           Supplier[]
+  purchaseOrders      PurchaseOrder[]
+  expenses            Expense[]
+  customerPayments    CustomerPayment[]
+  invoices            Invoice[]
+  taxConfig           TaxConfig?
+  mercadoPagoConfig   MercadoPagoConfig?
   mercadoPagoPayments MercadoPagoPayment[]
-  branches      Branch[]
-  promotions    Promotion[]
-  refunds       Refund[]
-  loyaltyProgram LoyaltyProgram?
+  branches            Branch[]
+  promotions          Promotion[]
+  refunds             Refund[]
+  loyaltyProgram      LoyaltyProgram?
   // Fase 4
-  commissionRules CommissionRule[]
-  commissions   Commission[]
-  ecommerceConfig EcommerceConfig?
-  ecommerceSyncLogs EcommerceSyncLog[]
-  printTemplates PrintTemplate[]
-  offlineSyncQueue OfflineSyncQueue[]
+  commissionRules     CommissionRule[]
+  commissions         Commission[]
+  ecommerceConfig     EcommerceConfig?
+  ecommerceSyncLogs   EcommerceSyncLog[]
+  printTemplates      PrintTemplate[]
+  offlineSyncQueue    OfflineSyncQueue[]
 }
 
 // ===== USUARIO =====
@@ -83,19 +83,19 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sales          Sale[]
-  stockMovements StockMovement[]
-  cashRegisters  CashRegister[]
-  cashMovements  CashMovement[]
-  purchaseOrders PurchaseOrder[]
-  expenses       Expense[]
+  store            Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales            Sale[]
+  stockMovements   StockMovement[]
+  cashRegisters    CashRegister[]
+  cashMovements    CashMovement[]
+  purchaseOrders   PurchaseOrder[]
+  expenses         Expense[]
   customerPayments CustomerPayment[]
-  invoices       Invoice[]
-  refunds        Refund[]
+  invoices         Invoice[]
+  refunds          Refund[]
   // Fase 4
-  commissions    Commission[]
-  commissionRules CommissionRule[]
+  commissions      Commission[]
+  commissionRules  CommissionRule[]
 }
 
 // ===== CATEGORÍA =====
@@ -106,124 +106,124 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  products    Product[]
-  promotions  Promotion[]
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products   Product[]
+  promotions Promotion[]
 }
 
 // ===== PRODUCTO =====
 model Product {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  barcode     String?
-  sku         String?
-  categoryId  String?
-  supplierId  String?
-  storeId     String
-  costPrice   Float    @default(0)
-  salePrice   Float    @default(0)
-  stock       Float    @default(0)
-  minStock    Float    @default(5)
-  unit        String   @default("UNIDAD") // UNIDAD, KG, LITRO, METRO, PACK
-  active      Boolean  @default(true)
+  id                 String    @id @default(cuid())
+  name               String
+  description        String?
+  barcode            String?
+  sku                String?
+  categoryId         String?
+  supplierId         String?
+  storeId            String
+  costPrice          Float     @default(0)
+  salePrice          Float     @default(0)
+  stock              Float     @default(0)
+  minStock           Float     @default(5)
+  unit               String    @default("UNIDAD") // UNIDAD, KG, LITRO, METRO, PACK
+  active             Boolean   @default(true)
   // Datos adicionales autocompletados desde Open Food Facts / UPC Item DB
-  brand       String?  // Marca (ej: LIEBIG, Coca-Cola)
-  labels      String?  // Etiquetas separadas por coma (ej: "Sin TACC,Sin aditivos,Vegano")
-  ingredients String?  // Lista de ingredientes completa
-  allergens   String?  // Alérgenos separados por coma (ej: "leche,gluten,soja")
-  imageUrl    String?  // URL o path local de la imagen del producto
+  brand              String? // Marca (ej: LIEBIG, Coca-Cola)
+  labels             String? // Etiquetas separadas por coma (ej: "Sin TACC,Sin aditivos,Vegano")
+  ingredients        String? // Lista de ingredientes completa
+  allergens          String? // Alérgenos separados por coma (ej: "leche,gluten,soja")
+  imageUrl           String? // URL o path local de la imagen del producto
   // Fase 4: e-commerce sync
   ecommerceProductId String? // ID remoto en la plataforma (Tienda Nube, WooCommerce, etc.)
   ecommerceSyncedAt  DateTime?
   ecommerceStatus    String? // ACTIVE, DRAFT, OUT_OF_STOCK
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  supplier        Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  saleItems       SaleItem[]
-  stockMovements  StockMovement[]
-  purchaseItems   PurchaseOrderItem[]
-  promotions      Promotion[]
-  refundItems     RefundItem[]
+  store          Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category       Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier       Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  purchaseItems  PurchaseOrderItem[]
+  promotions     Promotion[]
+  refundItems    RefundItem[]
 }
 
 // ===== CLIENTE =====
 model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  phone     String?
-  email     String?
-  address   String?
-  city      String?  // Localidad
-  notes     String?
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?
+  email         String?
+  address       String?
+  city          String? // Localidad
+  notes         String?
   // Datos fiscales (AFIP)
-  cuit      String?  // CUIT/CUIL del cliente (sin guiones)
-  taxType   String?  // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
-  storeId   String
-  creditLimit Float  @default(0) // límite de cuenta corriente (0 = sin límite)
+  cuit          String? // CUIT/CUIL del cliente (sin guiones)
+  taxType       String? // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
+  storeId       String
+  creditLimit   Float    @default(0) // límite de cuenta corriente (0 = sin límite)
   // Fidelización
-  loyaltyPoints   Float  @default(0) // saldo de puntos acumulados
-  loyaltyTier     String @default("BRONCE") // BRONCE, PLATA, ORO, PLATINO
-  totalSpent      Float  @default(0) // monto total histórico comprado
-  totalSales      Int    @default(0) // cantidad de compras históricas
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  loyaltyPoints Float    @default(0) // saldo de puntos acumulados
+  loyaltyTier   String   @default("BRONCE") // BRONCE, PLATA, ORO, PLATINO
+  totalSpent    Float    @default(0) // monto total histórico comprado
+  totalSales    Int      @default(0) // cantidad de compras históricas
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  store     Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sales     Sale[]
-  payments  CustomerPayment[]
-  invoices  Invoice[]
+  store            Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales            Sale[]
+  payments         CustomerPayment[]
+  invoices         Invoice[]
   loyaltyPointsLog LoyaltyPoint[]
-  refunds   Refund[]
+  refunds          Refund[]
 }
 
 // ===== VENTA =====
 model Sale {
-  id              String   @id @default(cuid())
-  storeId         String
-  userId          String
-  customerId      String?
-  cashRegisterId  String?
-  branchId        String?  // sucursal donde se realizó (null = principal)
-  subtotal        Float
-  discount        Float    @default(0)
-  discountReason  String?  // motivo del descuento (PROMOCION, MANUAL, PUNTOS, etc.)
-  tax             Float    @default(0)
-  surcharge       Float    @default(0) // recargo por método de pago
-  total           Float
-  paymentMethod   String   @default("EFECTIVO") // nombre del método (snapshot)
-  paymentMethodId String?
+  id                  String   @id @default(cuid())
+  storeId             String
+  userId              String
+  customerId          String?
+  cashRegisterId      String?
+  branchId            String? // sucursal donde se realizó (null = principal)
+  subtotal            Float
+  discount            Float    @default(0)
+  discountReason      String? // motivo del descuento (PROMOCION, MANUAL, PUNTOS, etc.)
+  tax                 Float    @default(0)
+  surcharge           Float    @default(0) // recargo por método de pago
+  total               Float
+  paymentMethod       String   @default("EFECTIVO") // nombre del método (snapshot)
+  paymentMethodId     String?
   // Promociones aplicadas (resumen)
-  promotionId     String?  // promoción principal aplicada
-  promotionDiscount Float  @default(0) // monto descontado por promociones automáticas
+  promotionId         String? // promoción principal aplicada
+  promotionDiscount   Float    @default(0) // monto descontado por promociones automáticas
   // Fidelización
-  loyaltyPointsEarned Float @default(0) // puntos ganados en esta venta
-  loyaltyPointsUsed   Float @default(0) // puntos canjeados (descuento aplicado)
+  loyaltyPointsEarned Float    @default(0) // puntos ganados en esta venta
+  loyaltyPointsUsed   Float    @default(0) // puntos canjeados (descuento aplicado)
   // Cuenta corriente
-  onCredit        Boolean  @default(false) // true = venta fiada
-  amountPaid      Float    @default(0) // monto cobrado (total si es contado, 0 si es fiado completo)
-  status          String   @default("COMPLETADA") // COMPLETADA, ANULADA
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  onCredit            Boolean  @default(false) // true = venta fiada
+  amountPaid          Float    @default(0) // monto cobrado (total si es contado, 0 si es fiado completo)
+  status              String   @default("COMPLETADA") // COMPLETADA, ANULADA
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user            User            @relation(fields: [userId], references: [id])
-  customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  paymentMethodRef PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
-  cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
-  branch          Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  promotion       Promotion?      @relation(fields: [promotionId], references: [id], onDelete: SetNull)
-  items           SaleItem[]
+  store              Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id])
+  customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  paymentMethodRef   PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  cashRegister       CashRegister?       @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+  branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  promotion          Promotion?          @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  items              SaleItem[]
   // Facturación y Mercado Pago
-  invoice         Invoice?
+  invoice            Invoice?
   mercadoPagoPayment MercadoPagoPayment?
-  refund          Refund?
+  refund             Refund?
   // Fase 4: Comisión asociada (1:1)
-  commission      Commission?
+  commission         Commission?
 
   @@index([storeId, createdAt])
   @@index([storeId, status])
@@ -233,32 +233,32 @@ model Sale {
 
 // ===== ITEM DE VENTA =====
 model SaleItem {
-  id         String @id @default(cuid())
-  saleId     String
-  productId  String
-  quantity   Float
-  unitPrice  Float
-  costPrice  Float // snapshot del costo al momento de la venta
-  subtotal   Float
+  id        String @id @default(cuid())
+  saleId    String
+  productId String
+  quantity  Float
+  unitPrice Float
+  costPrice Float // snapshot del costo al momento de la venta
+  subtotal  Float
 
-  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product    Product @relation(fields: [productId], references: [id])
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 }
 
 // ===== MÉTODO DE PAGO =====
 model PaymentMethod {
-  id          String   @id @default(cuid())
-  storeId     String
-  name        String   // Efectivo, Tarjeta Crédito, etc.
-  type        String   // EFECTIVO, TARJETA_CREDITO, TARJETA_DEBITO, TRANSFERENCIA, CUENTA, OTRO
-  surcharge   Float    @default(0) // porcentaje de recargo (ej: 10 = +10%)
-  active      Boolean  @default(true)
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String // Efectivo, Tarjeta Crédito, etc.
+  type      String // EFECTIVO, TARJETA_CREDITO, TARJETA_DEBITO, TRANSFERENCIA, CUENTA, OTRO
+  surcharge Float    @default(0) // porcentaje de recargo (ej: 10 = +10%)
+  active    Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sales       Sale[]
+  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales Sale[]
 
   @@index([storeId, active])
 }
@@ -269,16 +269,16 @@ model StockMovement {
   productId String
   storeId   String
   userId    String
-  type      String   // ENTRADA, SALIDA, AJUSTE, VENTA, COMPRA
-  quantity  Float    // positivo entrada, negativo salida
+  type      String // ENTRADA, SALIDA, AJUSTE, VENTA, COMPRA
+  quantity  Float // positivo entrada, negativo salida
   reason    String?
-  refType   String?  // Sale, PurchaseOrder, CashMovement (tipo de entidad origen)
-  refId     String?  // id de la entidad origen
+  refType   String? // Sale, PurchaseOrder, CashMovement (tipo de entidad origen)
+  refId     String? // id de la entidad origen
   createdAt DateTime @default(now())
 
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
 
   @@index([storeId, createdAt])
   @@index([productId, createdAt])
@@ -286,27 +286,27 @@ model StockMovement {
 
 // ===== CAJA / ARQUEO =====
 model CashRegister {
-  id          String    @id @default(cuid())
-  storeId     String
-  userId      String    // usuario que abrió la caja
-  branchId    String?   // sucursal donde opera la caja (null = principal)
-  openingDate DateTime  @default(now())
-  closingDate DateTime?
-  openingBalance Float  @default(0) // monto inicial en efectivo
-  closingBalance Float? // monto final declarado
+  id              String    @id @default(cuid())
+  storeId         String
+  userId          String // usuario que abrió la caja
+  branchId        String? // sucursal donde opera la caja (null = principal)
+  openingDate     DateTime  @default(now())
+  closingDate     DateTime?
+  openingBalance  Float     @default(0) // monto inicial en efectivo
+  closingBalance  Float? // monto final declarado
   expectedBalance Float? // monto esperado según sistema
-  difference  Float?    // closingBalance - expectedBalance
-  status      String    @default("ABIERTA") // ABIERTA, CERRADA
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  difference      Float? // closingBalance - expectedBalance
+  status          String    @default("ABIERTA") // ABIERTA, CERRADA
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  store      Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user       User           @relation(fields: [userId], references: [id])
-  branch     Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  movements  CashMovement[]
-  sales      Sale[]
-  refunds    Refund[]
+  store     Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id])
+  branch    Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  movements CashMovement[]
+  sales     Sale[]
+  refunds   Refund[]
 
   @@index([storeId, status])
   @@index([userId, openingDate])
@@ -315,17 +315,17 @@ model CashRegister {
 
 // Movimientos de efectivo dentro de una caja (ingresos/egresos manuales)
 model CashMovement {
-  id              String   @id @default(cuid())
-  cashRegisterId  String
-  storeId         String
-  userId          String
-  type            String   // INGRESO, EGRESO, VENTA, PAGO_CUENTA (sentido del efectivo)
-  amount          Float    // siempre positivo; el sentido lo da type
-  concept         String   // descripción: "Venta", "Cobro cuenta", "Gasto", etc.
-  paymentMethod   String?  // EFECTIVO, TRANSFERENCIA (snapshot si aplica)
-  refType         String?  // Sale, CustomerPayment, Expense
-  refId           String?
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  cashRegisterId String
+  storeId        String
+  userId         String
+  type           String // INGRESO, EGRESO, VENTA, PAGO_CUENTA (sentido del efectivo)
+  amount         Float // siempre positivo; el sentido lo da type
+  concept        String // descripción: "Venta", "Cobro cuenta", "Gasto", etc.
+  paymentMethod  String? // EFECTIVO, TRANSFERENCIA (snapshot si aplica)
+  refType        String? // Sale, CustomerPayment, Expense
+  refId          String?
+  createdAt      DateTime @default(now())
 
   cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
   store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -337,19 +337,19 @@ model CashMovement {
 
 // ===== PROVEEDORES =====
 model Supplier {
-  id        String   @id @default(cuid())
-  name      String
-  phone     String?
-  email     String?
-  address   String?
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  email       String?
+  address     String?
   contactName String?
-  notes     String?
-  storeId   String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notes       String?
+  storeId     String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  store          Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   purchaseOrders PurchaseOrder[]
   products       Product[]
 
@@ -358,36 +358,36 @@ model Supplier {
 
 // Orden de compra a proveedor
 model PurchaseOrder {
-  id            String    @id @default(cuid())
-  storeId       String
-  userId        String
-  supplierId    String?
-  supplierName  String    // snapshot por si se borra el proveedor
-  orderNumber   String    // número legible: OC-0001
-  status        String    @default("PENDIENTE") // PENDIENTE, RECIBIDA, ANULADA
-  total         Float     @default(0)
-  notes         String?
-  orderedAt     DateTime  @default(now())
-  receivedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  storeId      String
+  userId       String
+  supplierId   String?
+  supplierName String // snapshot por si se borra el proveedor
+  orderNumber  String // número legible: OC-0001
+  status       String    @default("PENDIENTE") // PENDIENTE, RECIBIDA, ANULADA
+  total        Float     @default(0)
+  notes        String?
+  orderedAt    DateTime  @default(now())
+  receivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  store     Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user      User               @relation(fields: [userId], references: [id])
-  supplier  Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  items     PurchaseOrderItem[]
+  store    Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id])
+  supplier Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    PurchaseOrderItem[]
 
   @@index([storeId, orderedAt])
   @@index([storeId, status])
 }
 
 model PurchaseOrderItem {
-  id          String @id @default(cuid())
+  id              String @id @default(cuid())
   purchaseOrderId String
-  productId   String
-  quantity    Float
-  unitCost    Float  // costo unitario de compra
-  subtotal    Float
+  productId       String
+  quantity        Float
+  unitCost        Float // costo unitario de compra
+  subtotal        Float
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product       Product       @relation(fields: [productId], references: [id])
@@ -395,19 +395,19 @@ model PurchaseOrderItem {
 
 // ===== GASTOS / EGRESOS =====
 model Expense {
-  id         String   @id @default(cuid())
-  storeId    String
-  userId     String
-  category   String   // ALQUILER, SERVICIOS, SUELDOS, INSUMOS, IMPUESTOS, TRANSPORTE, OTROS
-  description String
-  amount     Float
-  paymentMethod String @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, TARJETA
-  date       DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String   @id @default(cuid())
+  storeId       String
+  userId        String
+  category      String // ALQUILER, SERVICIOS, SUELDOS, INSUMOS, IMPUESTOS, TRANSPORTE, OTROS
+  description   String
+  amount        Float
+  paymentMethod String   @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, TARJETA
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id])
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
 
   @@index([storeId, date])
   @@index([storeId, category])
@@ -416,20 +416,20 @@ model Expense {
 // ===== PAGOS DE CUENTAS CORRIENTES =====
 // Registra cada pago que hace un cliente fiado para saldar su cuenta
 model CustomerPayment {
-  id         String   @id @default(cuid())
-  storeId    String
-  customerId String
-  userId     String
-  amount     Float    // monto pagado (positivo)
-  paymentMethod String @default("EFECTIVO")
+  id             String   @id @default(cuid())
+  storeId        String
+  customerId     String
+  userId         String
+  amount         Float // monto pagado (positivo)
+  paymentMethod  String   @default("EFECTIVO")
   cashRegisterId String?
-  date       DateTime @default(now())
-  notes      String?
-  createdAt  DateTime @default(now())
+  date           DateTime @default(now())
+  notes          String?
+  createdAt      DateTime @default(now())
 
-  store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  customer     Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  user         User           @relation(fields: [userId], references: [id])
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
 
   @@index([storeId, date])
   @@index([customerId, date])
@@ -438,148 +438,168 @@ model CustomerPayment {
 // ===== CONFIGURACIÓN FISCAL (AFIP / ARCA) =====
 // Datos del contribuyente necesarios para emitir facturas electrónicas
 model TaxConfig {
-  id              String   @id @default(cuid())
-  storeId         String   @unique
+  id                   String    @id @default(cuid())
+  storeId              String    @unique
   // Datos del contribuyente
-  cuit            String   // CUIT del emisor (sin guiones)
-  razonSocial     String   // Razón social
-  direccionFiscal String?  // Domicilio fiscal
-  inicioActividades DateTime?
+  cuit                 String // CUIT del emisor (sin guiones)
+  razonSocial          String // Razón social
+  direccionFiscal      String? // Domicilio fiscal
+  inicioActividades    DateTime?
   // Configuración AFIP
-  puntoVenta      Int      @default(1) // punto de venta habilitado
-  tipoFactura     String   @default("B") // tipo por defecto: A, B, C, M
-  condicionFiscal String   @default("MONOTRIBUTO") // MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
+  puntoVenta           Int       @default(1) // punto de venta habilitado
+  tipoFactura          String    @default("B") // tipo por defecto: A, B, C, M
+  condicionFiscal      String    @default("MONOTRIBUTO") // MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
   categoriaMonotributo String? // A, B, C, D, E, F, G, H (si aplica)
   // IVA
-  ivaRate         Float    @default(21) // porcentaje de IVA (0, 10.5, 21, 27)
+  ivaRate              Float     @default(21) // porcentaje de IVA (0, 10.5, 21, 27)
   // Certificados (.p12) - ruta al archivo cargado
-  certPath        String?  // ruta al certificado en /upload
-  privateKeyPath  String?  // ruta a la clave privada
-  certPassword    String?  // contraseña del certificado (encriptado idealmente)
+  certPath             String? // ruta al certificado en /upload
+  privateKeyPath       String? // ruta a la clave privada
+  certPassword         String? // contraseña del certificado (encriptado idealmente)
   // Modo AFIP: homologación (testing) o producción
-  environment     String   @default("homologacion") // homologacion, produccion
+  environment          String    @default("homologacion") // homologacion, produccion
   // Token de acceso AFIP (cache)
-  authToken       String?  // TA.xml serializado
-  authTokenExpires DateTime?
+  authToken            String? // TA.xml serializado
+  authTokenExpires     DateTime?
   // Numeración: último número de factura emitido por tipo
-  lastInvoiceA    Int      @default(0)
-  lastInvoiceB    Int      @default(0)
-  lastInvoiceC    Int      @default(0)
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  lastInvoiceA         Int       @default(0)
+  lastInvoiceB         Int       @default(0)
+  lastInvoiceC         Int       @default(0)
+  // Numeración: último número de nota de crédito emitido por tipo
+  // (separado de facturas porque AFIP los numera de forma independiente)
+  lastCreditNoteA      Int       @default(0)
+  lastCreditNoteB      Int       @default(0)
+  lastCreditNoteC      Int       @default(0)
+  active               Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  invoices        Invoice[]
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
 }
 
-// ===== FACTURA ELECTRÓNICA =====
-// Representa una factura electrónica emitida ante AFIP/ARCA
+// ===== COMPROBANTE ELECTRÓNICO (FACTURA / NOTA DE CRÉDITO / NOTA DE DÉBITO) =====
+// Representa un comprobante electrónico emitido ante AFIP/ARCA.
+// El campo `comprobanteSubtipo` distingue:
+//   - FACTURA:        factura original (tipo 1, 6, 11, 51, 19)
+//   - NOTA_CREDITO:   nota de crédito (tipo 3, 8, 13, 53, 21) — vincula a una factura vía `relatedInvoiceId`
+//   - NOTA_DEBITO:    nota de débito (tipo 2, 7, 12, 52, 20) — vincula a una factura vía `relatedInvoiceId`
 model Invoice {
-  id              String   @id @default(cuid())
-  storeId         String
-  userId          String   // usuario que emitió
-  saleId          String?  @unique // venta asociada (opcional: una factura puede existir sin venta)
-  customerId      String?  // cliente (null = Consumidor Final)
-  taxConfigId     String
+  id                 String    @id @default(cuid())
+  storeId            String
+  userId             String // usuario que emitió
+  saleId             String?   @unique // venta asociada (opcional: una factura puede existir sin venta)
+  customerId         String? // cliente (null = Consumidor Final)
+  taxConfigId        String
+  // Subtipo de comprobante (FACTURA | NOTA_CREDITO | NOTA_DEBITO)
+  comprobanteSubtipo String    @default("FACTURA")
+  // Para NC/ND: factura original a la que está vinculada (auto-referencia)
+  relatedInvoiceId   String?
   // Datos de la factura
-  tipo            String   // A, B, C, M, E
-  puntoVenta      Int
-  numero          Int      // número de factura dentro del punto de venta
-  numeroCompleto  String   // "0001-00000001" (legible)
-  fechaEmision    DateTime @default(now())
-  concepto        String   @default("PRODUCTOS") // PRODUCTOS, SERVICIOS, PRODUCTOS_Y_SERVICIOS
+  tipo               String // A, B, C, M, E (letra del comprobante)
+  puntoVenta         Int
+  numero             Int // número de comprobante dentro del punto de venta
+  numeroCompleto     String // "0001-00000001" (legible)
+  fechaEmision       DateTime  @default(now())
+  concepto           String    @default("PRODUCTOS") // PRODUCTOS, SERVICIOS, PRODUCTOS_Y_SERVICIOS
   // Totales
-  netoGravado     Float    @default(0) // base imponible sin IVA
-  ivaRate         Float    @default(0)
-  ivaAmount       Float    @default(0) // monto de IVA
-  noGravado       Float    @default(0) // importes no gravados
-  exento          Float    @default(0) // importes exentos
-  total           Float
+  netoGravado        Float     @default(0) // base imponible sin IVA
+  ivaRate            Float     @default(0)
+  ivaAmount          Float     @default(0) // monto de IVA
+  noGravado          Float     @default(0) // importes no gravados
+  exento             Float     @default(0) // importes exentos
+  total              Float
   // Datos del cliente (snapshot)
-  customerName    String   @default("Consumidor Final")
-  customerCuit    String?  // CUIT del cliente (null si es CF)
-  customerTaxType String   @default("CONSUMIDOR_FINAL")
+  customerName       String    @default("Consumidor Final")
+  customerCuit       String? // CUIT del cliente (null si es CF)
+  customerTaxType    String    @default("CONSUMIDOR_FINAL")
   // Respuesta AFIP
-  cae             String?  // Código de Autorización Electrónico
-  caeVencimiento  DateTime? // fecha de vencimiento del CAE
-  qrData          String?  // datos codificados para el QR AFIP (RG 4291)
+  cae                String? // Código de Autorización Electrónico
+  caeVencimiento     DateTime? // fecha de vencimiento del CAE
+  qrData             String? // datos codificados para el QR AFIP (RG 4291)
   // Estado
-  status          String   @default("EMITIDA") // EMITIDA, ANULADA, RECHAZADA, PENDIENTE
-  observation     String?  // observaciones AFIP
-  resultado       String?  // A (aprobado), R (rechazado), O (observado)
+  status             String    @default("EMITIDA") // EMITIDA, ANULADA, RECHAZADA, PENDIENTE
+  observation        String? // observaciones AFIP
+  resultado          String? // A (aprobado), R (rechazado), O (observado)
   // Anulación
-  anulatedAt      DateTime?
-  anulatedBy      String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  anulatedAt         DateTime?
+  anulatedBy         String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user            User     @relation(fields: [userId], references: [id])
-  sale            Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  taxConfig       TaxConfig @relation(fields: [taxConfigId], references: [id])
+  store          Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id])
+  sale           Sale?     @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  taxConfig      TaxConfig @relation(fields: [taxConfigId], references: [id])
+  // Auto-referencia: NC/ND → factura original
+  relatedInvoice Invoice?  @relation("InvoiceRelated", fields: [relatedInvoiceId], references: [id], onDelete: SetNull)
+  relatedBy      Invoice[] @relation("InvoiceRelated")
+  // Si esta NC fue emitida por una devolución, acá está el refund (1:1)
+  refund         Refund?
 
   @@index([storeId, fechaEmision])
+  @@index([storeId, comprobanteSubtipo, fechaEmision])
   @@index([storeId, tipo, numero])
   @@index([saleId])
   @@index([cae])
+  @@index([relatedInvoiceId])
 }
 
 // ===== CONFIGURACIÓN MERCADO PAGO =====
 model MercadoPagoConfig {
-  id              String   @id @default(cuid())
-  storeId         String   @unique
-  accessToken     String?  // token de acceso (producción)
-  publicKey       String?  // clave pública
+  id                 String   @id @default(cuid())
+  storeId            String   @unique
+  accessToken        String? // token de acceso (producción)
+  publicKey          String? // clave pública
   // Para testing (sandbox)
   sandboxAccessToken String?
-  sandboxPublicKey String?
+  sandboxPublicKey   String?
   // Modo
-  environment     String   @default("sandbox") // sandbox, produccion
+  environment        String   @default("sandbox") // sandbox, produccion
   // Datos del comercio en MP
-  userId          String?  // MP user id
-  collectorId     String?  // collector id (para QR)
+  userId             String? // MP user id
+  collectorId        String? // collector id (para QR)
   // Configuración QR
-  qrEnabled       Boolean  @default(true)
+  qrEnabled          Boolean  @default(true)
   defaultDescription String? // descripción por defecto en el QR
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  payments        MercadoPagoPayment[]
+  store    Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  payments MercadoPagoPayment[]
 }
 
 // ===== PAGOS MERCADO PAGO =====
 // Registra cada intento/transacción de pago con Mercado Pago QR
 model MercadoPagoPayment {
-  id              String   @id @default(cuid())
-  storeId         String
-  saleId          String?  @unique // venta asociada
-  configId        String
+  id             String    @id @default(cuid())
+  storeId        String
+  saleId         String?   @unique // venta asociada
+  configId       String
   // Datos de la transacción MP
-  mpPaymentId     String?  // id del pago en MP (numérico como string)
-  mpPreferenceId  String?  // id de la preferencia creada
-  mpOrderId       String?  // id de la orden de MP
+  mpPaymentId    String? // id del pago en MP (numérico como string)
+  mpPreferenceId String? // id de la preferencia creada
+  mpOrderId      String? // id de la orden de MP
   // QR
-  qrCode          String?  // código QR copia y pega (string)
-  qrImageUrl      String?  // URL de la imagen del QR
+  qrCode         String? // código QR copia y pega (string)
+  qrImageUrl     String? // URL de la imagen del QR
   // Monto y estado
-  amount          Float    // monto a cobrar
-  status          String   @default("PENDIENTE") // PENDIENTE, APPROVED, REJECTED, CANCELLED, REFUNDED
-  statusDetail    String?  // detalle del estado
-  paymentMethod   String?  // metodo de pago usado en MP (credit_card, debit_card, qr, etc.)
-  payerEmail      String?
+  amount         Float // monto a cobrar
+  status         String    @default("PENDIENTE") // PENDIENTE, APPROVED, REJECTED, CANCELLED, REFUNDED
+  statusDetail   String? // detalle del estado
+  paymentMethod  String? // metodo de pago usado en MP (credit_card, debit_card, qr, etc.)
+  payerEmail     String?
   // Respuesta completa (JSON serializado)
-  rawResponse     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  approvedAt      DateTime?
+  rawResponse    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  approvedAt     DateTime?
 
-  store           Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sale            Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  config          MercadoPagoConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  store  Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sale   Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  config MercadoPagoConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@index([storeId, createdAt])
   @@index([saleId])
@@ -590,22 +610,22 @@ model MercadoPagoPayment {
 // ===== SUCURSALES (Multi-sucursal) =====
 // Permite a un comercio operar con múltiples puntos de venta físicos
 model Branch {
-  id          String   @id @default(cuid())
-  storeId     String
-  name        String   // nombre legible: "Sucursal Centro", "Sucursal Norte"
-  code        String   // código corto: "CEN", "NOR", "SUR"
-  address     String?
-  phone       String?
-  manager     String?  // nombre del encargado
-  active      Boolean  @default(true)
-  isMain      Boolean  @default(false) // true = sucursal principal
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String // nombre legible: "Sucursal Centro", "Sucursal Norte"
+  code      String // código corto: "CEN", "NOR", "SUR"
+  address   String?
+  phone     String?
+  manager   String? // nombre del encargado
+  active    Boolean  @default(true)
+  isMain    Boolean  @default(false) // true = sucursal principal
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sales       Sale[]
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales         Sale[]
   cashRegisters CashRegister[]
-  refunds     Refund[]
+  refunds       Refund[]
 
   @@index([storeId, active])
 }
@@ -613,40 +633,40 @@ model Branch {
 // ===== PROMOCIONES / DESCUENTOS =====
 // Motor de promociones: porcentaje, monto fijo, 2x1, NxM, combos
 model Promotion {
-  id            String   @id @default(cuid())
-  storeId       String
-  name          String   // "2x1 en gaseosas", "Descuento 10% tarde"
-  description   String?
-  type          String   // PORCENTAJE, MONTO_FIJO, NXM (NxM), COMBO
+  id               String    @id @default(cuid())
+  storeId          String
+  name             String // "2x1 en gaseosas", "Descuento 10% tarde"
+  description      String?
+  type             String // PORCENTAJE, MONTO_FIJO, NXM (NxM), COMBO
   // Configuración principal
-  value         Float    @default(0) // porcentaje (0-100) o monto fijo según type
-  buyQuantity   Int      @default(0) // para NxM: cuántos paga el cliente
-  getQuantity   Int      @default(0) // para NxM: cuántos se lleva
+  value            Float     @default(0) // porcentaje (0-100) o monto fijo según type
+  buyQuantity      Int       @default(0) // para NxM: cuántos paga el cliente
+  getQuantity      Int       @default(0) // para NxM: cuántos se lleva
   // Aplicación
-  scope         String   @default("CART") // CART (carrito), CATEGORY, PRODUCT
-  categoryId    String?  // si scope=CATEGORY
-  productId     String?  // si scope=PRODUCT
-  minPurchase   Float    @default(0) // monto mínimo del carrito para activarse
-  maxDiscount   Float?   // tope máximo de descuento (null = sin tope)
+  scope            String    @default("CART") // CART (carrito), CATEGORY, PRODUCT
+  categoryId       String? // si scope=CATEGORY
+  productId        String? // si scope=PRODUCT
+  minPurchase      Float     @default(0) // monto mínimo del carrito para activarse
+  maxDiscount      Float? // tope máximo de descuento (null = sin tope)
   // Vigencia
-  startDate     DateTime @default(now())
-  endDate       DateTime?
-  daysOfWeek    String?  // "0,1,2,3,4,5,6" o null = todos los días (0=domingo)
-  startHour     Int?     // hora de inicio (0-23) para promos por horario
-  endHour       Int?     // hora de fin (0-23)
+  startDate        DateTime  @default(now())
+  endDate          DateTime?
+  daysOfWeek       String? // "0,1,2,3,4,5,6" o null = todos los días (0=domingo)
+  startHour        Int? // hora de inicio (0-23) para promos por horario
+  endHour          Int? // hora de fin (0-23)
   // Estado
-  active        Boolean  @default(true)
-  priority      Int      @default(0) // mayor = se evalúa primero
-  usageLimit    Int?     // límite total de usos (null = ilimitado)
-  usageCount    Int      @default(0) // usos actuales
-  perCustomerLimit Int?  // límite por cliente (null = ilimitado)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  active           Boolean   @default(true)
+  priority         Int       @default(0) // mayor = se evalúa primero
+  usageLimit       Int? // límite total de usos (null = ilimitado)
+  usageCount       Int       @default(0) // usos actuales
+  perCustomerLimit Int? // límite por cliente (null = ilimitado)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
-  sales         Sale[]
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sales    Sale[]
 
   @@index([storeId, active])
   @@index([storeId, type])
@@ -655,43 +675,46 @@ model Promotion {
 // ===== DEVOLUCIONES / NOTAS DE CRÉDITO =====
 // Registra devoluciones totales o parciales sobre una venta
 model Refund {
-  id            String   @id @default(cuid())
-  storeId       String
-  saleId        String   @unique // una venta tiene una sola devolución (total o parcial)
-  userId        String   // usuario que procesa la devolución
-  customerId    String?  // cliente (snapshot)
-  branchId      String?
-  cashRegisterId String?
-  refundNumber  String   // número legible: DEV-0001
-  type          String   @default("PARCIAL") // PARCIAL, TOTAL
+  id                  String   @id @default(cuid())
+  storeId             String
+  saleId              String   @unique // una venta tiene una sola devolución (total o parcial)
+  userId              String // usuario que procesa la devolución
+  customerId          String? // cliente (snapshot)
+  branchId            String?
+  cashRegisterId      String?
+  refundNumber        String // número legible: DEV-0001
+  type                String   @default("PARCIAL") // PARCIAL, TOTAL
   // Montos
-  subtotal      Float    @default(0)
-  discount      Float    @default(0)
-  tax           Float    @default(0)
-  total         Float    @default(0) // monto negativo o positivo (siempre positivo para la devolución)
+  subtotal            Float    @default(0)
+  discount            Float    @default(0)
+  tax                 Float    @default(0)
+  total               Float    @default(0) // monto negativo o positivo (siempre positivo para la devolución)
   // Método de devolución
-  refundMethod  String   @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, CREDITO_CUENTA (saldo a cuenta corriente)
+  refundMethod        String   @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, CREDITO_CUENTA (saldo a cuenta corriente)
   // Razón
-  reason        String?  // motivo: PRODUCTO_DEFECTUOSO, NO_CONFORME, ERROR_VENTA, OTRO
-  notes         String?
-  // Nota de crédito asociada (AFIP)
-  invoiceId     String?  // si se emitió nota de crédito fiscal
+  reason              String? // motivo: PRODUCTO_DEFECTUOSO, NO_CONFORME, ERROR_VENTA, OTRO
+  notes               String?
+  // Nota de crédito asociada (AFIP). FK real a Invoice donde comprobanteSubtipo='NOTA_CREDITO'
+  // @unique porque la relación con Invoice.refund es 1:1 (una NC pertenece a un solo refund)
+  creditNoteInvoiceId String?  @unique
   // Estado
-  status        String   @default("COMPLETADA") // COMPLETADA, ANULADA
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status              String   @default("COMPLETADA") // COMPLETADA, ANULADA
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  user          User     @relation(fields: [userId], references: [id])
-  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  branch        Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  cashRegister  CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
-  items         RefundItem[]
+  store             Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sale              Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  user              User          @relation(fields: [userId], references: [id])
+  customer          Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  branch            Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  cashRegister      CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+  creditNoteInvoice Invoice?      @relation(fields: [creditNoteInvoiceId], references: [id], onDelete: SetNull)
+  items             RefundItem[]
 
   @@index([storeId, createdAt])
   @@index([saleId])
   @@index([customerId, createdAt])
+  @@index([creditNoteInvoiceId])
 }
 
 model RefundItem {
@@ -699,13 +722,13 @@ model RefundItem {
   refundId   String
   saleItemId String // item original de la venta
   productId  String
-  quantity   Float  // cantidad devuelta (siempre positiva)
-  unitPrice  Float  // precio unitario al que se vendió
-  costPrice  Float  // costo snapshot
-  subtotal   Float  // cantidad * unitPrice
+  quantity   Float // cantidad devuelta (siempre positiva)
+  unitPrice  Float // precio unitario al que se vendió
+  costPrice  Float // costo snapshot
+  subtotal   Float // cantidad * unitPrice
 
-  refund     Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
-  product    Product @relation(fields: [productId], references: [id])
+  refund  Refund  @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 
   @@index([refundId])
 }
@@ -713,32 +736,32 @@ model RefundItem {
 // ===== PROGRAMA DE FIDELIZACIÓN =====
 // Configuración del programa de puntos de la tienda
 model LoyaltyProgram {
-  id                String   @id @default(cuid())
-  storeId           String   @unique
-  enabled           Boolean  @default(false)
-  name              String   @default("Programa de Puntos")
+  id               String   @id @default(cuid())
+  storeId          String   @unique
+  enabled          Boolean  @default(false)
+  name             String   @default("Programa de Puntos")
   // Reglas de acumulación
-  pointsPerWeight   Float    @default(1) // puntos por cada $1 comprado
-  roundMode         String   @default("FLOOR") // FLOOR, CEIL, ROUND
-  minPurchase       Float    @default(0) // monto mínimo para acumular
+  pointsPerWeight  Float    @default(1) // puntos por cada $1 comprado
+  roundMode        String   @default("FLOOR") // FLOOR, CEIL, ROUND
+  minPurchase      Float    @default(0) // monto mínimo para acumular
   // Reglas de canje
-  pointsToCurrency  Float    @default(0.01) // valor de 1 punto en $ (ej: 100 pts = $1)
-  minRedeemPoints   Float    @default(0) // mínimo de puntos para canjear
-  maxRedeemPercent  Float    @default(100) // % máx del total canjeable con puntos
+  pointsToCurrency Float    @default(0.01) // valor de 1 punto en $ (ej: 100 pts = $1)
+  minRedeemPoints  Float    @default(0) // mínimo de puntos para canjear
+  maxRedeemPercent Float    @default(100) // % máx del total canjeable con puntos
   // Niveles (tiers) por monto acumulado
-  tierBronceMin     Float    @default(0)
-  tierBronceBonus   Float    @default(0) // multiplicador de puntos
-  tierPlataMin      Float    @default(50000) // monto acumulado
-  tierPlataBonus    Float    @default(0.2) // +20% puntos
-  tierOroMin        Float    @default(200000)
-  tierOroBonus      Float    @default(0.5) // +50% puntos
-  tierPlatinoMin    Float    @default(500000)
-  tierPlatinoBonus  Float    @default(1) // +100% puntos
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  tierBronceMin    Float    @default(0)
+  tierBronceBonus  Float    @default(0) // multiplicador de puntos
+  tierPlataMin     Float    @default(50000) // monto acumulado
+  tierPlataBonus   Float    @default(0.2) // +20% puntos
+  tierOroMin       Float    @default(200000)
+  tierOroBonus     Float    @default(0.5) // +50% puntos
+  tierPlatinoMin   Float    @default(500000)
+  tierPlatinoBonus Float    @default(1) // +100% puntos
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  pointsLog         LoyaltyPoint[]
+  store     Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  pointsLog LoyaltyPoint[]
 }
 
 // Historial de puntos (entradas/salidas)
@@ -748,17 +771,17 @@ model LoyaltyPoint {
   customerId  String
   programId   String
   // Movimiento
-  type        String   // EARN (ganado), REDEEM (canjeado), EXPIRE (vencido), ADJUST (manual)
-  points      Float    // positivo si entrada, negativo si salida
-  balance     Float    // saldo después del movimiento
+  type        String // EARN (ganado), REDEEM (canjeado), EXPIRE (vencido), ADJUST (manual)
+  points      Float // positivo si entrada, negativo si salida
+  balance     Float // saldo después del movimiento
   // Referencia
-  refType     String?  // Sale, Refund, Manual
+  refType     String? // Sale, Refund, Manual
   refId       String?
   description String?
   createdAt   DateTime @default(now())
 
-  customer    Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  program     LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  program  LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([storeId, createdAt])
   @@index([customerId, createdAt])
@@ -772,28 +795,28 @@ model LoyaltyPoint {
 // ===== REGLAS DE COMISIÓN =====
 // Configura comisiones por vendedor con diferentes criterios
 model CommissionRule {
-  id          String   @id @default(cuid())
-  storeId     String
-  userId      String   // vendedor al que aplica la regla
-  name        String   // nombre legible (ej: "Comisión mesanual")
+  id            String    @id @default(cuid())
+  storeId       String
+  userId        String // vendedor al que aplica la regla
+  name          String // nombre legible (ej: "Comisión mesanual")
   // Tipo de cálculo
-  type        String   // PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO
+  type          String // PORCENTAJE_VENTA, PORCENTAJE_GANANCIA, MONTO_FIJO_POR_VENTA, ESCALONADO
   // Configuración principal
-  rate        Float    @default(0) // porcentaje (0-100) o monto fijo según type
+  rate          Float     @default(0) // porcentaje (0-100) o monto fijo según type
   // Escalonado (cuando type=ESCALONADO, JSON: [{"min":0,"max":50000,"rate":2},{"min":50000,"max":100000,"rate":3},...])
-  tiers       String?
+  tiers         String?
   // Filtros
-  minSaleAmount Float  @default(0) // monto mínimo de venta para aplicar
-  onlyPaid    Boolean  @default(true) // solo ventas cobradas (no fiado)
+  minSaleAmount Float     @default(0) // monto mínimo de venta para aplicar
+  onlyPaid      Boolean   @default(true) // solo ventas cobradas (no fiado)
   // Vigencia
-  startDate   DateTime @default(now())
-  endDate     DateTime?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store       Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   commissions Commission[]
 
   @@index([storeId, active])
@@ -803,28 +826,28 @@ model CommissionRule {
 // ===== COMISIÓN (por venta) =====
 // Registro de comisión calculada al cerrar una venta
 model Commission {
-  id           String   @id @default(cuid())
-  storeId      String
-  userId       String   // vendedor
-  saleId       String   @unique // una venta = una comisión
-  ruleId       String?  // regla aplicada (null = sin regla, comisión 0)
+  id         String    @id @default(cuid())
+  storeId    String
+  userId     String // vendedor
+  saleId     String    @unique // una venta = una comisión
+  ruleId     String? // regla aplicada (null = sin regla, comisión 0)
   // Cálculo
-  saleTotal    Float    // total de la venta (snapshot)
-  saleProfit   Float    @default(0) // ganancia bruta de la venta (snapshot)
-  base         Float    // base sobre la que se calcula (venta o ganancia)
-  rate         Float    // tasa aplicada (%)
-  amount       Float    // monto de comisión calculado
+  saleTotal  Float // total de la venta (snapshot)
+  saleProfit Float     @default(0) // ganancia bruta de la venta (snapshot)
+  base       Float // base sobre la que se calcula (venta o ganancia)
+  rate       Float // tasa aplicada (%)
+  amount     Float // monto de comisión calculado
   // Estado
-  status       String   @default("PENDIENTE") // PENDIENTE, PAGADA, ANULADA
-  paidAt       DateTime?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  status     String    @default("PENDIENTE") // PENDIENTE, PAGADA, ANULADA
+  paidAt     DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id])
-  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  rule         CommissionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  store Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User            @relation(fields: [userId], references: [id])
+  sale  Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  rule  CommissionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
 
   @@index([storeId, status])
   @@index([userId, status])
@@ -834,49 +857,49 @@ model Commission {
 // ===== CONFIGURACIÓN E-COMMERCE =====
 // Integración con plataformas (Tienda Nube, WooCommerce, MercadoLibre, Shopify)
 model EcommerceConfig {
-  id              String   @id @default(cuid())
-  storeId         String   @unique
-  platform        String   @default("TIENDA_NUBE") // TIENDA_NUBE, WOOCOMMERCE, MERCADOLIBRE, SHOPIFY
-  enabled         Boolean  @default(false)
+  id              String    @id @default(cuid())
+  storeId         String    @unique
+  platform        String    @default("TIENDA_NUBE") // TIENDA_NUBE, WOOCOMMERCE, MERCADOLIBRE, SHOPIFY
+  enabled         Boolean   @default(false)
   // Credenciales
-  apiUrl          String?  // URL base de la API
-  apiKey          String?  // token / API key
-  apiSecret       String?  // secreto (encryptado en producción)
-  accessToken     String?  // token de acceso OAuth2 (TiendaNube)
-  storeExternalId String?  // ID de la tienda en la plataforma (ej: store_id TiendaNube)
+  apiUrl          String? // URL base de la API
+  apiKey          String? // token / API key
+  apiSecret       String? // secreto (encryptado en producción)
+  accessToken     String? // token de acceso OAuth2 (TiendaNube)
+  storeExternalId String? // ID de la tienda en la plataforma (ej: store_id TiendaNube)
   // Sincronización
-  syncProducts    Boolean  @default(true) // sincronizar productos
-  syncStock       Boolean  @default(true) // sincronizar stock
-  syncPrices      Boolean  @default(true) // sincronizar precios
-  syncOrders      Boolean  @default(true) // importar pedidos online
-  autoFulfill     Boolean  @default(false) // marcar como enviado automáticamente
+  syncProducts    Boolean   @default(true) // sincronizar productos
+  syncStock       Boolean   @default(true) // sincronizar stock
+  syncPrices      Boolean   @default(true) // sincronizar precios
+  syncOrders      Boolean   @default(true) // importar pedidos online
+  autoFulfill     Boolean   @default(false) // marcar como enviado automáticamente
   // Webhook
-  webhookSecret   String?  // secreto para validar webhooks
+  webhookSecret   String? // secreto para validar webhooks
   lastSyncAt      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  syncLogs        EcommerceSyncLog[]
+  store    Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  syncLogs EcommerceSyncLog[]
 }
 
 // Log de sincronización (auditoría)
 model EcommerceSyncLog {
-  id          String   @id @default(cuid())
-  storeId     String
-  configId    String
-  direction   String   // OUTBOUND (local->plataforma), INBOUND (plataforma->local)
-  entity      String   // PRODUCT, STOCK, PRICE, ORDER, CUSTOMER
-  entityId    String?  // id local
-  externalId  String?  // id remoto
-  action      String   // CREATE, UPDATE, DELETE
-  status      String   // SUCCESS, ERROR, PENDING
-  message     String?  // detalle del error o éxito
-  payload     String?  // JSON del payload enviado/recibido (truncado si muy grande)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  storeId    String
+  configId   String
+  direction  String // OUTBOUND (local->plataforma), INBOUND (plataforma->local)
+  entity     String // PRODUCT, STOCK, PRICE, ORDER, CUSTOMER
+  entityId   String? // id local
+  externalId String? // id remoto
+  action     String // CREATE, UPDATE, DELETE
+  status     String // SUCCESS, ERROR, PENDING
+  message    String? // detalle del error o éxito
+  payload    String? // JSON del payload enviado/recibido (truncado si muy grande)
+  createdAt  DateTime @default(now())
 
-  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  config      EcommerceConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  store  Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  config EcommerceConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@index([storeId, createdAt])
   @@index([configId, createdAt])
@@ -886,29 +909,29 @@ model EcommerceSyncLog {
 // ===== PLANTILLAS DE IMPRESIÓN =====
 // Plantillas para impresoras térmicas (tickets, comandas)
 model PrintTemplate {
-  id          String   @id @default(cuid())
-  storeId     String
-  name        String   // nombre legible (ej: "Ticket 58mm", "Comanda cocina")
-  type        String   @default("TICKET") // TICKET, COMANDA, CIERRE_Z, ETIQUETA
+  id           String   @id @default(cuid())
+  storeId      String
+  name         String // nombre legible (ej: "Ticket 58mm", "Comanda cocina")
+  type         String   @default("TICKET") // TICKET, COMANDA, CIERRE_Z, ETIQUETA
   // Configuración de impresora
-  paperWidth  Int      @default(58) // ancho en mm (58 o 80)
-  charset     String   @default("CP437") // CP437, CP850, UTF8
-  cutPaper    Boolean  @default(true) // corte automático al final
+  paperWidth   Int      @default(58) // ancho en mm (58 o 80)
+  charset      String   @default("CP437") // CP437, CP850, UTF8
+  cutPaper     Boolean  @default(true) // corte automático al final
   // Diseño (JSON: header, footer, mostrar logo, mostrar QR AFIP, etc.)
-  config      String?
+  config       String?
   // Contenido (plantilla con placeholders: {{store.name}}, {{sale.total}}, etc.)
-  headerLines String?  // líneas de encabezado (separadas por \n)
-  footerLines String?  // líneas de pie
-  showLogo    Boolean  @default(false)
-  showCustomer Boolean @default(false)
-  showSeller  Boolean  @default(true)
-  showPayment Boolean  @default(true)
-  active      Boolean  @default(true)
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  headerLines  String? // líneas de encabezado (separadas por \n)
+  footerLines  String? // líneas de pie
+  showLogo     Boolean  @default(false)
+  showCustomer Boolean  @default(false)
+  showSeller   Boolean  @default(true)
+  showPayment  Boolean  @default(true)
+  active       Boolean  @default(true)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId, active])
 }
@@ -916,26 +939,26 @@ model PrintTemplate {
 // ===== COLA DE SINCRONIZACIÓN OFFLINE (PWA) =====
 // Operaciones realizadas offline que deben sincronizarse al volver online
 model OfflineSyncQueue {
-  id          String   @id @default(cuid())
-  storeId     String
-  userId      String?  // usuario que originó la operación
+  id        String    @id @default(cuid())
+  storeId   String
+  userId    String? // usuario que originó la operación
   // Operación
-  entity      String   // SALE, CUSTOMER, PRODUCT, STOCK_MOVEMENT
-  action      String   // CREATE, UPDATE, DELETE
-  payload     String   // JSON del cuerpo de la petición
-  endpoint    String   // path relativo (ej: /api/sales)
-  method      String   @default("POST") // POST, PUT, DELETE
+  entity    String // SALE, CUSTOMER, PRODUCT, STOCK_MOVEMENT
+  action    String // CREATE, UPDATE, DELETE
+  payload   String // JSON del cuerpo de la petición
+  endpoint  String // path relativo (ej: /api/sales)
+  method    String    @default("POST") // POST, PUT, DELETE
   // Estado
-  status      String   @default("PENDING") // PENDING, SYNCED, FAILED, CONFLICT
-  attempts    Int      @default(0)
-  lastError   String?
+  status    String    @default("PENDING") // PENDING, SYNCED, FAILED, CONFLICT
+  attempts  Int       @default(0)
+  lastError String?
   // IDs temporales para reconciliación
-  tempId      String?  // ID generado offline (UUID)
-  syncedId    String?  // ID real asignado por el servidor
-  createdAt   DateTime @default(now())
-  syncedAt    DateTime?
+  tempId    String? // ID generado offline (UUID)
+  syncedId  String? // ID real asignado por el servidor
+  createdAt DateTime  @default(now())
+  syncedAt  DateTime?
 
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId, status])
   @@index([entity, status])

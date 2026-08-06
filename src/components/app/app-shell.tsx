@@ -13,6 +13,7 @@ import { PurchasesView } from "@/components/views/purchases-view";
 import { ExpensesView } from "@/components/views/expenses-view";
 import { CashRegisterView } from "@/components/views/cash-register-view";
 import { InvoicesView } from "@/components/views/invoices-view";
+import { CreditNotesView } from "@/components/views/credit-notes-view";
 import { ReportsView } from "@/components/views/reports-view";
 import { RefundsView } from "@/components/views/refunds-view";
 import { PromotionsView } from "@/components/views/promotions-view";
@@ -46,6 +47,7 @@ import {
   TrendingDown,
   Wallet,
   FileText,
+  FileMinus,
   BarChart3,
   Settings,
   LogOut,
@@ -98,6 +100,7 @@ const NAV_CATEGORIES: NavCategory[] = [
       { key: "sales", label: "Ventas", icon: <Receipt className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
       { key: "refunds", label: "Devoluciones", icon: <RotateCcw className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
       { key: "invoices", label: "Facturación", icon: <FileText className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
+      { key: "credit-notes", label: "Notas de Crédito", icon: <FileMinus className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR", "CAJERO"] },
       { key: "customers", label: "Clientes", icon: <Users className="w-4 h-4" />, roles: ["ADMIN", "VENDEDOR"] },
     ],
   },
@@ -222,6 +225,8 @@ export function AppShell() {
         return <SalesView />;
       case "invoices":
         return <InvoicesView />;
+      case "credit-notes":
+        return <CreditNotesView />;
       case "refunds":
         return <RefundsView />;
       case "promotions":

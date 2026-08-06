@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,8 @@ import {
   Receipt,
   TrendingUp,
   TrendingDown,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
@@ -79,6 +82,10 @@ export function RefundsView() {
   const [saving, setSaving] = useState(false);
 
   const [detailRefund, setDetailRefund] = useState<any | null>(null);
+  // Nota de crédito: si el usuario quiere emitir NC al confirmar la devolución.
+  // Solo se ofrece si la venta tiene factura electrónica asociada con CAE.
+  const [emitCreditNote, setEmitCreditNote] = useState(false);
+  const [taxConfigExists, setTaxConfigExists] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -95,6 +102,16 @@ export function RefundsView() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  // Cargar configuración fiscal para saber si se puede emitir NC.
+  // /api/tax-config devuelve null si no hay config, o el objeto TaxConfig.
+  useEffect(() => {
+    safeFetchJSON<any>("/api/tax-config")
+      .then(({ ok, data }) => {
+        if (ok && data?.active) setTaxConfigExists(true);
+      })
+      .catch(() => {});
   }, []);
 
   // Buscar ventas por ID parcial o cliente
@@ -126,6 +143,9 @@ export function RefundsView() {
     setRefundMethod("EFECTIVO");
     setReason("");
     setNotes("");
+    // Por defecto, si la venta tiene factura y el comercio tiene AFIP configurado,
+    // pre-tildar emitir NC. El usuario puede destildar.
+    setEmitCreditNote(!!sale?.invoice && taxConfigExists);
     setSearchOpen(false);
   }
 
@@ -199,13 +219,27 @@ export function RefundsView() {
           refundMethod,
           reason,
           notes,
+          emitCreditNote,
         }),
       });
       if (!ok) {
         toast.error(error || "Error al procesar devolución");
         return;
       }
-      toast.success(`Devolución ${data.refundNumber} registrada`);
+      // Si el backend devolvió _warning, la devolución se procesó pero la NC
+      // falló — avisar al usuario y ofrecer reintentar desde el módulo NC.
+      if (data?._warning) {
+        toast.warning("Devolución registrada con advertencia", {
+          description: data._warning,
+          duration: 8000,
+        });
+      } else if (data?.creditNote) {
+        toast.success(`Devolución ${data.refundNumber} + NC ${data.creditNote.numeroCompleto}`, {
+          description: `CAE: ${data.creditNote.cae}`,
+        });
+      } else {
+        toast.success(`Devolución ${data.refundNumber} registrada`);
+      }
       setSelectedSale(null);
       await load();
     } catch (e: any) {
@@ -308,6 +342,7 @@ export function RefundsView() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Método</TableHead>
                     <TableHead>Monto</TableHead>
+                    <TableHead>NC</TableHead>
                     <TableHead>Motivo</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -342,6 +377,28 @@ export function RefundsView() {
                       </TableCell>
                       <TableCell className="font-semibold text-red-600">
                         −{formatCurrency(r.total, symbol)}
+                      </TableCell>
+                      <TableCell>
+                        {r.creditNoteInvoice ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-indigo-50 text-indigo-700 border-indigo-200 font-mono text-xs"
+                            title={`CAE: ${r.creditNoteInvoice.cae}`}
+                          >
+                            <FileText className="w-3 h-3 mr-1" />
+                            {r.creditNoteInvoice.numeroCompleto}
+                          </Badge>
+                        ) : r.sale?.invoice ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-50 text-amber-700 border-amber-200 text-xs"
+                            title="La venta tiene factura pero no se emitió NC"
+                          >
+                            Pendiente
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {REFUND_REASONS.find((m) => m.value === r.reason)?.label ||
@@ -513,6 +570,58 @@ export function RefundsView() {
                   <p>{detailRefund.notes}</p>
                 </div>
               )}
+
+              {/* Nota de crédito asociada (si se emitió) */}
+              {detailRefund.creditNoteInvoice ? (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-indigo-900 font-medium">
+                    <FileText className="w-4 h-4" />
+                    Nota de crédito emitida
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-indigo-800">
+                    <div>
+                      <span className="text-indigo-600">Comprobante:</span>{" "}
+                      <span className="font-mono">
+                        {detailRefund.creditNoteInvoice.numeroCompleto}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-indigo-600">Tipo:</span>{" "}
+                      NC-{detailRefund.creditNoteInvoice.status === "EMITIDA"
+                        ? "Emitida"
+                        : detailRefund.creditNoteInvoice.status}
+                    </div>
+                    <div>
+                      <span className="text-indigo-600">CAE:</span>{" "}
+                      <span className="font-mono">
+                        {detailRefund.creditNoteInvoice.cae}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-indigo-600">Fecha:</span>{" "}
+                      {formatDateTime(detailRefund.creditNoteInvoice.fechaEmision)}
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-indigo-600">Total NC:</span>{" "}
+                      <strong>
+                        {formatCurrency(detailRefund.creditNoteInvoice.total, symbol)}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              ) : detailRefund.sale?.invoice ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    La venta tiene factura{" "}
+                    <strong className="font-mono">
+                      {detailRefund.sale.invoice.numeroCompleto}
+                    </strong>{" "}
+                    pero no se emitió nota de crédito. Podés emitirla desde el
+                    módulo Notas de Crédito.
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
           <DialogFooter>
@@ -660,6 +769,73 @@ export function RefundsView() {
                   placeholder="Detalle adicional..."
                 />
               </div>
+
+              {/* Nota de crédito AFIP */}
+              {taxConfigExists && selectedSale.invoice && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="emit-nc"
+                      checked={emitCreditNote}
+                      onCheckedChange={(v) => setEmitCreditNote(v === true)}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <label
+                        htmlFor="emit-nc"
+                        className="text-sm font-medium text-indigo-900 cursor-pointer flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Emitir nota de crédito AFIP
+                      </label>
+                      <p className="text-xs text-indigo-700 mt-1">
+                        Se generará una NC electrónica tipo{" "}
+                        <strong>{selectedSale.invoice.tipo}</strong> vinculada a la
+                        factura{" "}
+                        <strong className="font-mono">
+                          {selectedSale.invoice.numeroCompleto || "—"}
+                        </strong>{" "}
+                        (CAE:{" "}
+                        <span className="font-mono">
+                          {selectedSale.invoice.cae || "—"}
+                        </span>
+                        ).
+                      </p>
+                    </div>
+                  </div>
+                  {emitCreditNote && (
+                    <div className="text-xs text-indigo-700 flex items-center gap-1.5 pl-7">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      La NC se emitirá con CAE propio y quedará vinculada a la
+                      factura original.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Si no tiene factura pero AFIP está configurado, mostrar aviso */}
+              {taxConfigExists && !selectedSale.invoice && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    Esta venta no tiene factura electrónica asociada. No se
+                    puede emitir nota de crédito AFIP. Si necesitás una NC,
+                    generá primero la factura desde el módulo Facturación.
+                  </div>
+                </div>
+              )}
+
+              {/* Si no hay AFIP configurado, igual informar */}
+              {!taxConfigExists && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex gap-2 text-xs text-slate-600">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    AFIP no está configurado. Las devoluciones se procesan
+                    igual pero no emiten nota de crédito fiscal. Configurá
+                    AFIP en Configuración → Fiscal para habilitar NC.
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

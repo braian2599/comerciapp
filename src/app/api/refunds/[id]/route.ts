@@ -21,12 +21,34 @@ export async function GET(
         include: {
           items: true,
           customer: { select: { id: true, name: true } },
+          invoice: {
+            select: {
+              id: true,
+              numeroCompleto: true,
+              tipo: true,
+              cae: true,
+              fechaEmision: true,
+            },
+          },
         },
       },
       customer: { select: { id: true, name: true } },
       user: { select: { name: true } },
       branch: { select: { id: true, name: true, code: true } },
       cashRegister: { select: { id: true, openingDate: true } },
+      creditNoteInvoice: {
+        select: {
+          id: true,
+          numeroCompleto: true,
+          cae: true,
+          caeVencimiento: true,
+          qrData: true,
+          fechaEmision: true,
+          total: true,
+          status: true,
+          observation: true,
+        },
+      },
     },
   });
 

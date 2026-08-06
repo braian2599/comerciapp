@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { calculateRefundTotals } from "@/lib/refund-calc";
+import { emitirNotaDeCredito } from "@/lib/afip";
 
 // GET /api/refunds - listar devoluciones
 export async function GET(req: NextRequest) {
@@ -32,11 +33,22 @@ export async function GET(req: NextRequest) {
           createdAt: true,
           total: true,
           paymentMethod: true,
+          invoice: { select: { id: true, numeroCompleto: true, tipo: true } },
         },
       },
       customer: { select: { id: true, name: true } },
       user: { select: { name: true } },
       branch: { select: { id: true, name: true, code: true } },
+      creditNoteInvoice: {
+        select: {
+          id: true,
+          numeroCompleto: true,
+          cae: true,
+          fechaEmision: true,
+          total: true,
+          status: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -64,7 +76,7 @@ export async function POST(req: NextRequest) {
   // 1. Validar venta
   const sale = await db.sale.findFirst({
     where: { id: body.saleId, storeId, status: "COMPLETADA" },
-    include: { items: true, customer: true },
+    include: { items: true, customer: true, invoice: true },
   });
   if (!sale) {
     return NextResponse.json({ error: "Venta no encontrada o ya anulada" }, { status: 404 });
@@ -79,6 +91,27 @@ export async function POST(req: NextRequest) {
       { error: "Esta venta ya tiene una devolución registrada" },
       { status: 400 }
     );
+  }
+
+  // 1b. Si el usuario pidió emitir NC, validar que la venta tenga factura
+  //     electrónica con CAE (no se puede emitir NC sobre una venta sin factura).
+  const wantsCreditNote = body.emitCreditNote === true;
+  if (wantsCreditNote) {
+    if (!sale.invoice) {
+      return NextResponse.json({
+        error: "No se puede emitir nota de crédito: la venta no tiene factura electrónica asociada. Genere la factura primero desde el módulo Facturación.",
+      }, { status: 400 });
+    }
+    if (sale.invoice.status === "ANULADA") {
+      return NextResponse.json({
+        error: `La factura ${sale.invoice.numeroCompleto} está anulada; no se puede emitir NC sobre una factura anulada.`,
+      }, { status: 400 });
+    }
+    if (!sale.invoice.cae) {
+      return NextResponse.json({
+        error: `La factura ${sale.invoice.numeroCompleto} no tiene CAE; no se puede emitir NC.`,
+      }, { status: 400 });
+    }
   }
 
   // 2. Determinar items a devolver y montos (cálculo delegado a lib/refund-calc)
@@ -288,8 +321,66 @@ export async function POST(req: NextRequest) {
   });
 
   // 7. (Opcional) Emitir nota de crédito AFIP
-  // TODO: si body.emitCreditNote, generar nota de crédito electrónica
-  // Por ahora se deja como referencia; el módulo AFIP puede procesar esto luego.
+  //     Se hace FUERA de la transacción principal porque llama a AFIP (latencia)
+  //     y no queremos hacer hold de locks de DB mientras AFIP responde.
+  //     Si AFIP falla, el refund YA está persistido con sus efectos (stock,
+  //     caja, cuenta corriente) — el usuario puede reintentar la NC desde
+  //     el módulo Notas de Crédito sin perder la devolución.
+  let creditNoteResult: any = null;
+  if (wantsCreditNote && sale.invoice) {
+    // Recalcular neto/IVA prorrateado para la NC, usando la misma tasa
+    // de IVA que tenía la factura original (snapshot).
+    const ivaRate = sale.invoice.ivaRate;
+    // El total de la NC es refundTotal (positivo). Para NC tipo A se
+    // discrimina IVA; para B/C va incluido.
+    let netoGravado: number;
+    let ivaAmount: number;
+    if (sale.invoice.tipo === "A") {
+      netoGravado = refundTotal / (1 + ivaRate / 100);
+      ivaAmount = refundTotal - netoGravado;
+    } else {
+      netoGravado = refundTotal / (1 + ivaRate / 100);
+      ivaAmount = refundTotal - netoGravado;
+    }
 
-  return NextResponse.json(refund);
+    creditNoteResult = await emitirNotaDeCredito(storeId, u.id, {
+      originalInvoiceId: sale.invoice.id,
+      tipo: sale.invoice.tipo as any,
+      concepto: sale.invoice.concepto as any,
+      fecha: new Date(),
+      clienteNombre: sale.invoice.customerName,
+      clienteCuit: sale.invoice.customerCuit,
+      clienteCondicionIva: sale.invoice.customerTaxType,
+      netoGravado: Number(netoGravado.toFixed(2)),
+      ivaRate,
+      ivaAmount: Number(ivaAmount.toFixed(2)),
+      total: Number(refundTotal.toFixed(2)),
+      customerId: sale.customerId,
+      refundId: refund.id,
+      motivo: `Devolución ${refundNumber}${body.reason ? ` - ${body.reason}` : ""}${body.notes ? ` - ${body.notes}` : ""}`,
+    });
+
+    if (!creditNoteResult.ok) {
+      // La NC falló pero el refund quedó persistido. Devolver warning al
+      // frontend para que el usuario sepa que debe reintentar la NC.
+      return NextResponse.json({
+        ...refund,
+        _warning: `La devolución se registró correctamente, pero la nota de crédito no se pudo emitir: ${creditNoteResult.error}. Puede reintentar desde el módulo Notas de Crédito.`,
+      });
+    }
+  }
+
+  // Devolver refund + NC si se emitió
+  const response: any = { ...refund };
+  if (creditNoteResult?.ok && creditNoteResult.creditNote) {
+    response.creditNote = {
+      id: creditNoteResult.creditNote.id,
+      numeroCompleto: creditNoteResult.numeroCompleto,
+      cae: creditNoteResult.cae,
+      caeVencimiento: creditNoteResult.caeVencimiento,
+      qrData: creditNoteResult.qrData,
+      total: creditNoteResult.creditNote.total,
+    };
+  }
+  return NextResponse.json(response);
 }

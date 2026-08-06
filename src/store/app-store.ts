@@ -13,6 +13,7 @@ export type ViewKey =
   | "expenses"
   | "cash"
   | "invoices"
+  | "credit-notes"
   | "reports"
   | "refunds"
   | "promotions"

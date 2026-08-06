@@ -115,21 +115,45 @@ export function getTipoComprobanteCode(tipo: string): number {
   }
 }
 
-export function getAlicuotaIvaCode(rate: number): number {
-  if (rate === 0) return AFIP_ALICUOTAS_IVA.CERO;
-  if (rate === 10.5) return AFIP_ALICUOTAS_IVA.DIEZ_COMA_CINCO;
-  if (rate === 21) return AFIP_ALICUOTAS_IVA.VEINTIUNO;
-  if (rate === 27) return AFIP_ALICUOTAS_IVA.VEINTISIETE;
-  return AFIP_ALICUOTAS_IVA.VEINTIUNO;
+/**
+ * Devuelve el código AFIP de Nota de Crédito para la letra dada.
+ * NC-A=3, NC-B=8, NC-C=13, NC-M=53, NC-E=21.
+ */
+export function getTipoComprobanteCodeNotaCredito(tipo: string): number {
+  switch (tipo) {
+    case "A": return AFIP_TIPOS_COMPROBANTE.NOTA_CREDITO_A;
+    case "B": return AFIP_TIPOS_COMPROBANTE.NOTA_CREDITO_B;
+    case "C": return AFIP_TIPOS_COMPROBANTE.NOTA_CREDITO_C;
+    case "M": return AFIP_TIPOS_COMPROBANTE.NOTA_CREDITO_M;
+    case "E": return AFIP_TIPOS_COMPROBANTE.NOTA_CREDITO_E;
+    default: return AFIP_TIPOS_COMPROBANTE.NOTA_CREDITO_B;
+  }
 }
 
-export function getTipoDocCliente(cuit?: string | null): number {
-  if (!cuit || cuit.trim() === "") return AFIP_TIPO_DOCUMENTO.SIN_IDENTIFICAR;
-  return AFIP_TIPO_DOCUMENTO.CUIT;
-}
-
-export function formatNumeroComprobante(puntoVenta: number, numero: number): string {
-  return `${String(puntoVenta).padStart(4, "0")}-${String(numero).padStart(8, "0")}`;
+/**
+ * Calcula el próximo número de factura según el tipo.
+ * `kind` distingue entre facturas y notas de crédito (AFIP los numera
+ * de forma independiente dentro del mismo punto de venta).
+ */
+export function getNextInvoiceNumber(
+  taxConfig: TaxConfig,
+  tipo: string,
+  kind: "FACTURA" | "NOTA_CREDITO" = "FACTURA"
+): number {
+  if (kind === "NOTA_CREDITO") {
+    switch (tipo) {
+      case "A": return taxConfig.lastCreditNoteA + 1;
+      case "B": return taxConfig.lastCreditNoteB + 1;
+      case "C": return taxConfig.lastCreditNoteC + 1;
+      default: return taxConfig.lastCreditNoteB + 1;
+    }
+  }
+  switch (tipo) {
+    case "A": return taxConfig.lastInvoiceA + 1;
+    case "B": return taxConfig.lastInvoiceB + 1;
+    case "C": return taxConfig.lastInvoiceC + 1;
+    default: return taxConfig.lastInvoiceB + 1;
+  }
 }
 
 /**
@@ -149,19 +173,21 @@ export function validarCuit(cuit: string): boolean {
   return checkDigit === parseInt(clean[10]);
 }
 
-/**
- * Calcula el próximo número de factura según el tipo
- */
-export function getNextInvoiceNumber(
-  taxConfig: TaxConfig,
-  tipo: string
-): number {
-  switch (tipo) {
-    case "A": return taxConfig.lastInvoiceA + 1;
-    case "B": return taxConfig.lastInvoiceB + 1;
-    case "C": return taxConfig.lastInvoiceC + 1;
-    default: return taxConfig.lastInvoiceB + 1;
-  }
+export function getAlicuotaIvaCode(rate: number): number {
+  if (rate === 0) return AFIP_ALICUOTAS_IVA.CERO;
+  if (rate === 10.5) return AFIP_ALICUOTAS_IVA.DIEZ_COMA_CINCO;
+  if (rate === 21) return AFIP_ALICUOTAS_IVA.VEINTIUNO;
+  if (rate === 27) return AFIP_ALICUOTAS_IVA.VEINTISIETE;
+  return AFIP_ALICUOTAS_IVA.VEINTIUNO;
+}
+
+export function getTipoDocCliente(cuit?: string | null): number {
+  if (!cuit || cuit.trim() === "") return AFIP_TIPO_DOCUMENTO.SIN_IDENTIFICAR;
+  return AFIP_TIPO_DOCUMENTO.CUIT;
+}
+
+export function formatNumeroComprobante(puntoVenta: number, numero: number): string {
+  return `${String(puntoVenta).padStart(4, "0")}-${String(numero).padStart(8, "0")}`;
 }
 
 // ===== GENERACIÓN DE QR (RG AFIP 4291/2018) =====
@@ -410,6 +436,306 @@ export async function emitirFactura(
     return { ok: false, error: err.message || "Error interno al emitir factura" };
   }
 }
+
+// ===== NOTA DE CRÉDITO ELECTRÓNICA =====
+/**
+ * Datos necesarios para emitir una Nota de Crédito electrónica vinculada
+ * a una factura original.
+ *
+ * En AFIP, una NC debe referenciar a la factura que está anulando/ajustando
+ * mediante un comprobante asociado (CbtesAsoc). Por eso requerimos el
+ * `originalInvoiceId` que apunta al Invoice (factura) en nuestra BD.
+ */
+export interface DatosNotaCredito {
+  // Factura original a la que se vincula esta NC
+  originalInvoiceId: string;
+  // Letra de la NC (debe coincidir con la factura original: A, B, C, M, E)
+  tipo: "A" | "B" | "C" | "M" | "E";
+  concepto: "PRODUCTOS" | "SERVICIOS" | "PRODUCTOS_Y_SERVICIOS";
+  fecha: Date;
+  // Cliente (snapshot de la factura original; AFIP exige el mismo receptor)
+  clienteNombre: string;
+  clienteCuit?: string | null;
+  clienteCondicionIva: string;
+  // Montos (positivos — la NC "anula" un monto de la factura original)
+  netoGravado: number;
+  ivaRate: number;
+  ivaAmount: number;
+  noGravado?: number;
+  exento?: number;
+  total: number;
+  // Opcional: cliente para vincular en BD
+  customerId?: string | null;
+  // Opcional: refund que originó esta NC (para back-link Invoice.refund)
+  refundId?: string;
+  // Motivo de la NC (texto libre, se guarda en observation)
+  motivo?: string;
+}
+
+export interface ResultadoNotaCredito extends ResultadoFactura {
+  // La NC recién creada
+  creditNote?: Invoice;
+  // La factura original a la que se vinculó
+  originalInvoice?: Invoice;
+}
+
+/**
+ * Emite una Nota de Crédito electrónica vinculada a una factura.
+ *
+ * Reglas de negocio:
+ *  - La factura original debe existir, estar EMITIDA (no ANULADA) y tener CAE.
+ *  - La letra y concepto de la NC deben coincidir con los de la factura original.
+ *  - El cliente de la NC es el mismo que el de la factura original (snapshot).
+ *  - La NC obtiene su propio número (contador independiente en TaxConfig).
+ *  - En modo demo: CAE simulado.
+ *  - En modo producción: WSFEv1 con CbtesAsoc apuntando a la factura original.
+ *
+ * El Invoice creado queda con:
+ *   comprobanteSubtipo = 'NOTA_CREDITO'
+ *   relatedInvoiceId   = <id de la factura original>
+ *   refundId           = <refundId si vino en DatosNotaCredito>  (se linkea más abajo)
+ *
+ * NOTA: NO se setea `saleId` en la NC porque Invoice.saleId es @unique
+ *       y la venta ya tiene su factura original. La NC se vincula a la
+ *       venta indirectamente vía relatedInvoiceId → Factura.saleId.
+ *
+ * NOTA: el back-link Invoice.refund → Refund se hace escribiendo
+ *       Refund.creditNoteInvoiceId = invoice.id desde el caller,
+ *       porque la relación 1:1 vive del lado del Refund.
+ */
+export async function emitirNotaDeCredito(
+  storeId: string,
+  userId: string,
+  datos: DatosNotaCredito
+): Promise<ResultadoNotaCredito> {
+  try {
+    // 1. Validar configuración fiscal
+    const taxConfig = await db.taxConfig.findUnique({ where: { storeId } });
+    if (!taxConfig || !taxConfig.active) {
+      return {
+        ok: false,
+        error: "No hay configuración fiscal activa. Configure AFIP en Configuración.",
+      };
+    }
+    if (!taxConfig.cuit || !validarCuit(taxConfig.cuit)) {
+      return { ok: false, error: "CUIT del emisor inválido en configuración fiscal." };
+    }
+
+    // 2. Cargar factura original y validar
+    const originalInvoice = await db.invoice.findFirst({
+      where: { id: datos.originalInvoiceId, storeId },
+    });
+    if (!originalInvoice) {
+      return { ok: false, error: "Factura original no encontrada." };
+    }
+    if (originalInvoice.comprobanteSubtipo !== "FACTURA") {
+      return {
+        ok: false,
+        error: `El comprobante ${originalInvoice.numeroCompleto} no es una factura (es ${originalInvoice.comprobanteSubtipo}).`,
+      };
+    }
+    if (originalInvoice.status === "ANULADA") {
+      return {
+        ok: false,
+        error: `La factura ${originalInvoice.numeroCompleto} ya está anulada; no se puede emitir NC sobre una factura anulada.`,
+      };
+    }
+    if (!originalInvoice.cae) {
+      return {
+        ok: false,
+        error: `La factura ${originalInvoice.numeroCompleto} no tiene CAE; no se puede emitir NC sobre una factura sin CAE.`,
+      };
+    }
+
+    // 3. Validar coherencia de letra y concepto con la factura original
+    if (datos.tipo !== originalInvoice.tipo) {
+      return {
+        ok: false,
+        error: `La NC debe ser tipo ${originalInvoice.tipo} para coincidir con la factura original.`,
+      };
+    }
+
+    // 4. Para NC-A se requiere CUIT del cliente
+    if (datos.tipo === "A" && (!datos.clienteCuit || !validarCuit(datos.clienteCuit))) {
+      return {
+        ok: false,
+        error: "Para nota de crédito A se requiere CUIT válido del cliente.",
+      };
+    }
+
+    // 5. Generar número de NC (contador independiente)
+    const numero = getNextInvoiceNumber(taxConfig, datos.tipo, "NOTA_CREDITO");
+    const numeroCompleto = formatNumeroComprobante(taxConfig.puntoVenta, numero);
+    const tipoComprobanteCode = getTipoComprobanteCodeNotaCredito(datos.tipo);
+
+    // 6. Solicitar CAE a AFIP
+    let cae: string;
+    let caeVencimiento: Date;
+    let observaciones: string | undefined;
+    let resultado: string;
+
+    if (taxConfig.environment === "produccion" && taxConfig.certPath) {
+      const afipResult = await solicitarCaeNotaCreditoProduccion({
+        taxConfig,
+        tipoComprobante: tipoComprobanteCode,
+        puntoVenta: taxConfig.puntoVenta,
+        numero,
+        datos,
+        originalInvoice,
+      });
+      if (!afipResult.ok) {
+        return { ok: false, error: afipResult.error };
+      }
+      cae = afipResult.cae!;
+      caeVencimiento = afipResult.caeVencimiento!;
+      observaciones = afipResult.observaciones;
+      resultado = afipResult.resultado || "A";
+    } else {
+      // MODO DEMO: simular CAE
+      cae = generarCaeSimulado();
+      caeVencimiento = new Date();
+      caeVencimiento.setDate(caeVencimiento.getDate() + 10);
+      resultado = "A";
+    }
+
+    // 7. Generar QR (RG 4291 — mismo formato que factura, pero con tipoCmp de NC)
+    const tipoDocRec = getTipoDocCliente(datos.clienteCuit);
+    const nroDocRec =
+      tipoDocRec === AFIP_TIPO_DOCUMENTO.SIN_IDENTIFICAR
+        ? 0
+        : parseInt((datos.clienteCuit || "0").replace(/\D/g, "")) || 0;
+
+    const qrData = generarQrData({
+      cuitEmisor: taxConfig.cuit,
+      fecha: datos.fecha,
+      puntoVenta: taxConfig.puntoVenta,
+      tipoComprobante: tipoComprobanteCode,
+      numero,
+      importe: datos.total,
+      tipoDocReceptor: tipoDocRec,
+      nroDocReceptor: nroDocRec,
+      cae,
+    });
+
+    // 8. Crear Invoice con comprobanteSubtipo='NOTA_CREDITO'
+    //
+    // NOTA sobre saleId: NO seteamos saleId en la NC, porque Invoice.saleId
+    // tiene @unique y la venta ya tiene su factura original linkeada a saleId.
+    // La NC se vincula a la venta INDIRECTAMENTE vía:
+    //   NC.relatedInvoiceId → Factura.id → Factura.saleId → Sale.id
+    //   NC.refund → Refund.saleId → Sale.id
+    // Esto evita la violación de unique constraint.
+    const creditNote = await db.invoice.create({
+      data: {
+        storeId,
+        userId,
+        // saleId intencionalmente omitido (ver comentario arriba)
+        customerId: datos.customerId || originalInvoice.customerId || null,
+        taxConfigId: taxConfig.id,
+        comprobanteSubtipo: "NOTA_CREDITO",
+        relatedInvoiceId: originalInvoice.id,
+        tipo: datos.tipo,
+        puntoVenta: taxConfig.puntoVenta,
+        numero,
+        numeroCompleto,
+        fechaEmision: datos.fecha,
+        concepto: datos.concepto,
+        netoGravado: datos.netoGravado,
+        ivaRate: datos.ivaRate,
+        ivaAmount: datos.ivaAmount,
+        noGravado: datos.noGravado || 0,
+        exento: datos.exento || 0,
+        total: datos.total,
+        customerName: datos.clienteNombre || "Consumidor Final",
+        customerCuit: datos.clienteCuit || null,
+        customerTaxType: datos.clienteCondicionIva,
+        cae,
+        caeVencimiento,
+        qrData,
+        status: resultado === "A" ? "EMITIDA" : resultado === "R" ? "RECHAZADA" : "PENDIENTE",
+        observation: observaciones || datos.motivo || null,
+        resultado,
+      },
+    });
+
+    // 9. Actualizar contador de NC en TaxConfig
+    const updateData: any = {};
+    if (datos.tipo === "A") updateData.lastCreditNoteA = numero;
+    else if (datos.tipo === "B") updateData.lastCreditNoteB = numero;
+    else if (datos.tipo === "C") updateData.lastCreditNoteC = numero;
+
+    await db.taxConfig.update({
+      where: { id: taxConfig.id },
+      data: updateData,
+    });
+
+    // 10. Vincular Refund → NC (back-link 1:1)
+    if (datos.refundId) {
+      await db.refund.update({
+        where: { id: datos.refundId },
+        data: { creditNoteInvoiceId: creditNote.id },
+      });
+    }
+
+    return {
+      ok: true,
+      invoice: creditNote,
+      creditNote,
+      originalInvoice,
+      cae,
+      caeVencimiento,
+      numero,
+      numeroCompleto,
+      qrData,
+      observaciones,
+    };
+  } catch (err: any) {
+    console.error("Error emitiendo nota de crédito:", err);
+    return { ok: false, error: err.message || "Error interno al emitir nota de crédito" };
+  }
+}
+
+/**
+ * Producción: solicita CAE de NC a AFIP WSFEv1.
+ * A diferencia de la factura, una NC debe incluir el array `CbtesAsoc`
+ * apuntando a la factura original (tipo + ptoVta + nro).
+ *
+ * TODO: integración real con @afipsdk/afip.js cuando el cliente cargue
+ * certificado de producción. Por ahora retorna error claro.
+ */
+async function solicitarCaeNotaCreditoProduccion(params: {
+  taxConfig: TaxConfig;
+  tipoComprobante: number;
+  puntoVenta: number;
+  numero: number;
+  datos: DatosNotaCredito;
+  originalInvoice: Invoice;
+}): Promise<{
+  ok: boolean;
+  cae?: string;
+  caeVencimiento?: Date;
+  observaciones?: string;
+  resultado?: string;
+  error?: string;
+}> {
+  // TODO: implementar con @afipsdk/afip.js
+  // Pasos:
+  // 1. Verificar token WSAA vigente, si no, solicitar nuevo.
+  // 2. Llamar a FECAESolicitar con:
+  //    - CbteTipo = params.tipoComprobante (3, 8, 13, 53 o 21)
+  //    - PtoVta = params.puntoVenta
+  //    - CbteNro = params.numero
+  //    - Concepto = same que factura original
+  //    - DocTipo + DocNro = same que factura original
+  //    - ImpNeto, ImpIVA, ImpTotal (positivos, montos de la NC)
+  //    - CbtesAsoc = [{ Tipo: <tipo original>, PtoVta: <pto original>, Nro: <nro original> }]
+  // 3. Verificar ErroresArray y obtener CAE + vencimiento.
+  return {
+    ok: false,
+    error: "Integración AFIP producción para NC no implementada. Use modo demo o cargue el SDK.",
+  };
+}
+
 
 // ===== PRODUCCIÓN: SOLICITAR CAE A AFIP WSFEv1 =====
 /**
