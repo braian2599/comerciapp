@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { calculatePointsEarned, determineTier, pointsToCurrency, calculateMaxRedeemablePoints } from "@/lib/loyalty";
+import { assertCreditAvailable } from "@/lib/customer-account";
 
 // GET: lista de ventas (con filtros)
 export async function GET(req: NextRequest) {
@@ -195,6 +196,34 @@ export async function POST(req: NextRequest) {
   const isCredit = method?.type === "CUENTA";
   const amountPaid = isCredit ? 0 : total;
   const onCredit = isCredit;
+
+  // Si es venta fiada, validar que el cliente tenga crédito disponible.
+  // ANTES: no había validación, se podía fiar cualquier monto sin importar
+  //        el creditLimit configurado en el cliente.
+  // AHORA: si el cliente tiene creditLimit > 0, se valida que el saldo
+  //        actual + monto nuevo no exceda el límite. Si lo excede, se
+  //        rechaza la venta con error 400 y mensaje claro.
+  //        Si creditLimit = 0, se asume "sin límite" (cliente ilimitado).
+  if (isCredit) {
+    if (!body.customerId) {
+      return NextResponse.json(
+        {
+          error:
+            "Las ventas en cuenta corriente requieren un cliente asociado. " +
+            "Seleccioná un cliente antes de cobrar con el método CUENTA.",
+        },
+        { status: 400 }
+      );
+    }
+    try {
+      await assertCreditAvailable(db, storeId, body.customerId, total);
+    } catch (e: any) {
+      return NextResponse.json(
+        { error: e?.message || "Crédito insuficiente" },
+        { status: 400 }
+      );
+    }
+  }
 
   // Buscar caja abierta para asociar venta y movimientos de efectivo
   const openRegister = await db.cashRegister.findFirst({

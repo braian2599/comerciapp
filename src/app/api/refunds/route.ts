@@ -5,6 +5,11 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { calculateRefundTotals } from "@/lib/refund-calc";
 import { emitirNotaDeCredito } from "@/lib/afip";
+import {
+  getNextRefundNumber,
+  normalizeRefundMethod,
+  applyCreditToCustomerAccount,
+} from "@/lib/customer-account";
 
 // GET /api/refunds - listar devoluciones
 export async function GET(req: NextRequest) {
@@ -155,26 +160,43 @@ export async function POST(req: NextRequest) {
     refundTotal,
   } = refundCalc;
 
-  // 4. Generar número de devolución
-  const lastRefund = await db.refund.findFirst({
-    where: { storeId },
-    orderBy: { refundNumber: "desc" },
-  });
-  let nextNum = 1;
-  if (lastRefund && lastRefund.refundNumber) {
-    const m = lastRefund.refundNumber.match(/DEV-(\d+)/);
-    if (m) nextNum = parseInt(m[1]) + 1;
-  }
-  const refundNumber = `DEV-${String(nextNum).padStart(4, "0")}`;
-
-  // 5. Buscar caja abierta
+  // 4. Buscar caja abierta (antes de la transacción para no hacer IO
+  //    innecesario dentro de la tx, pero la validación de unicidad de
+  //    refundNumber se hace DENTRO de la tx para evitar races).
   const openRegister = await db.cashRegister.findFirst({
     where: { storeId, status: "ABIERTA" },
   });
 
+  // 4b. Normalizar método de devolución considerando contexto de la venta.
+  //     Esto resuelve:
+  //      - Venta fiada + EFECTIVO/TRANSFERENCIA → automáticamente CREDITO_CUENTA
+  //        (con warning para que el usuario sepa) salvo que confirme con
+  //        forceCashRefundOnCreditSale=true.
+  //      - CREDITO_CUENTA sin cliente en la venta → cae a EFECTIVO (con warning).
+  const { method: normalizedRefundMethod, warning: methodWarning } =
+    normalizeRefundMethod(
+      {
+        onCredit: sale.onCredit,
+        customerId: sale.customerId,
+        paymentMethod: sale.paymentMethod,
+      },
+      body.refundMethod,
+      {
+        forceCashRefundOnCreditSale:
+          body.forceCashRefundOnCreditSale === true,
+      }
+    );
+
   // 6. Crear devolución en transacción
+  //    Todas las escrituras (refund, stock, customer_payment, cash_movement,
+  //    sale.status, customer stats) van adentro para garantizar atomicidad.
   const refund = await db.$transaction(async (tx) => {
-    // Crear registro de devolución
+    // 6.1 Generar refundNumber DENTRO de la transacción para evitar race
+    //     conditions. Antes esto se hacía afuera y dos usuarios concurrentes
+    //     podían generar el mismo número.
+    const refundNumber = await getNextRefundNumber(tx, storeId);
+
+    // 6.2 Crear registro de devolución
     const newRefund = await tx.refund.create({
       data: {
         storeId,
@@ -189,7 +211,7 @@ export async function POST(req: NextRequest) {
         discount: refundDiscount,
         tax: refundTax,
         total: refundTotal,
-        refundMethod: body.refundMethod || "EFECTIVO",
+        refundMethod: normalizedRefundMethod,
         reason: body.reason || null,
         notes: body.notes || null,
         status: "COMPLETADA",
@@ -207,7 +229,10 @@ export async function POST(req: NextRequest) {
       include: { items: true },
     });
 
-    // Restituir stock
+    // 6.3 Restituir stock + registrar movimiento
+    //     Usamos tipo "ENTRADA" (no "AJUSTE") para distinguir devoluciones de
+    //     ajustes manuales en reportes de stock. Esto permite filtrar
+    //     "entradas por devolución" sin ambigüedad.
     for (const item of refundItems) {
       await tx.product.update({
         where: { id: item.productId },
@@ -218,7 +243,7 @@ export async function POST(req: NextRequest) {
           productId: item.productId,
           storeId,
           userId: u.id,
-          type: "AJUSTE",
+          type: "ENTRADA",
           quantity: item.quantity,
           reason: `Devolución ${refundNumber}`,
           refType: "Refund",
@@ -227,11 +252,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Si fue pago en efectivo y hay caja abierta, registrar EGRESO
+    // 6.4 Registrar movimiento de caja si se entregó efectivo al cliente.
+    //     ANTES: solo se registraba si sale.paymentMethod === "EFECTIVO",
+    //     lo cual rompía si el cliente pagó con TARJETA pero devuelve en
+    //     EFECTIVO (no quedaba registro del egreso de caja).
+    //     AHORA: registramos egreso siempre que se entregue efectivo al
+    //     cliente en la devolución, independientemente de cómo pagó originalmente.
     if (
       openRegister &&
-      body.refundMethod === "EFECTIVO" &&
-      sale.paymentMethod === "EFECTIVO"
+      normalizedRefundMethod === "EFECTIVO" &&
+      refundTotal > 0
     ) {
       await tx.cashMovement.create({
         data: {
@@ -248,57 +278,93 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Si fue CREDITO_CUENTA, registrar pago a cuenta del cliente (resta saldo)
-    if (body.refundMethod === "CREDITO_CUENTA" && sale.customerId) {
-      await tx.customerPayment.create({
-        data: {
-          storeId,
-          customerId: sale.customerId,
-          userId: u.id,
-          amount: refundTotal,
-          paymentMethod: "NOTA_CREDITO",
-          cashRegisterId: openRegister?.id || null,
-          notes: `Devolución ${refundNumber} de venta ${sale.id.slice(-6)}`,
-        },
+    // 6.5 Si refundMethod=CREDITO_CUENTA, acreditar a la cuenta del cliente.
+    //     normalizeRefundMethod() ya garantizó que hay customerId.
+    //     Usamos applyCreditToCustomerAccount() para centralizar la lógica.
+    if (normalizedRefundMethod === "CREDITO_CUENTA" && sale.customerId) {
+      await applyCreditToCustomerAccount(tx, {
+        storeId,
+        customerId: sale.customerId,
+        userId: u.id,
+        amount: refundTotal,
+        paymentMethod: "NOTA_CREDITO",
+        cashRegisterId: openRegister?.id || null,
+        notes: `Devolución ${refundNumber} de venta ${sale.id.slice(-6)}`,
+        refType: "Refund",
+        refId: newRefund.id,
+        // NC no genera movimiento de caja física (el dinero no entra/sale de la caja)
+        registerCashMovement: false,
       });
     }
 
-    // Si es devolución total, marcar venta como ANULADA
+    // 6.6 Si es devolución total, marcar venta como ANULADA.
+    //     ANTES: esto dejaba deuda fantasma si la venta era fiada y el
+    //     refundMethod era CREDITO_CUENTA, porque el saldo se calcula con
+    //     Sale(onCredit=true, status=COMPLETADA) y al cambiar status a
+    //     ANULADA la deuda desaparecía "por arte de magia" (sin registro
+    //     contable de la reversión).
+    //     AHORA: si la venta era fiada, NO la marcamos como ANULADA — la
+    //     deuda queda visible en cuenta corriente hasta que el
+    //     CustomerPayment (NOTA_CREDITO) la compense explícitamente.
+    //     Solo anulamos ventas CONTADO.
     if (isTotal) {
-      await tx.sale.update({
-        where: { id: sale.id },
-        data: { status: "ANULADA" },
-      });
-    } else {
-      // Devolución parcial: la venta sigue COMPLETADA pero con marca (no se anula)
-      // Podría agregarse un campo hasPartialRefund pero lo manejamos vía relación refund
+      if (sale.onCredit) {
+        // Venta fiada: NO marcar como ANULADA. La deuda se cancela vía
+        // CustomerPayment (creado en 6.5 si method=CREDITO_CUENTA).
+        // Si method=EFECTIVO (con forceCashRefundOnCreditSale=true), la
+        // deuda queda activa y debe cancelarse manualmente.
+        // Nota: dejamos status=COMPLETADA para que siga apareciendo en el
+        // ledger de cuenta corriente.
+      } else {
+        // Venta contado: anular la venta.
+        await tx.sale.update({
+          where: { id: sale.id },
+          data: { status: "ANULADA" },
+        });
+      }
     }
 
-    // Descontar puntos al cliente si ganó puntos en la venta original
-    if (sale.customerId && sale.loyaltyPointsEarned > 0) {
-      const program = await tx.loyaltyProgram.findUnique({ where: { storeId } });
-      if (program && program.enabled) {
-        const customer = await tx.customer.findUnique({
-          where: { id: sale.customerId },
+    // 6.7 Actualizar stats del cliente (totalSpent, totalSales, loyaltyPoints).
+    //     ANTES: esto estaba DENTRO del bloque `if (sale.loyaltyPointsEarned > 0)`,
+    //     lo cual hacía que totalSpent/totalSales no se actualizaran si la
+    //     venta no había ganado puntos (programa desactivado, compra chica, etc.).
+    //     AHORA: el bloque de stats es independiente del bloque de puntos.
+    if (sale.customerId) {
+      const customer = await tx.customer.findUnique({
+        where: { id: sale.customerId },
+      });
+      if (customer) {
+        // Calcular proporción para prorratear puntos
+        const proportionToRevert = sale.total > 0 ? refundTotal / sale.total : 0;
+        const pointsToRevert = Math.floor(
+          sale.loyaltyPointsEarned * proportionToRevert
+        );
+        const pointsToReturn = Math.floor(
+          sale.loyaltyPointsUsed * proportionToRevert
+        );
+        const newBalance = Math.max(
+          0,
+          customer.loyaltyPoints - pointsToRevert + pointsToReturn
+        );
+
+        await tx.customer.update({
+          where: { id: customer.id },
+          data: {
+            loyaltyPoints: newBalance,
+            totalSpent: { decrement: refundTotal },
+            // Solo decrementar totalSales si fue devolución total de venta contado.
+            // Para venta fiada dejamos el contador (porque la venta sigue existiendo).
+            totalSales:
+              isTotal && !sale.onCredit ? { decrement: 1 } : undefined,
+          },
         });
-        if (customer) {
-          // Devolver puntos proporcionalmente al monto devuelto
-          const proportionToRevert = refundTotal / sale.total;
-          const pointsToRevert = Math.floor(sale.loyaltyPointsEarned * proportionToRevert);
-          // Devolver puntos canjeados si los hubo
-          const pointsToReturn = Math.floor(sale.loyaltyPointsUsed * proportionToRevert);
-          const newBalance = Math.max(0, customer.loyaltyPoints - pointsToRevert + pointsToReturn);
 
-          await tx.customer.update({
-            where: { id: customer.id },
-            data: {
-              loyaltyPoints: newBalance,
-              totalSpent: { decrement: refundTotal },
-              totalSales: isTotal ? { decrement: 1 } : undefined,
-            },
+        // Registrar movimiento de puntos si hubo reversa
+        if (pointsToRevert > 0 || pointsToReturn > 0) {
+          const program = await tx.loyaltyProgram.findUnique({
+            where: { storeId },
           });
-
-          if (pointsToRevert > 0) {
+          if (program) {
             await tx.loyaltyPoint.create({
               data: {
                 storeId,
@@ -357,7 +423,7 @@ export async function POST(req: NextRequest) {
       total: Number(refundTotal.toFixed(2)),
       customerId: sale.customerId,
       refundId: refund.id,
-      motivo: `Devolución ${refundNumber}${body.reason ? ` - ${body.reason}` : ""}${body.notes ? ` - ${body.notes}` : ""}`,
+      motivo: `Devolución ${refund.refundNumber}${body.reason ? ` - ${body.reason}` : ""}${body.notes ? ` - ${body.notes}` : ""}`,
     });
 
     if (!creditNoteResult.ok) {
@@ -365,13 +431,20 @@ export async function POST(req: NextRequest) {
       // frontend para que el usuario sepa que debe reintentar la NC.
       return NextResponse.json({
         ...refund,
+        refundMethod: normalizedRefundMethod,
         _warning: `La devolución se registró correctamente, pero la nota de crédito no se pudo emitir: ${creditNoteResult.error}. Puede reintentar desde el módulo Notas de Crédito.`,
       });
     }
   }
 
-  // Devolver refund + NC si se emitió
-  const response: any = { ...refund };
+  // Devolver refund + NC si se emitió + propagar warnings de normalización
+  const response: any = {
+    ...refund,
+    refundMethod: normalizedRefundMethod,
+  };
+  if (methodWarning) {
+    response._warning = methodWarning;
+  }
   if (creditNoteResult?.ok && creditNoteResult.creditNote) {
     response.creditNote = {
       id: creditNoteResult.creditNote.id,

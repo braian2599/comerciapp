@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getCustomerBalance, applyCreditToCustomerAccount } from "@/lib/customer-account";
 
 // GET: estado de cuenta de un cliente (ventas fiadas + pagos)
 // ?customerId=xxx
@@ -112,7 +113,14 @@ export async function GET(req: NextRequest) {
 }
 
 // POST: registrar pago de cuenta corriente
-// body: { customerId, amount, paymentMethod, notes?, cashRegisterId? }
+// body: {
+//   customerId: string,
+//   amount: number,
+//   paymentMethod: string, // EFECTIVO | TRANSFERENCIA | TARJETA | OTRO
+//   notes?: string,
+//   cashRegisterId?: string,
+//   allowOverpayment?: boolean  // si true, permite pagar más del saldo (adelanto)
+// }
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No auth" }, { status: 401 });
@@ -122,13 +130,41 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { customerId, amount, paymentMethod, notes } = body;
 
-  if (!customerId || !amount || amount <= 0) {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+  // Validaciones básicas
+  if (!customerId) {
+    return NextResponse.json({ error: "Falta customerId" }, { status: 400 });
+  }
+  const amountNum = Number(amount);
+  if (!Number.isFinite(amountNum) || amountNum <= 0) {
+    return NextResponse.json(
+      { error: "El monto debe ser un número mayor a cero" },
+      { status: 400 }
+    );
   }
 
   const customer = await db.customer.findFirst({ where: { id: customerId, storeId } });
   if (!customer) {
     return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+
+  // Validar overpayment: si el monto excede el saldo actual y el usuario
+  // no confirmó con allowOverpayment=true, rechazar para evitar saldos
+  // negativos accidentales (el cliente queda "a favor" pero podría ser
+  // un error de tipeo del usuario).
+  // allowOverpayment=true permite adelantos deliberados (ej: cliente
+  // deja seña para futuras compras).
+  const currentBalance = await getCustomerBalance(db, storeId, customerId);
+  const allowOverpayment = body.allowOverpayment === true;
+  if (amountNum > currentBalance + 0.01 && !allowOverpayment) {
+    return NextResponse.json({
+      error:
+        `El monto a pagar ($${amountNum.toFixed(2)}) excede el saldo deudor ` +
+        `actual ($${currentBalance.toFixed(2)}). ` +
+        `Si querés registrar un adelanto (saldo a favor del cliente), ` +
+        `confirmá con allowOverpayment=true.`,
+      currentBalance,
+      requestedAmount: amountNum,
+    }, { status: 400 });
   }
 
   // Buscar caja abierta si el pago es en efectivo
@@ -139,39 +175,27 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Usar applyCreditToCustomerAccount para centralizar la creación de
+  // CustomerPayment + CashMovement (mantenemos consistencia con refunds).
   const payment = await db.$transaction(async (tx) => {
-    const newPayment = await tx.customerPayment.create({
-      data: {
-        storeId,
-        customerId,
-        userId: u.id,
-        amount: Number(amount),
-        paymentMethod: paymentMethod || "EFECTIVO",
-        cashRegisterId: openRegister?.id || null,
-        notes,
-      },
-      include: { user: { select: { name: true } } },
+    return applyCreditToCustomerAccount(tx, {
+      storeId,
+      customerId,
+      userId: u.id,
+      amount: amountNum,
+      paymentMethod: paymentMethod || "EFECTIVO",
+      cashRegisterId: openRegister?.id || null,
+      notes: notes || null,
+      refType: "CustomerPayment",
+      registerCashMovement: true, // PAGO_CUENTA genera ingreso de caja si es efectivo
     });
-
-    // Si es efectivo, registrar movimiento de caja
-    if (openRegister && paymentMethod === "EFECTIVO") {
-      await tx.cashMovement.create({
-        data: {
-          cashRegisterId: openRegister.id,
-          storeId,
-          userId: u.id,
-          type: "PAGO_CUENTA",
-          amount: Number(amount),
-          concept: `Pago cta. ${customer.name}`,
-          paymentMethod: "EFECTIVO",
-          refType: "CustomerPayment",
-          refId: newPayment.id,
-        },
-      });
-    }
-
-    return newPayment;
   });
 
-  return NextResponse.json(payment);
+  // Devolver el pago creado + saldo actualizado (para que el frontend
+  // refresque el balance sin tener que hacer otro GET).
+  const newBalance = await getCustomerBalance(db, storeId, customerId);
+  return NextResponse.json({
+    ...payment,
+    _newBalance: newBalance,
+  });
 }

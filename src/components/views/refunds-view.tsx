@@ -140,7 +140,13 @@ export function RefundsView() {
   function openRefundForSale(sale: any) {
     setSelectedSale(sale);
     setReturnItems({});
-    setRefundMethod("EFECTIVO");
+    // Si la venta original fue fiada (onCredit=true), pre-seleccionar
+    // CREDITO_CUENTA como método de devolución. Esto evita el bug de doble
+    // devolución (deuda activa + entrega de efectivo).
+    // Si el usuario realmente quiere entregar efectivo/transferencia por una
+    // venta fiada, tiene que elegirlo manualmente — el backend lo va a
+    // rechazar con warning a menos que mande forceCashRefundOnCreditSale=true.
+    setRefundMethod(sale?.onCredit ? "CREDITO_CUENTA" : "EFECTIVO");
     setReason("");
     setNotes("");
     // Por defecto, si la venta tiene factura y el comercio tiene AFIP configurado,
@@ -226,8 +232,9 @@ export function RefundsView() {
         toast.error(error || "Error al procesar devolución");
         return;
       }
-      // Si el backend devolvió _warning, la devolución se procesó pero la NC
-      // falló — avisar al usuario y ofrecer reintentar desde el módulo NC.
+      // Si el backend devolvió _warning, la devolución se procesó pero algo
+      // requirió ajuste automático (venta fiada → CREDITO_CUENTA, NC fallida,
+      // sin cliente → EFECTIVO, etc.) — avisar al usuario.
       if (data?._warning) {
         toast.warning("Devolución registrada con advertencia", {
           description: data._warning,
@@ -742,6 +749,25 @@ export function RefundsView() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {/* Warning visual si la venta fue fiada y se eligió cash.
+                      El backend va a forzar CREDITO_CUENTA automáticamente,
+                      pero le avisamos al usuario antes para que no se sorprenda. */}
+                  {selectedSale?.onCredit &&
+                    (refundMethod === "EFECTIVO" || refundMethod === "TRANSFERENCIA") && (
+                      <p className="text-xs text-amber-700 mt-1">
+                        ⚠️ Esta venta fue fiada (cuenta corriente). El sistema
+                        la procesará como <strong>Crédito en cuenta corriente</strong>{" "}
+                        para evitar doble devolución. Para entregar dinero al
+                        cliente, confirmá con un admin.
+                      </p>
+                    )}
+                  {/* Warning si eligió CREDITO_CUENTA pero la venta no tiene cliente */}
+                  {refundMethod === "CREDITO_CUENTA" && !selectedSale?.customerId && (
+                    <p className="text-xs text-amber-700 mt-1">
+                      ⚠️ La venta no tiene cliente asociado. No se puede
+                      acreditar a cuenta corriente — se procesará como EFECTIVO.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Motivo</Label>

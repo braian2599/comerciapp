@@ -82,3 +82,74 @@ Stage Summary:
 - Modo producción: placeholder con TODO detallado (requiere @afipsdk/afip.js + certificado del cliente)
 - Build: ✓ Compiled successfully
 - Type-check: ✓ sin errores en src/
+
+---
+Task ID: P2.1-refunds-customer-account
+Agent: main (Super Z)
+Task: Robustecer el flujo devoluciones → cuenta corriente cliente (P2.1). Asegurar que no queden datos al azar ni comunicaciones inter-modulares fallidas entre refunds, customer-account, sales y cash-registers.
+
+Work Log:
+- Audité el flujo completo de refunds → customer account:
+  - Schema: no existe modelo CustomerAccount; el saldo se calcula como Σ(Sale.onCredit=true, status=COMPLETADA, total) − Σ(CustomerPayment.amount). Es un cálculo derivado en runtime.
+  - 3 lugares distintos calculaban saldo (customers/account GET, customers GET lista, dashboard) sin compartir lógica.
+- Detecté 12 bugs de robustez en el flujo:
+  1. Refund de venta fiada en EFECTIVO dejaba deuda fantasma (doble devolución).
+  2. refundNumber se generaba FUERA de transacción (race condition).
+  3. refundNumber usaba orderBy string desc (bug lexicográfico después de DEV-9999).
+  4. StockMovement type="AJUSTE" no distinguía devoluciones de ajustes manuales.
+  5. cashMovement solo se registraba si sale.paymentMethod === "EFECTIVO" (rompía si pagó con tarjeta).
+  6. customer.totalSpent solo se decrementaba si la venta tenía loyaltyPointsEarned > 0 (programa desactivado → stats erróneas).
+  7. customer.totalSales se decrementaba en toda devolución total, incluso de venta fiada (donde la venta sigue existiendo).
+  8. CREDITO_CUENTA sin customerId se ignoraba silenciosamente (refund "perdido").
+  9. POST /api/customers/account permitía overpayment sin validación (saldos negativos accidentales).
+  10. POST /api/sales no validaba creditLimit al fiar (se podía fiar cualquier monto).
+  11. POST /api/sales no requería customerId al fiar (venta fiada sin cliente = imposible cobrar después).
+  12. Refund de venta fiada total marcaba sale.status="ANULADA" → deuda desaparecía sin registro contable.
+- Creé `src/lib/customer-account.ts` (lib nueva, ~290 LOC):
+  - `getCustomerBalance(dbOrTx, storeId, customerId)` — cálculo canónico con aggregate (no carga registros a memoria).
+  - `assertCreditAvailable(dbOrTx, storeId, customerId, amount)` — valida creditLimit, throws con mensaje user-friendly.
+  - `normalizeRefundMethod(sale, requestedMethod, options)` — decide método efectivo considerando si la venta era fiada + forceCashRefundOnCreditSale flag.
+  - `getNextRefundNumber(tx, storeId)` — generación atómica dentro de transacción, parsing numérico robusto.
+  - `applyCreditToCustomerAccount(tx, params)` — wrapper reutilizable para crear CustomerPayment + CashMovement.
+- Refactorizé `POST /api/refunds`:
+  - Mover generación refundNumber DENTRO de la transacción.
+  - Aplicar normalizeRefundMethod() antes de la tx (resuelve bug #1, #8).
+  - Mover actualización de customer.totalSpent/totalSales FUERA del bloque de puntos (resuelve #6, #7).
+  - Cambiar StockMovement type a "ENTRADA" (resuelve #4).
+  - Registrar cashMovement siempre que se entregue efectivo, sin depender de sale.paymentMethod (resuelve #5).
+  - No anular ventas fiadas en devolución total (resuelve #12) — la deuda queda visible hasta que CustomerPayment la compense.
+  - Propagar _warning de normalización al frontend.
+- Refactorizé `POST /api/sales`:
+  - Validar que customerId esté presente si method.type=CUENTA (resuelve #11).
+  - Llamar assertCreditAvailable() antes de crear la venta (resuelve #10).
+- Refactorizé `POST /api/customers/account`:
+  - Validaciones más estrictas (Number.isFinite, separar amountNum).
+  - Validar overpayment con flag allowOverpayment (resuelve #9).
+  - Usar applyCreditToCustomerAccount() para consistencia con refunds.
+  - Devolver _newBalance en respuesta para que el frontend refresque sin GET adicional.
+- Actualicé `refunds-view.tsx`:
+  - openRefundForSale() pre-selecciona CREDITO_CUENTA si venta era fiada.
+  - Warning visual en el modal si venta fiada + método cash elegido.
+  - Warning visual si CREDITO_CUENTA + sin cliente.
+  - submitRefund maneja _warning con toast (ya existía, mejoré docstring).
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 14.3s, 58/58 static pages OK
+
+Stage Summary:
+- Bugs críticos resueltos: 12 (todos los detectados en el audit)
+- Libs nuevas: 1 (src/lib/customer-account.ts, ~290 LOC con JSDoc detallado)
+- Endpoints refactorizados: 3 (/api/refunds POST, /api/sales POST, /api/customers/account POST)
+- Frontend mejorado: refunds-view.tsx (pre-select + 2 warnings visuales + manejo de _warning)
+- Comunicación inter-modular validada:
+  - refunds → customer-account: normalizeRefundMethod decide método según contexto de la venta
+  - refunds → customers: stats (totalSpent, totalSales, loyaltyPoints) se actualizan SIEMPRE, no solo si ganó puntos
+  - refunds → cash-registers: EGRESO se registra siempre que se entrega efectivo
+  - refunds → stock: type="ENTRADA" distingue devoluciones de ajustes manuales
+  - sales → customers: assertCreditAvailable valida creditLimit ANTES de crear venta fiada
+  - customers/account → customers: devuelve _newBalance para evitar race con GET
+- Race conditions eliminadas:
+  - refundNumber: ahora dentro de transacción (serializable de Postgres)
+  - customer.totalSpent: ahora dentro de la misma tx que el refund
+  - overpayment: validado con getCustomerBalance antes de aceptar pago
+- Sin cambios de schema (no requiere migración nueva)
+- Build: ✓ Compiled successfully
