@@ -1001,3 +1001,28 @@ Stage Summary:
 - Con 9 campos de clientes, ahora se ven TODOS en una sola pantalla (5 filas de 2 columnas) sin necesidad de scroll vertical.
 - Sidebar con scroll independiente para archivos con muchas columnas (28+ columnas se ven sin comprimir).
 - Responsivo: en pantallas chicas (mobile) el sidebar se oculta y se mantiene la lista de pills compacta como antes.
+
+---
+Task ID: 8
+Agent: Super Z (main)
+Task: Ajustes adicionales al diálogo de importación (más ancho + grid más denso)
+
+Work Log:
+- Tras feedback del usuario ("la ventana sigue muy chica, no se expandió nada"), analicé nueva captura con VLM.
+- Diagnóstico: max-w-7xl (1280px) en monitor 1920px = solo 60-65% del ancho visible. Con 17 campos de productos en grid de 2 cols, solo se veían ~4-6 campos a la vez.
+- Ajustes adicionales en src/components/import-dialog.tsx:
+    * Ancho: `max-w-7xl` (1280px) → `max-w-[90rem]` (1440px)
+    * Altura: `h-[88vh]` → `h-[90vh]` (+20px de espacio vertical)
+    * Sidebar: `w-64` (256px) → `w-56` (224px) — más espacio para el grid
+    * Grid: `lg:grid-cols-2` → `md:grid-cols-2 xl:grid-cols-3` — 3 columnas en monitores xl+ (>1280px)
+    * Preview: `h-40` (160px) → `h-32` (128px) — más espacio vertical para campos
+- Server reiniciado con `.next` limpio para evitar cache.
+- TypeScript: sin errores en src/.
+- Server: HTTP 200 OK.
+
+Stage Summary:
+- Con 17 campos (productos) en monitor 1920px: ahora caben 3 columnas × 6 filas = 18 cards visibles sin scroll.
+- Ancho máximo sube a 1440px (90% del monitor en 1600px, 75% en 1920px).
+- En monitores más chicos (1280-1366px): el `w-[96vw]` y el grid responsive mantienen usabilidad (2 columnas en md, 3 en xl).
+- Sidebar más angosto (224px) pero aún cómodo para listar columnas.
+- Preview más compacto (128px vs 160px) libera 32px extra para el grid de campos.

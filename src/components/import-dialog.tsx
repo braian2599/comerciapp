@@ -412,7 +412,7 @@ export function ImportDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-w-7xl w-[96vw] h-[88vh] !flex flex-col overflow-hidden p-0 gap-0"
+        className="max-w-[90rem] w-[96vw] h-[90vh] !flex flex-col overflow-hidden p-0 gap-0"
       >
         {/* ═══ HEADER (fijo) ═══ */}
         <DialogHeader className="shrink-0 px-6 pt-5 pb-3 border-b gap-2">
@@ -605,7 +605,7 @@ export function ImportDialog({
               {/* ─── Cuerpo principal: sidebar izq (cols archivo) + main (campos) ─ */}
               <div className="flex-1 min-h-0 flex">
                 {/* ═══ Sidebar: Columnas en archivo ═══ */}
-                <aside className="w-64 shrink-0 border-r bg-muted/20 flex flex-col min-h-0 hidden md:flex">
+                <aside className="w-56 shrink-0 border-r bg-muted/20 flex flex-col min-h-0 hidden md:flex">
                   <div className="shrink-0 px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
                     <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       Columnas en archivo
@@ -682,7 +682,7 @@ export function ImportDialog({
                     className="flex-1 min-h-0 overflow-y-auto px-6 pb-3"
                     style={{ contain: "strict" }}
                   >
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                       {fields.map((field) => {
                         const idx = columnMapping[field.key];
                         const isMapped = idx !== undefined && idx >= 0;
@@ -786,8 +786,8 @@ export function ImportDialog({
                     </div>
                   </div>
 
-                  {/* Tabla preview (h-40 fija, scroll-x+y interno) */}
-                  <div className="shrink-0 h-40 border-t bg-background overflow-auto">
+                  {/* Tabla preview (h-32 fija, scroll-x+y interno) */}
+                  <div className="shrink-0 h-32 border-t bg-background overflow-auto">
                     {Object.keys(columnMapping).length === 0 ? (
                       <div className="h-full flex items-center justify-center text-center p-4">
                         <div className="text-xs text-muted-foreground space-y-1">
