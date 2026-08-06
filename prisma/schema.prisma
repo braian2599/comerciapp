@@ -18,6 +18,8 @@ datasource db {
   // Si no está definido, Prisma usa `url` para todo (incluido migrate),
   // lo cual falla contra el pooler de Neon porque pgbouncer no soporta
   // prepared statements necesarios para migraciones.
+  // Fallback con `env()` directo: si DIRECT_DATABASE_URL no está seteada,
+  // Prisma usa DATABASE_URL (aceptable en dev, no en prod con pgbouncer).
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
