@@ -59,3 +59,4 @@ db/
 *.sqlite
 *.sqlite3
 tool-results/
+.zscripts

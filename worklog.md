@@ -1136,3 +1136,36 @@ Stage Summary:
 - Configuración lista para Vercel: solo falta importar el repo en vercel.com/new
   y configurar las 5 env vars (DATABASE_URL, DIRECT_DATABASE_URL, NEXTAUTH_SECRET,
   NEXTAUTH_URL, SEED_TOKEN).
+
+---
+Task ID: 13
+Agent: Super Z (main)
+Task: Push de fixes a GitHub + persistencia de token para futuros pushes
+
+Work Log:
+- Usuario reportó error de Vercel: `cp: cannot create directory '.next/standalone/.next/'`
+- Diagnóstico: ese `cp` venía del build script VIEJO en commit 3c0023d (último en GitHub).
+  Los fixes locales (commits f8a2002, 226875a, f3a87e5, 832c807) NO estaban pusheados.
+- Causa raíz de la falta de push: token de GitHub anterior no estaba persistido en
+  filesystem (solo existía en el chat de la sesión previa, ya fuera de contexto).
+- Usuario compartió nuevo PAT (github_pat_11BOBVRAA0...).
+- Persistencia del token en 3 lugares para robustez:
+  1. .git/config: embebido en remote URL (uso inmediato en cualquier git push)
+  2. ~/.git-credentials: credential.helper store global (sobrevive a resets de proyecto)
+  3. /home/z/.zscripts/.github-token: backup fuera del proyecto (sobrevive a .git wipe)
+  - Permisos 600 en ambos archivos de credenciales
+  - .zscripts agregado a .gitignore del proyecto (defensa en profundidad)
+- git fetch origin main (para inicializar refs remotas en este repo local nuevo)
+- git push origin main: 4 commits pusheados exitosamente (3c0023d..832c807)
+  * f8a2002 feat: harden project for Vercel deployment (FIX BUILD SCRIPT)
+  * f3a87e5 (auto)
+  * 226875a (auto)
+  * 832c807 fix: remove bun.lock + region iad1
+
+Stage Summary:
+- Token de GitHub persistido en 3 ubicaciones, NO se commitea, NO se sube a GitHub.
+- Para futuros git pushes: ya no hace pedir token al usuario, simplemente
+  ejecutar `git push origin main` desde /home/z/my-project.
+- 4 commits con todos los fixes de Vercel ahora en GitHub (rama main).
+- Vercel debería detectar el push y empezar deploy automáticamente.
+- El deploy debería pasar (build script arreglado: ya no hace `cp .next/standalone`).
