@@ -412,7 +412,7 @@ export function ImportDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-w-[90rem] w-[96vw] h-[90vh] !flex flex-col overflow-hidden p-0 gap-0"
+        className="!max-w-[95vw] w-[95vw] sm:!max-w-[95vw] md:!max-w-[95vw] lg:!max-w-[95vw] xl:!max-w-[95vw] 2xl:!max-w-[95rem] h-[92vh] !flex flex-col overflow-hidden p-0 gap-0"
       >
         {/* ═══ HEADER (fijo) ═══ */}
         <DialogHeader className="shrink-0 px-6 pt-5 pb-3 border-b gap-2">
@@ -682,7 +682,7 @@ export function ImportDialog({
                     className="flex-1 min-h-0 overflow-y-auto px-6 pb-3"
                     style={{ contain: "strict" }}
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
                       {fields.map((field) => {
                         const idx = columnMapping[field.key];
                         const isMapped = idx !== undefined && idx >= 0;

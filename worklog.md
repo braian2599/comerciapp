@@ -1026,3 +1026,26 @@ Stage Summary:
 - En monitores más chicos (1280-1366px): el `w-[96vw]` y el grid responsive mantienen usabilidad (2 columnas en md, 3 en xl).
 - Sidebar más angosto (224px) pero aún cómodo para listar columnas.
 - Preview más compacto (128px vs 160px) libera 32px extra para el grid de campos.
+
+---
+Task ID: 9
+Agent: Super Z (main)
+Task: Corrección crítica - diálogo de importación NO estaba tomando el ancho configurado
+
+Work Log:
+- Análisis de captura del usuario con VLM: el diálogo seguía ocupando ~45-50% del ancho (850-900px) en monitor 1920px, con campos cortados a la derecha.
+- DIAGNÓSTICO RAÍZ: El componente DialogContent base (src/components/ui/dialog.tsx) tiene clases responsive hardcodeadas: `sm:max-w-2xl md:max-w-3xl` (672px / 768px). Tailwind da prioridad a estas clases responsive sobre la clase genérica `max-w-[90rem]` del import-dialog, porque los breakpoints specificity ganan en CSS.
+- SOLUCIÓN: Usar `!important` en todas las variantes responsive del import-dialog para pisar las del base:
+    * `!max-w-[95vw] sm:!max-w-[95vw] md:!max-w-[95vw] lg:!max-w-[95vw] xl:!max-w-[95vw] 2xl:!max-w-[95rem]`
+    * `w-[95vw]` para asegurar ancho real
+    * `h-[92vh]` (era 90vh) — más alto también
+- Grid de campos ampliado: `md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4` (antes era `md:grid-cols-2 xl:grid-cols-3`)
+- Server reiniciado con `.next` limpio, HTTP 200 OK, TypeScript sin errores.
+
+Stage Summary:
+- El diálogo ahora SÍ se expande al 95% del viewport (95vw) en todos los breakpoints, pisando los defaults del componente Dialog base.
+- En monitor 1920px: el diálogo ahora ocupa ~1824px de ancho (antes 850-900px).
+- En monitor 1366px: ocupa ~1298px (antes ~672-768px por el md:max-w-3xl).
+- Grid de campos escalonado: 1 col (mobile) → 2 cols (md ≥768px) → 3 cols (lg ≥1024px) → 4 cols (2xl ≥1536px).
+- Con 17 campos de productos en monitor 1920px: caben 4 columnas × 5 filas = 20 cards visibles sin scroll.
+- Con 9 campos de clientes: caben 3-4 columnas × 3 filas = todos visibles sin scroll.
