@@ -1,12 +1,24 @@
 // Prisma schema - Gestor de Ventas para Comercios
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // binaryTargets cubre:
+  //  - "native": desarrollo local (Linux/macOS/Windows detectado automáticamente)
+  //  - "debian-openssl-3.0.x": Vercel build image y Amazon Linux 2023 lambdas
+  //    (Node 20+ en Vercel usan OpenSSL 3.x).
+  // Sin estos targets, `prisma generate` en Vercel puede producir un cliente
+  // que falla en runtime con "Query engine node library not found".
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // directUrl se usa para migraciones (conexión directa, sin pgbouncer).
+  // Si no está definido, Prisma usa `url` para todo (incluido migrate),
+  // lo cual falla contra el pooler de Neon porque pgbouncer no soporta
+  // prepared statements necesarios para migraciones.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ===== TIENDA / COMERCIO =====

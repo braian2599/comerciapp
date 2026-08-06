@@ -3,8 +3,54 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/constants";
 
+/**
+ * Ruta de seed para crear una tienda demo.
+ *
+ * PROTECCIÓN ANTI-ABUSO:
+ * - En producción (Vercel), la ruta SOLO funciona si se envía el header
+ *   `x-seed-token` con valor igual a `process.env.SEED_TOKEN`.
+ * - En desarrollo local, no requiere token (por comodidad).
+ * - Esto evita que cualquiera pueda crear tiendas demo infinitas en
+ *   producción, llenando la base de datos con basura.
+ *
+ * Para invocar en producción:
+ *   curl -X POST https://app.vercel.app/api/seed \
+ *        -H "x-seed-token: $SEED_TOKEN"
+ */
+function isAuthorized(req: Request): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  const expectedToken = process.env.SEED_TOKEN;
+  if (!expectedToken) return false; // sin token configurado => bloqueado
+  const received = req.headers.get("x-seed-token");
+  return received === expectedToken;
+}
+
+// GET: información sobre cómo usar la ruta (no ejecuta el seed).
+export async function GET(req: Request) {
+  const tokenConfigured = !!process.env.SEED_TOKEN;
+  return NextResponse.json({
+    ok: true,
+    message: "Seed endpoint. POST para crear tienda demo.",
+    requiresToken: process.env.NODE_ENV === "production",
+    tokenConfigured,
+    usage:
+      process.env.NODE_ENV === "production"
+        ? "POST /api/seed con header 'x-seed-token: <SEED_TOKEN>'"
+        : "POST /api/seed (sin token en dev)",
+  });
+}
+
 // Crea una tienda de demostración con datos precargados
-export async function POST() {
+export async function POST(req: Request) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json(
+      {
+        error:
+          "No autorizado. En producción se requiere el header 'x-seed-token'.",
+      },
+      { status: 401 }
+    );
+  }
   try {
     const email = "admin@demo.com";
     const existing = await db.user.findUnique({ where: { email } });

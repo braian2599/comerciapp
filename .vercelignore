@@ -1,0 +1,46 @@
+# .vercelignore
+# Archivos y directorios que NO se suben a Vercel en cada deploy.
+# Reduce el tamaño del upload y acelera el build.
+
+# Examples / demos / scripts locales
+examples/
+scripts/
+.zscripts/
+mini-services/
+tests/
+
+# Logs y artifacts de dev
+*.log
+dev.log
+dev.out.log
+server.log
+worklog.md
+tsconfig.tsbuildinfo
+
+# Screenshots y datos de prueba
+pos_search_*.json
+download/
+upload/
+
+# Config local que no aplica en Vercel
+Caddyfile
+.claude
+.z-ai-config
+
+# Skills directory (interno, no parte del deploy)
+skills/
+
+# SQLite local (ya migrado a Postgres)
+db/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Tooling local
+tool-results/
+.local-*
+
+# Notas / docs internas
+prompt
+test
