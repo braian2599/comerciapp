@@ -953,3 +953,24 @@ Stage Summary:
 - Layout del paso de mapeo de ImportDialog rediseñado: labels ya NO se truncarán porque se eliminó `truncate` y el layout pasó de horizontal (todo en una fila) a vertical (label arriba, select abajo a full width).
 - 14 archivos modificados: dialog.tsx, alert-dialog.tsx, sheet.tsx, drawer.tsx (base), pos-view, sales-view, refunds-view, purchases-view, promotions-view, invoices-view, customers-view, print-templates-view, commissions-view, cash-register-view, products-view, import-dialog.
 - Build OK, server OK.
+
+---
+Task ID: 6
+Agent: Super Z (main)
+Task: Agregar campo "Localidad" al formulario de nuevos clientes
+
+Work Log:
+- Agregué `city String?  // Localidad` al modelo Customer en prisma/schema.prisma.
+- Apliqué cambios a la DB con `prisma db push` (sin reset) y regeneré el Prisma client.
+- Actualicé `emptyForm` en src/components/views/customers-view.tsx para incluir `city: ""`.
+- Agregué input "Localidad" en el formulario de clientes (entre Dirección y Límite de cuenta corriente), con placeholder "Ej: CABA, Rosario, Córdoba...".
+- Actualicé API POST y PUT en src/app/api/customers/route.ts para persistir `city: body.city || null`.
+- Actualicé src/app/api/customers/import/route.ts: interfaz MappedCustomer + mapRow + create/update en commit para incluir `city`.
+- Agregué el campo `city` con aliases ["city", "localidad", "ciudad", "poblacion", "municipio", "partido"] a CUSTOMER_IMPORT_FIELDS en src/lib/import-config.ts.
+- TypeScript: sin errores en archivos modificados (npx tsc --noEmit limpio para estos archivos).
+
+Stage Summary:
+- El formulario de Nuevo/Editar cliente ahora incluye el campo "Localidad".
+- La localidad se persiste en DB (campo `city`) y se incluye en edición, creación e importación masiva.
+- El importador detecta automáticamente columnas llamadas "localidad", "ciudad", "city", "poblacion", "municipio", "partido".
+- Migración aplicada con `db push` (no destructiva) — los clientes existentes quedan con city=null.

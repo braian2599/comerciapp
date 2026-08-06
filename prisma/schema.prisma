@@ -143,6 +143,7 @@ model Customer {
   phone     String?
   email     String?
   address   String?
+  city      String?  // Localidad
   notes     String?
   // Datos fiscales (AFIP)
   cuit      String?  // CUIT/CUIL del cliente (sin guiones)

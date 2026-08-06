@@ -182,6 +182,12 @@ export const CUSTOMER_IMPORT_FIELDS: ImportField[] = [
     aliases: ["address", "direccion", "domicilio", "dir"],
   },
   {
+    key: "city",
+    label: "Localidad",
+    type: "text",
+    aliases: ["city", "localidad", "ciudad", "poblacion", "municipio", "partido"],
+  },
+  {
     key: "cuit",
     label: "CUIT/CUIL",
     type: "text",

@@ -89,6 +89,7 @@ interface MappedCustomer {
   phone: string | null;
   email: string | null;
   address: string | null;
+  city: string | null;
   cuit: string | null;
   taxType: string | null;
   creditLimit: number;
@@ -111,6 +112,7 @@ function mapRow(
     phone: toStr(get("phone")),
     email: toStr(get("email")),
     address: toStr(get("address")),
+    city: toStr(get("city")),
     cuit: normalizeCuit(get("cuit")),
     taxType: normalizeTaxType(get("taxType")),
     creditLimit: toNumber(get("creditLimit"), 0),
@@ -297,6 +299,7 @@ export async function POST(req: NextRequest) {
               phone: data.phone,
               email: data.email,
               address: data.address,
+              city: data.city,
               cuit: data.cuit,
               taxType: data.taxType,
               creditLimit: Math.max(0, data.creditLimit),
@@ -336,6 +339,7 @@ export async function POST(req: NextRequest) {
               phone: data.phone,
               email: data.email,
               address: data.address,
+              city: data.city,
               cuit: data.cuit,
               taxType: data.taxType,
               creditLimit: Math.max(0, data.creditLimit),

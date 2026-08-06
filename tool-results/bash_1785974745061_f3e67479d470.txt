@@ -1,126 +1,5 @@
-"use client";
-
-import { useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogClose,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { toast } from "sonner";
-import {
-  Plus,
-  Search,
-  Pencil,
-  Trash2,
-  Users,
-  Phone,
-  Mail,
-  Loader2,
-  Wallet,
-  ReceiptText,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Star,
-  Award,
-  Gift,
-  Upload,
-} from "lucide-react";
-import { ImportDialog } from "@/components/import-dialog";
-import { useAppStore } from "@/store/app-store";
-import { formatCurrency, formatDateTime, PAYMENT_METHOD_TYPES } from "@/lib/constants";
-import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
-import { CUSTOMER_IMPORT_FIELDS } from "@/lib/import-config";
-
-interface Customer {
-  id: string;
-  name: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  notes?: string;
-  creditLimit?: number;
-  saldo?: number;
-  _count?: { sales: number };
-  loyaltyPoints?: number;
-  loyaltyTier?: string;
-  totalSpent?: number;
-  totalSales?: number;
-}
-
-interface LedgerItem {
-  id: string;
-  date: string;
-  type: "DEBE" | "HABER";
-  description: string;
-  amount: number;
-  user?: string;
-  balanceAfter: number;
-}
-
-interface AccountState {
-  customer: Customer;
-  saldo: number;
-  creditLimit: number;
-  disponible: number;
-  movimientos: LedgerItem[];
-  totalVentas: number;
-  totalPagos: number;
-}
-
-const emptyForm = {
-  id: "",
-  name: "",
-  phone: "",
-  email: "",
-  address: "",
-  city: "",
-  notes: "",
-  creditLimit: 0,
-};
-
-export function CustomersView() {
-  const { store } = useAppStore();
-  const symbol = store?.currencySymbol || "$";
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState<any>(emptyForm);
+Line 122:
+const [form, setForm] = useState<any>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -782,14 +661,6 @@ export function CustomersView() {
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="city">Localidad</Label>
-              <Input
-                value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                placeholder="Ej: CABA, Rosario, Córdoba..."
-              />
-            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="creditLimit">
                 Límite de cuenta corriente (0 = sin límite)
@@ -1008,3 +879,5 @@ export function CustomersView() {
     </div>
   );
 }
+
+---
