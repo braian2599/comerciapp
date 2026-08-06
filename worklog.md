@@ -974,3 +974,30 @@ Stage Summary:
 - La localidad se persiste en DB (campo `city`) y se incluye en edición, creación e importación masiva.
 - El importador detecta automáticamente columnas llamadas "localidad", "ciudad", "city", "poblacion", "municipio", "partido".
 - Migración aplicada con `db push` (no destructiva) — los clientes existentes quedan con city=null.
+
+---
+Task ID: 7
+Agent: Super Z (main)
+Task: Rediseño del layout del diálogo de importación (Opción A + max-w-7xl)
+
+Work Log:
+- Análisis visual con VLM de la captura del diálogo de importación de clientes: identifiqué que el problema principal era que 3 secciones (campos, preview, cols archivo) competían por la altura, dejando solo 3 campos visibles de 8.
+- Propuse 5 opciones de layout (A: sidebar+main, B: grid 4col+preview colapsable, C: tabs, D: split-pane, E: híbrido) con sus trade-offs.
+- Usuario confirmó Opción A + ancho max-w-7xl (1280px, resolución mínima de ordenadores modernos).
+- Cambios en src/components/import-dialog.tsx:
+    * DialogContent: `max-w-6xl` → `max-w-7xl` (1152px → 1280px)
+    * Paso 2 "Mapear columnas" rediseñado con layout sidebar + main:
+      - Sidebar izquierdo de 256px (w-64) con "Columnas en archivo": lista vertical con check verde para las usadas, scroll independiente. Visible solo en md+ (hidden md:flex).
+      - Zona main a la derecha con grid de campos en 2 columnas (lg:grid-cols-2), flex-1 con scroll vertical.
+      - Vista previa abajo (h-40 fija, igual que antes) dentro de la zona main.
+      - En mobile (md:hidden) se mantiene la lista compacta de columnas del archivo como fila de pills arriba del grid.
+- TypeScript: sin errores en src/ (npx tsc --noEmit).
+- Build: `next build` exitoso, sin errores ni warnings.
+- Server: corriendo en PID 1074, HTTP 200 en /.
+
+Stage Summary:
+- Diálogo de importación ahora ocupa 1280px de ancho máximo (era 1152px).
+- Layout cambió de apilado vertical (3 secciones compitiendo por altura) a sidebar+main (cols archivo siempre visibles a la izquierda + grid de campos a la derecha en 2 columnas + preview abajo).
+- Con 9 campos de clientes, ahora se ven TODOS en una sola pantalla (5 filas de 2 columnas) sin necesidad de scroll vertical.
+- Sidebar con scroll independiente para archivos con muchas columnas (28+ columnas se ven sin comprimir).
+- Responsivo: en pantallas chicas (mobile) el sidebar se oculta y se mantiene la lista de pills compacta como antes.

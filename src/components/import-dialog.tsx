@@ -412,7 +412,7 @@ export function ImportDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-w-6xl w-[96vw] h-[88vh] !flex flex-col overflow-hidden p-0 gap-0"
+        className="max-w-7xl w-[96vw] h-[88vh] !flex flex-col overflow-hidden p-0 gap-0"
       >
         {/* ═══ HEADER (fijo) ═══ */}
         <DialogHeader className="shrink-0 px-6 pt-5 pb-3 border-b gap-2">
@@ -544,7 +544,7 @@ export function ImportDialog({
             </div>
           )}
 
-          {/* ─── PASO 2: MAPEAR COLUMNAS (layout apilado vertical) ────────── */}
+          {/* ─── PASO 2: MAPEAR COLUMNAS (layout sidebar + main) ──────────── */}
           {(phase === "mapping" || phase === "previewing") && parsed && (
             <div className="h-full flex flex-col">
               {/* ─── Toolbar de stats + acciones (fijo arriba) ─── */}
@@ -602,195 +602,238 @@ export function ImportDialog({
                 </div>
               )}
 
-              {/* ─── Sección 1: Campos del sistema (header fuera del scroll) ─── */}
-              <div className="shrink-0 px-6 pt-3 pb-1.5 flex items-center justify-between">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Campos del sistema ({fields.length})
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Mapeados: {mappingStats.mapped}/{fields.length}
-                </div>
-              </div>
-
-              {/* Grid de campos (scrollable, flex-1 para llenar espacio) */}
-              <div
-                className="flex-1 min-h-0 overflow-y-auto px-6 pb-3"
-                style={{ contain: "strict" }}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {fields.map((field) => {
-                    const idx = columnMapping[field.key];
-                    const isMapped = idx !== undefined && idx >= 0;
-                    const samples = isMapped ? sampleValues(idx) : [];
-                    const usedColumnIndices = Object.values(columnMapping).filter(
-                      (i) => i !== idx
-                    );
-
-                    return (
-                      <div
-                        key={field.key}
-                        className={`rounded-md border p-2.5 transition-colors ${
-                          isMapped
-                            ? "border-indigo-200 bg-indigo-50/30"
-                            : field.required
-                            ? "border-amber-200 bg-amber-50/30"
-                            : "border-border bg-background"
-                        }`}
-                      >
-                        {/* Label + estado */}
-                        <div className="flex items-center gap-1.5 mb-1.5 min-w-0">
-                          {field.required && (
-                            <span className="text-amber-600 text-xs font-bold shrink-0">*</span>
-                          )}
-                          <Label className="text-xs font-medium truncate flex-1 min-w-0">
-                            {field.label}
-                          </Label>
-                          {field.type !== "text" && (
-                            <Badge variant="outline" className="text-[9px] py-0 px-1 h-3.5 shrink-0">
-                              {field.type}
-                            </Badge>
-                          )}
-                          {isMapped ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground italic shrink-0">
-                              sin mapear
-                            </span>
-                          )}
-                        </div>
-                        {/* Hint */}
-                        {field.hint && (
-                          <p className="text-[10px] text-muted-foreground mb-1.5 leading-tight">
-                            {field.hint}
-                          </p>
-                        )}
-                        {/* Select */}
-                        <Select
-                          value={isMapped ? String(idx) : "none"}
-                          onValueChange={(v) =>
-                            setFieldMapping(
-                              field.key,
-                              v === "none" ? -1 : Number(v)
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-full text-xs">
-                            <SelectValue placeholder="Elegir columna…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">
-                              <span className="text-muted-foreground italic">
-                                — No mapear —
-                              </span>
-                            </SelectItem>
-                            {parsed.headers.map((h, i) => (
-                              <SelectItem
-                                key={i}
-                                value={String(i)}
-                                disabled={usedColumnIndices.includes(i)}
-                              >
-                                <span className={usedColumnIndices.includes(i) ? "opacity-50" : ""}>
-                                  {h || `(columna ${i + 1})`}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {/* Mapped column badge */}
-                        {isMapped && (
-                          <div className="mt-1.5 flex items-center gap-1 text-[10px]">
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0 h-4 truncate max-w-full"
-                            >
-                              {columnLabel(idx)}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* ─── Sección 2: Vista previa (header fuera del scroll) ─── */}
-              <div className="shrink-0 px-6 pt-2 pb-1 border-t bg-muted/30">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5" />
-                  Vista previa (primeras 8 filas con el mapeo actual)
-                </div>
-              </div>
-
-              {/* Tabla preview (h-40 fija, scroll-x+y interno) */}
-              <div className="shrink-0 h-40 border-t bg-background overflow-auto">
-                {Object.keys(columnMapping).length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-center p-4">
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <Eye className="w-6 h-6 mx-auto opacity-30" />
-                      <p>Mapeá al menos un campo para ver la vista previa.</p>
+              {/* ─── Cuerpo principal: sidebar izq (cols archivo) + main (campos) ─ */}
+              <div className="flex-1 min-h-0 flex">
+                {/* ═══ Sidebar: Columnas en archivo ═══ */}
+                <aside className="w-64 shrink-0 border-r bg-muted/20 flex flex-col min-h-0 hidden md:flex">
+                  <div className="shrink-0 px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Columnas en archivo
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {parsed.headers.length}
                     </div>
                   </div>
-                ) : (
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-muted/60 z-10">
-                      <TableRow>
-                        <TableHead className="h-7 text-[10px] w-10">#</TableHead>
-                        {fields
-                          .filter((f) => columnMapping[f.key] !== undefined)
-                          .map((f) => (
-                            <TableHead key={f.key} className="h-7 text-[10px] whitespace-nowrap">
-                              {f.label}
-                            </TableHead>
-                          ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {parsed.rows.slice(0, 8).map((row, rowIdx) => (
-                        <TableRow key={rowIdx}>
-                          <TableCell className="text-[10px] py-1 text-muted-foreground">
-                            {rowIdx + 2}
-                          </TableCell>
-                          {fields
-                            .filter((f) => columnMapping[f.key] !== undefined)
-                            .map((f) => {
-                              const v = row[columnMapping[f.key]];
-                              return (
-                                <TableCell key={f.key} className="text-[10px] py-1 whitespace-nowrap">
-                                  {v === null || v === undefined || v === ""
-                                    ? "—"
-                                    : String(v)}
-                                </TableCell>
-                              );
-                            })}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
+                    {parsed.headers.map((h, i) => {
+                      const isUsed = Object.values(columnMapping).includes(i);
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded border px-2 py-1.5 text-[11px] flex items-center gap-1.5 ${
+                            isUsed
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                              : "bg-background border-border text-foreground"
+                          }`}
+                        >
+                          {isUsed ? (
+                            <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-600" />
+                          ) : (
+                            <span className="w-3 h-3 shrink-0 rounded-full border border-muted-foreground/30" />
+                          )}
+                          <span className="truncate flex-1">{h || `(col ${i + 1})`}</span>
+                          <span className="text-[9px] text-muted-foreground shrink-0">
+                            #{i + 1}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </aside>
 
-              {/* ─── Lista de columnas del archivo (referencia, colapsable) ─── */}
-              <div className="shrink-0 px-6 py-1.5 border-t bg-muted/20 flex items-center gap-1.5 flex-wrap text-[10px]">
-                <span className="text-muted-foreground font-medium shrink-0">
-                  Columnas en archivo:
-                </span>
-                {parsed.headers.map((h, i) => {
-                  const isUsed = Object.values(columnMapping).includes(i);
-                  return (
-                    <Badge
-                      key={i}
-                      variant="outline"
-                      className={`text-[10px] py-0 h-4 ${
-                        isUsed
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-muted/50 text-muted-foreground"
-                      }`}
-                    >
-                      {isUsed && <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />}
-                      {h || `(col ${i + 1})`}
-                    </Badge>
-                  );
-                })}
+                {/* ═══ Main: Campos del sistema + Vista previa ═══ */}
+                <div className="flex-1 min-h-0 flex flex-col">
+                  {/* Columnas del archivo (visible solo en pantallas chicas, md:hidden) */}
+                  <div className="shrink-0 md:hidden px-6 py-1.5 border-b bg-muted/20 flex items-center gap-1.5 flex-wrap text-[10px]">
+                    <span className="text-muted-foreground font-medium shrink-0">
+                      Columnas en archivo:
+                    </span>
+                    {parsed.headers.map((h, i) => {
+                      const isUsed = Object.values(columnMapping).includes(i);
+                      return (
+                        <Badge
+                          key={i}
+                          variant="outline"
+                          className={`text-[10px] py-0 h-4 ${
+                            isUsed
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-muted/50 text-muted-foreground"
+                          }`}
+                        >
+                          {isUsed && <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />}
+                          {h || `(col ${i + 1})`}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+
+                  {/* Header "Campos del sistema" */}
+                  <div className="shrink-0 px-6 pt-3 pb-1.5 flex items-center justify-between">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Campos del sistema ({fields.length})
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Mapeados: {mappingStats.mapped}/{fields.length}
+                    </div>
+                  </div>
+
+                  {/* Grid de campos (scrollable, flex-1) */}
+                  <div
+                    className="flex-1 min-h-0 overflow-y-auto px-6 pb-3"
+                    style={{ contain: "strict" }}
+                  >
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                      {fields.map((field) => {
+                        const idx = columnMapping[field.key];
+                        const isMapped = idx !== undefined && idx >= 0;
+                        const samples = isMapped ? sampleValues(idx) : [];
+                        const usedColumnIndices = Object.values(columnMapping).filter(
+                          (i) => i !== idx
+                        );
+
+                        return (
+                          <div
+                            key={field.key}
+                            className={`rounded-md border p-2.5 transition-colors ${
+                              isMapped
+                                ? "border-indigo-200 bg-indigo-50/30"
+                                : field.required
+                                ? "border-amber-200 bg-amber-50/30"
+                                : "border-border bg-background"
+                            }`}
+                          >
+                            {/* Label + estado */}
+                            <div className="flex items-center gap-1.5 mb-1.5 min-w-0">
+                              {field.required && (
+                                <span className="text-amber-600 text-xs font-bold shrink-0">*</span>
+                              )}
+                              <Label className="text-xs font-medium truncate flex-1 min-w-0">
+                                {field.label}
+                              </Label>
+                              {field.type !== "text" && (
+                                <Badge variant="outline" className="text-[9px] py-0 px-1 h-3.5 shrink-0">
+                                  {field.type}
+                                </Badge>
+                              )}
+                              {isMapped ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground italic shrink-0">
+                                  sin mapear
+                                </span>
+                              )}
+                            </div>
+                            {/* Hint */}
+                            {field.hint && (
+                              <p className="text-[10px] text-muted-foreground mb-1.5 leading-tight">
+                                {field.hint}
+                              </p>
+                            )}
+                            {/* Select */}
+                            <Select
+                              value={isMapped ? String(idx) : "none"}
+                              onValueChange={(v) =>
+                                setFieldMapping(
+                                  field.key,
+                                  v === "none" ? -1 : Number(v)
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-full text-xs">
+                                <SelectValue placeholder="Elegir columna…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">
+                                  <span className="text-muted-foreground italic">
+                                    — No mapear —
+                                  </span>
+                                </SelectItem>
+                                {parsed.headers.map((h, i) => (
+                                  <SelectItem
+                                    key={i}
+                                    value={String(i)}
+                                    disabled={usedColumnIndices.includes(i)}
+                                  >
+                                    <span className={usedColumnIndices.includes(i) ? "opacity-50" : ""}>
+                                      {h || `(columna ${i + 1})`}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {/* Mapped column badge */}
+                            {isMapped && (
+                              <div className="mt-1.5 flex items-center gap-1 text-[10px]">
+                                <Badge
+                                  variant="outline"
+                                  className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0 h-4 truncate max-w-full"
+                                >
+                                  {columnLabel(idx)}
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ─── Vista previa (header fuera del scroll) ─── */}
+                  <div className="shrink-0 px-6 pt-2 pb-1 border-t bg-muted/30">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5" />
+                      Vista previa (primeras 8 filas con el mapeo actual)
+                    </div>
+                  </div>
+
+                  {/* Tabla preview (h-40 fija, scroll-x+y interno) */}
+                  <div className="shrink-0 h-40 border-t bg-background overflow-auto">
+                    {Object.keys(columnMapping).length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-center p-4">
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <Eye className="w-6 h-6 mx-auto opacity-30" />
+                          <p>Mapeá al menos un campo para ver la vista previa.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-muted/60 z-10">
+                          <TableRow>
+                            <TableHead className="h-7 text-[10px] w-10">#</TableHead>
+                            {fields
+                              .filter((f) => columnMapping[f.key] !== undefined)
+                              .map((f) => (
+                                <TableHead key={f.key} className="h-7 text-[10px] whitespace-nowrap">
+                                  {f.label}
+                                </TableHead>
+                              ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {parsed.rows.slice(0, 8).map((row, rowIdx) => (
+                            <TableRow key={rowIdx}>
+                              <TableCell className="text-[10px] py-1 text-muted-foreground">
+                                {rowIdx + 2}
+                              </TableCell>
+                              {fields
+                                .filter((f) => columnMapping[f.key] !== undefined)
+                                .map((f) => {
+                                  const v = row[columnMapping[f.key]];
+                                  return (
+                                    <TableCell key={f.key} className="text-[10px] py-1 whitespace-nowrap">
+                                      {v === null || v === undefined || v === ""
+                                        ? "—"
+                                        : String(v)}
+                                    </TableCell>
+                                  );
+                                })}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Error msg (fija abajo) */}
