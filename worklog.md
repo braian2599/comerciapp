@@ -1169,3 +1169,160 @@ Stage Summary:
 - 4 commits con todos los fixes de Vercel ahora en GitHub (rama main).
 - Vercel debería detectar el push y empezar deploy automáticamente.
 - El deploy debería pasar (build script arreglado: ya no hace `cp .next/standalone`).
+
+---
+Task ID: 14
+Agent: Super Z (main)
+Task: Persistencia robusta del carrito + plan integral de módulos
+
+Work Log:
+- Analizado pos-view.tsx (1,800 LOC) y use-pwa.ts (332 LOC) para entender arquitectura.
+- Creado src/lib/types.ts: tipos compartidos del dominio (Product, CartItem, Customer, Branch, AppliedPromotion, PaymentMethod). Centraliza definiciones que estaban duplicadas inline.
+- Creado src/lib/cart-storage.ts (220 LOC): capa IndexedDB para persistencia del carrito.
+  * Usa DB existente 'comerciapp-offline' + object store 'drafts' (estaba vacío).
+  * Multi-tenant: key = `cart:${storeId}:${userId}` (cada cajero tiene su draft).
+  * TTL de 7 días: drafts viejos se eliminan automáticamente al cargar.
+  * Schema versioning para migraciones futuras.
+  * Función reconcileDraft() que detecta productos borrados, desactivados, o con stock/precio cambiados desde que se guardó el draft.
+- Creado src/hooks/use-persistent-cart.ts (200 LOC): hook React.
+  * Carga draft al montar, auto-guarda con debounce 800ms.
+  * Skip del primer save post-restore para evitar writes redundantes.
+  * Expone isRestoring, reconcileInfo, isSaved, clearPersisted, discardPersisted.
+- Integrado en pos-view.tsx:
+  * Hook usePersistentCart conectado con estado del carrito.
+  * Indicador visual "Guardado"/"Guardando…" en el header del POS.
+  * Modal de reconciliación: avisa al usuario qué productos fueron ajustados o quitados al restaurar, con opciones "Continuar" o "Descartar y empezar de cero".
+  * clearCart() ahora también limpia el draft persistido (llama a cartPersistence.clearPersisted()).
+- Build local exitoso, sin errores ni warnings.
+- Commits + push: 23d7c7f feat: persist POS cart to IndexedDB (production-grade)
+
+Stage Summary:
+- Problema CRÍTICO resuelto: el carrito ya NO se pierde al refresh / crash / reinicio.
+- Diseño robusto: multi-tenant, multi-pestaña, TTL, reconciliación, versionado.
+- UX clara: indicador de estado + modal informativo cuando hay cambios al restaurar.
+- IndexedDB > localStorage: async, 50MB+ quota, structured clone, transaccional.
+
+===
+PLAN INTEGRAL DE MÓDULOS (post-persistencia)
+===
+
+# Estado actual del sistema (post-audit)
+
+20 módulos auditados. Resumen del estado:
+- ✅ Working:        Auth, Products/Categories, Payment Methods, Expenses, Loyalty, Branches, Dashboard (7 módulos)
+- ⚠️ Incomplete:    Customers, Sales/POS, Inventory, Cash Registers, Suppliers/Purchases, Commissions, Promotions, Reports, PWA/Offline, Store/Print-templates (10 módulos)
+- 🚫 Stub-only:     Invoices/AFIP, Ecommerce Integration (2 módulos)
+- ✅ Working (with minor): MercadoPago (1 módulo)
+
+# Problemas encontrados (categorizados)
+
+## P0 - Seguridad (URGENTE)
+1. **6 endpoints PUT sin verificación de propiedad storeId**:
+   - customers, suppliers, promotions, commissions/rules, branches, print-templates
+   - Usuario de tienda A puede modificar datos de tienda B adivinando cuids.
+   - Fix: agregar `storeId` al `where` del `findFirst` + usar `updateMany({ where: { id, storeId } })` con check de count.
+2. **Webhooks sin verificación de firma**:
+   - mercadopago/webhook: no valida x-signature → posible marcar pagos como aprobados.
+   - ecommerce/webhook: solo string compare, vulnerable a timing attacks; además si no hay secret configurado, acepta cualquier POST.
+3. **Server confía en valores del cliente**:
+   - sales/route.ts:127: `promotionDiscount` viene del cliente, no se re-calcula.
+   - sales/route.ts:127: `manualDiscount` sin validación de upper bound.
+   - sales/route.ts:173: `taxRate` viene del cliente, no se valida contra store.taxRate.
+   - Fix: re-computar descuentos/promociones/tax server-side con datos de DB.
+
+## P1 - Bugs de correctitud
+4. **Inconsistencia en snapshot de paymentMethod** (afecta múltiples módulos):
+   - sales/route.ts:232 almacena `method?.name` (ej: "Efectivo")
+   - cash-registers/close/route.ts:33 compara `=== "Efectivo"` (solo matchea si el usuario dejó el nombre default)
+   - reports/cash-flow/route.ts:45,49,64,79 compara `=== "EFECTIVO"` (NUNCA matchea ventas porque el campo tiene "Efectivo")
+   - Resultado: reporte de flujo de caja SUB-REGISTRA ventas en efectivo.
+   - Fix: agregar campo `paymentMethodType` a Sale; usar tipo (no nombre) en comparaciones.
+5. **Bug matemático en cierre Z**:
+   - print/route.ts:236: `expectedCash = openingBalance + cash - openingBalance` → se cancelan, queda solo `cash`.
+   - Fix: revisar fórmula, probablemente `openingBalance + cash`.
+6. **Race condition en decremento de stock**:
+   - sales/route.ts:249-255 y inventory/route.ts:51-58: decrementan y DESPUÉS chequean < 0.
+   - Dos ventas concurrentes pueden dejar stock negativo.
+   - Fix: usar `updateMany({ where: { id, stock: { gte: qty } }, data: { stock: { decrement: qty } } })` y verificar `count === 1`.
+7. **Dead code**: store/route.ts:25 `Number(body.lowStockThreshold) ?? 5` (Number nunca retorna null).
+8. **20+ rutas sin try/catch en `req.json()`**: crash no-JSON en body malformado.
+9. **Imports sin transacción por item**: partial failures dejan data inconsistente.
+10. **Numbers de OC/Devolución no transaccionales**: `findFirst + parse + insert` puede duplicar.
+11. **Dashboard loading infinito en error**: loadedDays nunca se resetea en catch.
+12. **Endpoint /api/ecommerce/test no existe**: botón "Probar conexión" siempre falla.
+13. **promotions/usageLimit y perCustomerLimit nunca se enforcean**.
+
+## P2 - Features faltantes
+14. **AFIP producción es stub**: lib/afip.ts:421-461 returns "no implementado".
+15. **Notas de crédito**: refunds/route.ts:324 TODO explícito.
+16. **CRUD de usuarios**: solo GET, no hay POST/PUT/DELETE para crear vendedores/cajeros.
+17. **Recepción parcial de OC**: solo receive-all, no partial.
+18. **Filtro por branch en reports/dashboard**: branchId existe en schema pero no se expone.
+19. **Export PDF de reports**: solo CSV.
+20. **Reconciliación offline en views**: SW posteja OFFLINE_SYNCED pero nadie escucha.
+
+## P3 - Code quality
+21. settings-view.tsx (1,308 LOC) y pos-view.tsx (1,909 LOC) demasiado grandes.
+22. Falta helper `requireAdmin(req)` / `requireNonCajero(req)` para DRY auth.
+23. Solo register usa Zod; resto de POST/PUT no valida schema.
+24. Cero tests en src/.
+25. console.log/error en API routes (debería ser logger estructurado).
+
+# Plan de trabajo recomendado (fases)
+
+## Fase 1: Estabilización (1-2 días) — ANTES de cualquier feature nueva
+Objetivo: cerrar todos los P0 y P1 críticos para que el sistema sea confiable.
+
+1.1. Security: fix los 6 PUT endpoints sin storeId check (1h c/u, ~6h total)
+1.2. Security: agregar signature verification a webhooks MP y ecommerce (~4h)
+1.3. Security: re-calcular promotionDiscount, manualDiscount, taxRate server-side en /api/sales (~3h)
+1.4. Bug: fix inconsistency paymentMethod snapshot (agregar paymentMethodType a Sale + migrar) (~4h)
+1.5. Bug: fix print/route.ts:236 math (~30min)
+1.6. Bug: fix race condition stock decrement (sales + inventory) (~3h)
+1.7. Bug: agregar try/catch en req.json() en las 20+ rutas (~2h, mecánico)
+1.8. Bug: wrap imports en per-item tx (~3h)
+1.9. Bug: fix dashboard loading infinito (~30min)
+1.10. Bug: implementar /api/ecommerce/test o eliminar botón (~1h)
+1.11. Bug: enforce promotions usageLimit/perCustomerLimit en /api/sales (~2h)
+
+Total Fase 1: ~30 horas. Al terminar, el sistema es production-ready en cuanto a seguridad y correctitud.
+
+## Fase 2: Features críticas faltantes (2-3 días)
+2.1. CRUD de usuarios (/api/store/users POST/PUT/DELETE) + UI (~6h)
+2.2. Recepción parcial de OC + UI (~4h)
+2.3. Filtro por branch en reports + dashboard (~3h)
+2.4. Export PDF de reports (~4h)
+2.5. Reconciliación offline: escuchar commerciapp:synced en views y refrescar data (~3h)
+2.6. Delete/edit stock movements + reason validation (~3h)
+
+## Fase 3: Integraciones reales (1-2 semanas)
+3.1. AFIP producción: implementar WSFEv1 real (es complejo, requiere certificados)
+3.2. Notas de crédito electrónicas
+3.3. MercadoPago: polling automático + manejo de rechazos
+3.4. Ecommerce: sync automático vía cron (Vercel Cron Jobs)
+3.5. Ecommerce: verificar los 4 adapters (TiendaNube, WooCommerce, MercadoLibre, Shopify)
+
+## Fase 4: Code quality (ongoing)
+4.1. Decompose settings-view.tsx en tabs separados
+4.2. Decompose pos-view.tsx en sub-componentes (CartPanel, ProductsPanel, CheckoutPanel)
+4.3. Helper requireAdmin/requireNonCajero
+4.4. Zod schemas para todos los POST/PUT
+4.5. Tests (empezar por /api/sales, /api/auth, /api/products)
+4.6. Logger estructurado (pino o winston)
+
+# Módulos priorizados para trabajar primero
+
+Si el usuario quiere ir modulo por modulo, el orden recomendado:
+1. Sales/POS (modulo core, tiene race conditions + security holes)
+2. Cash Registers + Reports (afectados por bug de paymentMethod)
+3. Customers + Suppliers (security hole en PUT)
+4. Promotions (usageLimit no enforceado)
+5. Commissions (PUT sin storeId)
+6. Inventory (race condition)
+7. Branches (PUT sin storeId)
+8. Print templates (PUT sin storeId)
+9. Mercadopago (webhook sin signature)
+10. Ecommerce (stub + endpoint faltante)
+11. Invoices/AFIP (stub completo)
+12. PWA/Offline (reconciliación)
+
