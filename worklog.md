@@ -1326,3 +1326,25 @@ Si el usuario quiere ir modulo por modulo, el orden recomendado:
 11. Invoices/AFIP (stub completo)
 12. PWA/Offline (reconciliación)
 
+
+---
+Task ID: AUDIT-1
+Agent: Explore
+Task: Auditoría de salud de 18 módulos de Comerciapp
+
+Work Log:
+- Leído worklog previo (Fase 1 + Fase 2 completas). Verificada estructura: 18 views en /src/components/views (13.966 líneas totales) y 56 API routes en /src/app/api.
+- Listado todos los endpoints referenciados por cada view con grep de `safeFetchJSON|fetch(|axios`.
+- Grep global de marcadores `TODO|FIXME|stub|placeholder|mock|not implemented` en views y API routes.
+- Verificada existencia de cada endpoint llamado: único endpoint faltante confirmado = `/api/ecommerce/test` (la view lo llama pero la carpeta `/api/ecommerce/` sólo tiene `config/`, `sync/`, `webhook/`).
+- Verificada integración del endpoint `/api/sales` (decremento de stock, stockMovement, cashRegisterId, loyaltyPoints, promotion usage) — correctamente integrado con 5 módulos.
+- Confirmado TODO en `/api/refunds/route.ts` línea 324: nota de crédito AFIP no implementada.
+- Leído header + función load() de cada view para confirmar implementación sustantiva vs. stub.
+- Identificado inconsistencia: `customers-view.tsx` y `pos-view.tsx` (líneas 672, 715, 451 sales-view) mezclan `fetch()` crudo con `safeFetchJSON()`.
+
+Stage Summary:
+- 15/18 módulos ✅ Funcionales, 2/18 ⚠️ Parciales (invoices, refunds), 1/18 ❌ Roto (ecommerce - botón "Probar conexión" 404).
+- Top 5 más completos: pos, settings, products, customers, reports.
+- Top 5 más rotos/incompletos: ecommerce (404), refunds (sin nota de crédito AFIP), invoices (AFIP sólo demo), print-templates (sólo configuración, no imprime físicamente), branches (sólo CRUD, sin asignación de stock por sucursal).
+- Funcionalidades compartidas健康: descuento de stock (sales/annul/refunds/purchase-orders/receive), cálculo de impuestos (sales/invoices/afip), loyalty (sales accrue + loyalty/points adjust + pos redeem).
+- Bug crítico accionable: crear `/api/ecommerce/test/route.ts` o quitar el botón "Probar conexión" de ecommerce-view.tsx línea 151-181.
