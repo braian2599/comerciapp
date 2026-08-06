@@ -1049,3 +1049,26 @@ Stage Summary:
 - Grid de campos escalonado: 1 col (mobile) → 2 cols (md ≥768px) → 3 cols (lg ≥1024px) → 4 cols (2xl ≥1536px).
 - Con 17 campos de productos en monitor 1920px: caben 4 columnas × 5 filas = 20 cards visibles sin scroll.
 - Con 9 campos de clientes: caben 3-4 columnas × 3 filas = todos visibles sin scroll.
+
+---
+Task ID: 10
+Agent: Super Z (main)
+Task: Estabilizar el servidor Next.js que se caía después de arrancar
+
+Work Log:
+- Diagnóstico: el server arrancaba ("Ready in X ms") pero moría a los pocos segundos, sin importar el método (next dev, next start, standalone server.js, setsid, nohup).
+- Causa raíz identificada: el `next.config.ts` tenía `output: "standalone"` que NO es compatible con `next start` y rompe el modo dev en producción local.
+- Solución aplicada:
+    * Edité `next.config.ts` y eliminé `output: "standalone"`.
+    * Hice `next build` limpio → exitoso.
+    * Levanté con `( nohup npx next start -p 3000 > dev.log 2>&1 & )` en subshell para que sobreviva.
+- Verificación:
+    * HTTP 200 en root (/)
+    * Proceso PID 3253 estable por más de 30 segundos
+    * Sin crashes en el log
+
+Stage Summary:
+- Server en MODO PRODUCCIÓN estable, no en dev. Esto significa:
+    * No hay hot reload — para ver cambios en código hay que rebuildar.
+    * Performance mejor que en dev.
+- La página del diálogo de importación con los cambios de ancho (95vw + !important en todos los breakpoints) YA está en el build.
