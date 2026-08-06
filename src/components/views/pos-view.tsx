@@ -309,10 +309,22 @@ export function PosView() {
   // El hook restaura el carrito guardado al montar y auto-guarda cambios.
   // reconcileInfo se usa para mostrar un modal al usuario informando qué
   // productos fueron ajustados (stock/precio cambiado) o quitados (ya no existen).
+  //
+  // ⚠️ productsReady: el hook SÓLO intenta restaurar el draft cuando los
+  // productos ya están cargados desde /api/products. Sin esto, el reconcile
+  // eliminaría todos los items porque el productMap estaría vacío.
   const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+  const [remoteUpdateNotice, setRemoteUpdateNotice] = useState<string | null>(
+    null
+  );
+
+  // productsReady se deriva de !loading — cuando loading=false, products está cargado.
+  const productsReady = !loading && products.length > 0;
+
   const cartPersistence = usePersistentCart({
     storeId: store?.id,
     userId: user?.id,
+    productsReady,
     cart,
     customerId,
     discount,
@@ -328,7 +340,29 @@ export function PosView() {
       setNotes(data.notes);
       if (data.branchId) setBranchId(data.branchId);
     },
+    onRemoteUpdate: (msg) => {
+      // Otra pestaña del mismo cajero actualizó el draft.
+      // No pisamos automáticamente (el usuario puede estar editando acá),
+      // pero mostramos un toast informativo.
+      if (msg.type === "draft-updated") {
+        setRemoteUpdateNotice(
+          `Otra pestaña actualizó el carrito (${msg.itemCount} items). Recargá para ver los cambios.`
+        );
+      } else if (msg.type === "draft-deleted") {
+        setRemoteUpdateNotice(
+          "Otra pestaña vació el carrito. Recargá para sincronizar."
+        );
+      }
+      // draft-restored lo ignoramos: no hay nada que hacer acá
+    },
   });
+
+  // Auto-dismiss del notice después de 5s
+  useEffect(() => {
+    if (!remoteUpdateNotice) return;
+    const t = setTimeout(() => setRemoteUpdateNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [remoteUpdateNotice]);
 
   // Mostrar modal de reconciliación cuando hay info y terminó de restaurar
   useEffect(() => {
@@ -785,6 +819,20 @@ export function PosView() {
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="h-[calc(100vh-6.5rem)] flex flex-col gap-3">
+      {/* Banner de aviso: otra pestaña modificó el draft */}
+      {remoteUpdateNotice && (
+        <div className="shrink-0 rounded-md bg-blue-50 border border-blue-200 px-3 py-2 flex items-center gap-2 text-xs">
+          <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="text-blue-800 flex-1">{remoteUpdateNotice}</span>
+          <button
+            onClick={() => setRemoteUpdateNotice(null)}
+            className="text-blue-600 hover:text-blue-800 shrink-0"
+            aria-label="Cerrar aviso"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       {/* Header compacto */}
       <div className="flex items-end justify-between flex-wrap gap-2 shrink-0">
         <div>
@@ -1827,16 +1875,12 @@ export function PosView() {
               Carrito recuperado con cambios
             </DialogTitle>
             <DialogDescription>
-              Detectamos que tenías una venta en curso guardada del{" "}
-              {cartPersistence.reconcileInfo
-                ? new Date(
-                    cartPersistence.reconcileInfo.items[0]?.product?.id
-                      ? Date.now()
-                      : Date.now()
-                  ).toLocaleString("es-AR", {
+              Detectamos que tenías una venta en curso guardada
+              {cartPersistence.draftDate
+                ? ` del ${cartPersistence.draftDate.toLocaleString("es-AR", {
                     dateStyle: "short",
                     timeStyle: "short",
-                  })
+                  })}`
                 : ""}
               . Algunos productos cambiaron desde entonces y los ajustamos
               automáticamente:
@@ -1863,17 +1907,29 @@ export function PosView() {
             ) : null}
             {cartPersistence.reconcileInfo?.adjustedCount &&
             cartPersistence.reconcileInfo.adjustedCount > 0 ? (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 space-y-1.5">
                 <p className="text-sm font-medium text-amber-800">
                   {cartPersistence.reconcileInfo.adjustedCount} producto
                   {cartPersistence.reconcileInfo.adjustedCount === 1
                     ? " ajustado"
                     : " ajustados"}
                 </p>
-                <p className="text-xs text-amber-700 mt-0.5">
+                <p className="text-xs text-amber-700">
                   Cambió el precio o el stock disponible desde tu última sesión.
                   Las cantidades fueron limitadas al stock actual.
                 </p>
+                {cartPersistence.reconcileInfo.priceChangedProductNames &&
+                  cartPersistence.reconcileInfo.priceChangedProductNames.length >
+                    0 && (
+                    <p className="text-xs text-amber-700 pt-1 border-t border-amber-200 mt-1">
+                      <span className="font-medium">Precio actualizado:</span>{" "}
+                      {cartPersistence.reconcileInfo.priceChangedProductNames
+                        .slice(0, 5)
+                        .join(", ")}
+                      {cartPersistence.reconcileInfo.priceChangedProductNames
+                        .length > 5 && "…"}
+                    </p>
+                  )}
               </div>
             ) : null}
             <div className="rounded-md bg-emerald-50 border border-emerald-200 p-3">
