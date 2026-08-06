@@ -1072,3 +1072,30 @@ Stage Summary:
     * No hay hot reload — para ver cambios en código hay que rebuildar.
     * Performance mejor que en dev.
 - La página del diálogo de importación con los cambios de ancho (95vw + !important en todos los breakpoints) YA está en el build.
+
+---
+Task ID: 11
+Agent: Super Z (main)
+Task: Migrar de SQLite a PostgreSQL (Neon) para deploy en Vercel
+
+Work Log:
+- Auditoría de localStorage/sessionStorage: NO hay uso de localStorage en src/. El único sessionStorage/indexedDB está en src/hooks/use-pwa.ts para offline PWA (no es dato de usuario). Zustand store es solo en memoria.
+- Schema: cambié provider de `sqlite` a `postgresql` en prisma/schema.prisma.
+- .env actualizado con URL de Neon Postgres (no commiteado).
+- Creada migración inicial `20260806184452_init_postgres` con las 32 tablas del sistema.
+- Aplicada migración a Neon: DB ahora tiene todas las tablas creadas.
+- Verificado: `prisma db push` confirma sincronización.
+- Build de Next.js exitoso con Postgres.
+- Server dev levantado en http://localhost:3000, HTTP 200 OK.
+- Limpieza: tool-results/ agregado a .gitignore y eliminado del tracking.
+- Commits pusheados a https://github.com/braian2599/comerciapp:
+    * feat: migrate from SQLite to PostgreSQL (Neon)
+    * chore: ignore tool-results directory
+
+Stage Summary:
+- DB ahora es PostgreSQL serverless en Neon (no SQLite local).
+- Schema tiene 32 modelos migrados correctamente.
+- Migración SQL incluida en prisma/migrations/ para reproducibilidad.
+- .env.example documenta las 3 variables necesarias (DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL).
+- Código limpio de localStorage/sessionStorage para datos de usuario.
+- Repo en GitHub actualizada y lista para conectar a Vercel.
