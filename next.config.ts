@@ -6,21 +6,24 @@ import type { NextConfig } from "next";
  * - Sin `output: "standalone"`: Vercel maneja su propio runtime serverless.
  * - `images.formats`: habilita AVIF/WebP para optimización automática.
  * - `images.remotePatterns`: dominios externos permitidos para next/image.
- * - `experimental.serverComponentsExternalPackages`: evita que Next bundlee
- *   paquetes que dependen de binaries nativos (Prisma, bcryptjs, sharp).
+ * - `serverExternalPackages`: evita que Next bundlee paquetes que dependen
+ *   de binaries nativos (Prisma, bcryptjs, sharp). En Next 16+ ya no va
+ *   dentro de `experimental`.
  * - `poweredByHeader`: oculta la cabecera X-Powered-By (security hardening).
  * - `reactStrictMode`: desactivado por decisión del proyecto (doble-render
  *   rompía algunos efectos en dev).
  * - `typescript.ignoreBuildErrors`: mantiene build resiliente aunque haya
  *   errores de tipo no críticos (no afecta runtime).
+ *
+ * NOTA: En Next.js 16, `eslint.ignoreDuringBuilds` fue removido de
+ * next.config.ts. El linting se maneja ahora con `next lint --quiet` o
+ * un script `prebuild` separado. Vercel no ejecuta ESLint por defecto
+ * durante el build, así que no hace falta configurar nada aquí.
  */
 const nextConfig: NextConfig = {
   reactStrictMode: false,
   typescript: {
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
   },
   poweredByHeader: false,
   images: {
