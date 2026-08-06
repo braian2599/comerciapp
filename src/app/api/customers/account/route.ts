@@ -66,11 +66,20 @@ export async function GET(req: NextRequest) {
       date: new Date(p.date),
       fn: () => {
         balance -= p.amount;
+        // Distinguir tipo de pago para mostrar etiqueta clara en el ledger
+        let label = "Pago";
+        if (p.paymentMethod === "NOTA_CREDITO") {
+          label = "Nota de crédito";
+        } else if (p.paymentMethod === "TRANSFERENCIA") {
+          label = "Pago por transferencia";
+        } else if (p.paymentMethod === "TARJETA") {
+          label = "Pago con tarjeta";
+        }
         ledger.push({
           id: p.id,
           date: p.date.toISOString(),
           type: "HABER",
-          description: `Pago${p.notes ? ` - ${p.notes}` : ""}`,
+          description: `${label}${p.notes ? ` - ${p.notes}` : ""}`,
           amount: p.amount,
           user: p.user?.name,
           balanceAfter: balance,

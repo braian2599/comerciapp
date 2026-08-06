@@ -89,3 +89,67 @@ export async function safeFetchArray<T = any>(
   if (!ok || !Array.isArray(data)) return fallback;
   return data;
 }
+
+/**
+ * Hace fetch y devuelve un Blob de forma segura.
+ *
+ * Útil para endpoints que devuelven archivos binarios (PDF, imágenes,
+ * tickets térmicos .bin, etc.). A diferencia de `safeFetchJSON`, NO
+ * intenta parsear el body como texto — preserva el blob binario.
+ *
+ * Si la respuesta no es ok, lee el body como texto para extraer el
+ * mensaje de error del servidor (si es JSON) o un mensaje genérico.
+ */
+export async function safeFetchBlob(
+  url: string,
+  init?: RequestInit
+): Promise<{ ok: boolean; status: number; blob: Blob | null; error?: string }> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (e: any) {
+    return {
+      ok: false,
+      status: 0,
+      blob: null,
+      error: e?.message || "Error de red",
+    };
+  }
+
+  if (!res.ok) {
+    // Intentar leer el body como JSON para extraer el mensaje de error
+    let error: string;
+    try {
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        error =
+          (data && typeof data === "object" && data.error) ||
+          `Error del servidor (${res.status})`;
+      } catch {
+        error = text || `Error del servidor (${res.status})`;
+      }
+    } catch {
+      error = `Error del servidor (${res.status})`;
+    }
+    return { ok: false, status: res.status, blob: null, error };
+  }
+
+  try {
+    const blob = await res.blob();
+    return { ok: true, status: res.status, blob };
+  } catch (e: any) {
+    return {
+      ok: false,
+      status: res.status,
+      blob: null,
+      error: e?.message || "No se pudo leer el cuerpo de la respuesta",
+    };
+  }
+}

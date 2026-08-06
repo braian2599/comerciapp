@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { calculateRefundTotals } from "@/lib/refund-calc";
 
 // GET /api/refunds - listar devoluciones
 export async function GET(req: NextRequest) {
@@ -80,80 +81,46 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2. Determinar items a devolver y montos
+  // 2. Determinar items a devolver y montos (cálculo delegado a lib/refund-calc)
   const requestedItems: Array<{ saleItemId: string; quantity: number }> = body.items || [];
-  const refundItems: Array<{
-    saleItemId: string;
-    productId: string;
-    quantity: number;
-    unitPrice: number;
-    costPrice: number;
-    subtotal: number;
-  }> = [];
 
-  let refundSubtotal = 0;
-  const isTotal =
-    requestedItems.length === 0 ||
-    requestedItems.length === sale.items.length;
-
-  if (isTotal) {
-    // Devolución total: todos los items completos
-    for (const item of sale.items) {
-      refundItems.push({
-        saleItemId: item.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        costPrice: item.costPrice,
-        subtotal: item.subtotal,
-      });
-      refundSubtotal += item.subtotal;
-    }
-  } else {
-    // Devolución parcial: items específicos
-    for (const req of requestedItems) {
-      const saleItem = sale.items.find((i) => i.id === req.saleItemId);
-      if (!saleItem) {
-        return NextResponse.json(
-          { error: `Item ${req.saleItemId} no pertenece a la venta` },
-          { status: 400 }
-        );
-      }
-      const qty = Number(req.quantity);
-      if (qty <= 0 || qty > saleItem.quantity) {
-        return NextResponse.json(
-          { error: `Cantidad inválida para item ${saleItem.id}` },
-          { status: 400 }
-        );
-      }
-      const proportion = qty / saleItem.quantity;
-      refundItems.push({
-        saleItemId: saleItem.id,
-        productId: saleItem.productId,
-        quantity: qty,
-        unitPrice: saleItem.unitPrice,
-        costPrice: saleItem.costPrice,
-        subtotal: saleItem.unitPrice * qty,
-      });
-      refundSubtotal += saleItem.unitPrice * qty;
-    }
+  let refundCalc;
+  try {
+    refundCalc = calculateRefundTotals(
+      {
+        id: sale.id,
+        subtotal: sale.subtotal,
+        discount: sale.discount,
+        tax: sale.tax,
+        surcharge: sale.surcharge,
+        total: sale.total,
+        items: sale.items.map((i) => ({
+          id: i.id,
+          productId: i.productId,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          costPrice: i.costPrice,
+          subtotal: i.subtotal,
+        })),
+      },
+      requestedItems
+    );
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e.message || "Error al calcular montos de devolución" },
+      { status: 400 }
+    );
   }
 
-  // 3. Calcular proporcionales: discount, tax, surcharge
-  const saleSubtotal = sale.subtotal || refundSubtotal;
-  const discountProportion = saleSubtotal > 0 ? sale.discount / saleSubtotal : 0;
-  const refundDiscount = refundSubtotal * discountProportion;
-
-  const taxableSale = saleSubtotal - sale.discount;
-  const refundTaxable = refundSubtotal - refundDiscount;
-  const taxRate = taxableSale > 0 ? sale.tax / taxableSale : 0;
-  const refundTax = refundTaxable * taxRate;
-
-  const surchargeRate = taxableSale + sale.tax > 0
-    ? sale.surcharge / (taxableSale + sale.tax)
-    : 0;
-  const refundSurcharge = (refundTaxable + refundTax) * surchargeRate;
-  const refundTotal = refundTaxable + refundTax + refundSurcharge;
+  const {
+    isTotal,
+    items: refundItems,
+    refundSubtotal,
+    refundDiscount,
+    refundTax,
+    refundSurcharge,
+    refundTotal,
+  } = refundCalc;
 
   // 4. Generar número de devolución
   const lastRefund = await db.refund.findFirst({

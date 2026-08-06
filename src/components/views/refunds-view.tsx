@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,7 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
+import { calculateRefundTotals } from "@/lib/refund-calc";
 
 const REFUND_REASONS = [
   { value: "PRODUCTO_DEFECTUOSO", label: "Producto defectuoso" },
@@ -128,47 +129,64 @@ export function RefundsView() {
     setSearchOpen(false);
   }
 
-  // Calcular montos de la devolución (estimación)
-  const refundItemsList = selectedSale
-    ? selectedSale.items.filter((it: any) => (returnItems[it.id] || 0) > 0)
-    : [];
-  const refundSubtotal = refundItemsList.reduce(
-    (sum: number, it: any) =>
-      sum + (returnItems[it.id] || 0) * it.unitPrice,
-    0
-  );
-  const isTotalRefund =
-    selectedSale &&
-    selectedSale.items.every(
-      (it: any) => (returnItems[it.id] || 0) >= it.quantity
-    );
-  const saleSubtotal = selectedSale?.subtotal || 0;
-  const discountProportion = saleSubtotal > 0
-    ? (selectedSale?.discount || 0) / saleSubtotal
-    : 0;
-  const refundDiscount = refundSubtotal * discountProportion;
-  const refundTaxable = refundSubtotal - refundDiscount;
-  const taxableSale = saleSubtotal - (selectedSale?.discount || 0);
-  const taxRate = taxableSale > 0 ? (selectedSale?.tax || 0) / taxableSale : 0;
-  const refundTax = refundTaxable * taxRate;
-  const surchargeRate =
-    taxableSale + (selectedSale?.tax || 0) > 0
-      ? (selectedSale?.surcharge || 0) /
-        (taxableSale + (selectedSale?.tax || 0))
-      : 0;
-  const refundSurcharge = (refundTaxable + refundTax) * surchargeRate;
-  const refundTotal = refundTaxable + refundTax + refundSurcharge;
+  // Calcular montos de la devolución usando la función compartida con el backend.
+  // Esto evita drift entre lo que ve el usuario y lo que persiste el backend.
+  const refundCalc = useMemo(() => {
+    if (!selectedSale) return null;
+    try {
+      const requestedItems = selectedSale.items
+        .filter((it: any) => (returnItems[it.id] || 0) > 0)
+        .map((it: any) => ({
+          saleItemId: it.id,
+          quantity: returnItems[it.id],
+        }));
+      // Si ningún item seleccionado, calcular como devolución total (items vacíos)
+      // para mostrar el monto máximo a devolver.
+      return calculateRefundTotals(
+        {
+          id: selectedSale.id,
+          subtotal: selectedSale.subtotal,
+          discount: selectedSale.discount,
+          tax: selectedSale.tax,
+          surcharge: selectedSale.surcharge,
+          total: selectedSale.total,
+          items: selectedSale.items.map((it: any) => ({
+            id: it.id,
+            productId: it.productId,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            costPrice: it.costPrice,
+            subtotal: it.subtotal,
+          })),
+        },
+        requestedItems
+      );
+    } catch {
+      return null;
+    }
+  }, [selectedSale, returnItems]);
+
+  const refundSubtotal = refundCalc?.refundSubtotal ?? 0;
+  const refundDiscount = refundCalc?.refundDiscount ?? 0;
+  const refundTax = refundCalc?.refundTax ?? 0;
+  const refundSurcharge = refundCalc?.refundSurcharge ?? 0;
+  const refundTotal = refundCalc?.refundTotal ?? 0;
+  const isTotalRefund = refundCalc?.isTotal ?? false;
 
   async function submitRefund() {
     if (!selectedSale) return;
 
-    const items =
-      isTotalRefund || refundItemsList.length === 0
-        ? []
-        : refundItemsList.map((it: any) => ({
-            saleItemId: it.id,
-            quantity: returnItems[it.id],
-          }));
+    // Si el usuario no seleccionó ningún item, mandar array vacío = devolución total.
+    // Si seleccionó items, mandarlos explícitamente.
+    const selectedItems = selectedSale.items.filter(
+      (it: any) => (returnItems[it.id] || 0) > 0
+    );
+    const items = isTotalRefund || selectedItems.length === 0
+      ? []
+      : selectedItems.map((it: any) => ({
+          saleItemId: it.id,
+          quantity: returnItems[it.id],
+        }));
 
     setSaving(true);
     try {

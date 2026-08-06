@@ -11,7 +11,9 @@ node_modules
 !.yarn/versions
 
 # testing
-/coverage
+/coverage/
+/test/
+*.lcov
 
 # next.js
 /.next/
@@ -46,7 +48,9 @@ local-*
 *.log
 dev.log
 dev.out.log
-test
+/test/
+/coverage/
+*.lcov
 prompt
 
 server.log

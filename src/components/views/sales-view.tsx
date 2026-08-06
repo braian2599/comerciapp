@@ -54,7 +54,7 @@ import {
   formatCurrency,
   formatDateTime,
 } from "@/lib/constants";
-import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
+import { safeFetchJSON, safeFetchArray, safeFetchBlob } from "@/lib/fetch";
 
 interface Sale {
   id: string;
@@ -448,13 +448,14 @@ export function SalesView() {
               onClick={async () => {
                 if (!selected) return;
                 try {
-                  const res = await fetch("/api/print", {
+                  const blobRes = await safeFetchBlob("/api/print", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ type: "TICKET", saleId: selected.id, returnFormat: "blob" }),
                   });
-                  if (!res.ok) throw new Error("Error al generar ticket");
-                  const blob = await res.blob();
+                  if (!blobRes.ok || !blobRes.blob) {
+                    throw new Error(blobRes.error || "Error al generar ticket");
+                  }
+                  const blob = blobRes.blob;
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;

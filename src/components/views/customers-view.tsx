@@ -197,11 +197,16 @@ export function CustomersView() {
     setAccountLoading(true);
     setAccountData(null);
     try {
-      const res = await fetch(`/api/customers/account?customerId=${c.id}`);
-      const data = await res.json();
+      const { ok, data, error } = await safeFetchJSON<any>(
+        `/api/customers/account?customerId=${c.id}`
+      );
+      if (!ok) {
+        toast.error(error || "Error al cargar cuenta");
+        return;
+      }
       setAccountData(data);
-    } catch {
-      toast.error("Error al cargar cuenta");
+    } catch (e: any) {
+      toast.error("Error al cargar cuenta", { description: e?.message });
     } finally {
       setAccountLoading(false);
     }
@@ -214,11 +219,16 @@ export function CustomersView() {
     setAdjustPoints(0);
     setAdjustNotes("");
     try {
-      const res = await fetch(`/api/loyalty/points?customerId=${c.id}`);
-      const data = await res.json();
+      const { ok, data, error } = await safeFetchJSON<any>(
+        `/api/loyalty/points?customerId=${c.id}`
+      );
+      if (!ok) {
+        toast.error(error || "Error al cargar puntos");
+        return;
+      }
       setPointsData(data);
-    } catch {
-      toast.error("Error al cargar puntos");
+    } catch (e: any) {
+      toast.error("Error al cargar puntos", { description: e?.message });
     } finally {
       setPointsLoading(false);
     }
@@ -232,17 +242,15 @@ export function CustomersView() {
     }
     setAdjustSaving(true);
     try {
-      const res = await fetch("/api/loyalty/points", {
+      const { ok, error } = await safeFetchJSON("/api/loyalty/points", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId: pointsData.customer.id,
           points: adjustPoints,
           description: adjustNotes,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Puntos ajustados");
       // Recargar
       await openPoints(pointsData.customer);
@@ -262,13 +270,11 @@ export function CustomersView() {
     setSaving(true);
     try {
       const method = form.id ? "PUT" : "POST";
-      const res = await fetch("/api/customers", {
+      const { ok, error } = await safeFetchJSON("/api/customers", {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success(form.id ? "Cliente actualizado" : "Cliente creado");
       setFormOpen(false);
       load();
@@ -282,9 +288,10 @@ export function CustomersView() {
   async function handleDelete() {
     if (!deleteId) return;
     try {
-      const res = await fetch(`/api/customers?id=${deleteId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, error } = await safeFetchJSON(`/api/customers?id=${deleteId}`, {
+        method: "DELETE",
+      });
+      if (!ok) throw new Error(error);
       toast.success("Cliente eliminado");
       setDeleteId(null);
       load();
@@ -301,9 +308,8 @@ export function CustomersView() {
     }
     setPaySaving(true);
     try {
-      const res = await fetch("/api/customers/account", {
+      const { ok, error } = await safeFetchJSON("/api/customers/account", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId: accountData.customer.id,
           amount: payAmount,
@@ -311,8 +317,7 @@ export function CustomersView() {
           notes: payNotes,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(error);
       toast.success("Pago registrado");
       setPayOpen(false);
       setPayAmount(0);

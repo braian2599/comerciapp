@@ -54,7 +54,7 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
 import { calculateMaxRedeemablePoints, pointsToCurrency } from "@/lib/loyalty";
-import { safeFetchJSON } from "@/lib/fetch";
+import { safeFetchJSON, safeFetchBlob } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -669,22 +669,23 @@ export function PosView() {
       return;
     }
     let cancelled = false;
-    fetch("/api/promotions/evaluate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: cart.map((i) => ({
-          productId: i.product.id,
-          categoryId: i.product.categoryId || null,
-          name: i.product.name,
-          quantity: i.qty,
-          unitPrice: i.product.salePrice,
-        })),
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
+    safeFetchJSON<{ applicable: AppliedPromotion[]; best: AppliedPromotion | null }>(
+      "/api/promotions/evaluate",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          items: cart.map((i) => ({
+            productId: i.product.id,
+            categoryId: i.product.categoryId || null,
+            name: i.product.name,
+            quantity: i.qty,
+            unitPrice: i.product.salePrice,
+          })),
+        }),
+      }
+    )
+      .then(({ ok, data }) => {
+        if (cancelled || !ok || !data) return;
         setAvailablePromotions(data.applicable || []);
         if (data.best && !appliedPromotion) {
           setAppliedPromotion(data.best);
@@ -692,7 +693,9 @@ export function PosView() {
           setAppliedPromotion(null);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // best-effort: si falla, no rompemos el flujo de venta
+      });
     return () => {
       cancelled = true;
     };
@@ -712,19 +715,18 @@ export function PosView() {
       });
       if (!printRes.ok) throw new Error(printRes.error);
 
-      const blobRes = await fetch("/api/print", {
+      const blobRes = await safeFetchBlob("/api/print", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "TICKET",
           saleId: lastSale.id,
           returnFormat: "blob",
         }),
       });
-      if (!blobRes.ok) {
-        throw new Error("No se pudo generar el archivo del ticket");
+      if (!blobRes.ok || !blobRes.blob) {
+        throw new Error(blobRes.error || "No se pudo generar el archivo del ticket");
       }
-      const blob = await blobRes.blob();
+      const blob = blobRes.blob;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
