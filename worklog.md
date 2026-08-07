@@ -428,3 +428,79 @@ Stage Summary:
 - Sin cambios de schema (usa campos existentes)
 - Modo demo sigue funcionando sin cambios (env=homologacion o sin
   certPath → generarCaeSimulado)
+
+---
+Task ID: P3-afip-ui-test
+Agent: main (Super Z)
+Task: Implementar UI de 'Probar conexión AFIP' en el módulo Configuración. Métodos robustos y profundos.
+
+Work Log:
+- Audité la UI existente: settings-view.tsx tiene un tab 'Facturación
+  AFIP' con formulario (CUIT, razón social, punto venta, environment,
+  certPath implícito). Faltaba el panel de diagnóstico de conexión.
+- Diseñé el componente AfipConnectionPanel con 6 estados derivados:
+  - unknown (sin verificar)
+  - connected (TA válido)
+  - config_error (falta CUIT, environment o certPath)
+  - cert_error (.p12 no se puede leer)
+  - wsaa_error (AFIP rechazó el TRA)
+  - network_error (timeout o sin respuesta)
+
+- Creé src/components/afip-connection-panel.tsx (~510 LOC):
+  - deriveStatus(): mapea la respuesta de /api/afip/test a uno de los
+    6 estados, basándose en el primer step que falló.
+  - STATUS_META: tabla de metadata (label, color, icon) por estado.
+  - STEP_META: tabla de metadata (label, icon) por step (config,
+    certificado, wsaa, wsaa_cache).
+  - runTest(): ejecuta el test con AbortController + timeout 35s.
+    Maneja 3 niveles de error:
+    1. ok=true → connected + toast success
+    2. 4xx con body JSON estructurado → deriveStatus + reintentos
+    3. 5xx / timeout / fetch exception → network_error + reintentos
+  - Backoff: reintenta hasta 2 veces con 1s + 2s SOLO para wsaa_error
+    y network_error (no reintenta config ni cert porque no van a
+    mejorar solos).
+  - willRetry flag para NO bajar `testing` durante el backoff.
+  - SuggestionBox: componente auxiliar para mostrar listas de
+    verificación según el tipo de error.
+  - Pre-condiciones: avisa si falta environment=produccion, certPath
+    o CUIT, y deshabilita el botón.
+  - Modal con tabla de steps (icono + label + detail) + sugerencias
+    contextuales.
+
+- Integré en settings-view.tsx:
+  - Import AfipConnectionPanel.
+  - Insertado en el tab 'Facturación AFIP', después del formulario y
+    antes del botón Guardar.
+  - Pasa taxConfig (state) y onTestSuccess=loadTaxConfig (refresca
+    el TA cacheado).
+
+- Mejoras en src/components/ui/badge.tsx:
+  - Agregadas variantes 'success' (emerald-100/800) y 'warning'
+    (amber-100/800) con soporte dark mode.
+
+- Tests scripts/test-afip-derive-status.ts (7 tests):
+  - 7 casos cubriendo los 6 estados + 1 edge case (ok=false pero
+    todos steps OK → network_error).
+  - 7/7 OK.
+
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 16.5s, 59/59 static pages OK
+- Commit: 418c4e3
+- Push: ✓ origin/main
+
+Stage Summary:
+- Componentes nuevos: 1 (AfipConnectionPanel, ~510 LOC)
+- Componentes modificados: 2 (settings-view.tsx integración, badge.tsx
+  +2 variantes)
+- Tests de regresión: 7 (scripts/test-afip-derive-status.ts)
+- 6 estados derivados con mensajes user-friendly y sugerencias
+- Reintentos automáticos (máx 2) con backoff 1s+2s SOLO para errores
+  transitorios (wsaa/network)
+- Timeout 35s con AbortController
+- Pre-condiciones visuales (falta environment / cert / CUIT)
+- Comunicación inter-modular validada:
+  - settings-view → AfipConnectionPanel: taxConfig state + callback
+  - AfipConnectionPanel → /api/afip/test: POST con AbortController
+  - /api/afip/test → afip-prod: lee cert + obtiene TA
+  - onTestSuccess → loadTaxConfig: refresca taxConfig con TA cacheado
