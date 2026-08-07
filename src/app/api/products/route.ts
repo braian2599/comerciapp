@@ -49,7 +49,15 @@ export async function GET() {
       include: { category: true, supplier: true },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });
-    return NextResponse.json(products);
+    // Headers anti-cache: sin esto, el browser/CDN puede cachear la
+    // respuesta del GET y la lista no se actualiza tras un POST/PUT.
+    return NextResponse.json(products, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
   } catch (e: any) {
     console.error("[GET /api/products] error:", e);
     return NextResponse.json(

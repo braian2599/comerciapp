@@ -39,8 +39,14 @@ export async function safeFetchJSON<T = any>(
 ): Promise<SafeResponse<T>> {
   let res: Response;
   try {
+    // `cache: "no-store"` evita que el browser/Next.js cachee la respuesta.
+    // Sin esto, después de un POST/PUT/DELETE, el GET siguiente puede
+    // devolver datos viejos cacheados y la UI no se actualiza.
+    // Solo se aplica si el caller no especificó `cache` explícitamente.
+    const cache = init?.cache ?? "no-store";
     res = await fetch(url, {
       ...init,
+      cache,
       headers: {
         // Por defecto enviamos JSON; el caller puede sobreescribir.
         "Content-Type": "application/json",
@@ -106,8 +112,10 @@ export async function safeFetchBlob(
 ): Promise<{ ok: boolean; status: number; blob: Blob | null; error?: string }> {
   let res: Response;
   try {
+    const cache = init?.cache ?? "no-store";
     res = await fetch(url, {
       ...init,
+      cache,
       headers: {
         "Content-Type": "application/json",
         ...(init?.headers || {}),
