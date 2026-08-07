@@ -5,13 +5,26 @@
  * - Precaching del shell de la app (HTML, JS, CSS)
  * - Estrategia network-first para navegación (con fallback offline)
  * - Estrategia stale-while-revalidate para assets estáticos
+ * - Network-first corto para TODAS las APIs (red primero, cache como fallback offline)
+ * - Invalidación automática de cache tras mutaciones (POST/PUT/PATCH/DELETE)
  * - Background sync para encolar operaciones realizadas offline
- * - Mensajería con el cliente (para sincronización manual)
+ * - Mensajería con el cliente (sincronización manual, limpieza de cache)
  *
- * Versión: 4.0
+ * Versión: 5.0
+ *
+ * Cambios en v5.0 (FIX real-time refresh):
+ *   Antes, los endpoints /api/products, /api/customers, /api/categories,
+ *   /api/payment-methods, /api/dashboard, /api/store, /api/me usaban
+ *   staleWhileRevalidate, que devuelve la cache STALE instantáneamente y
+ *   revalida en background. Después de crear/editar/borrar, la vista llamaba
+ *   load() pero el SW entregaba la respuesta vieja → la lista no se
+ *   actualizaba hasta recargar la página.
+ *   Ahora TODAS las APIs usan networkFirstShort (red primero; cache solo si
+ *   la red falla) y se invalidan las caches relacionadas tras cada mutación
+ *   exitosa. Así la próxima lectura siempre ve datos frescos.
  */
 
-const SW_VERSION = "comerciapp-v4.0.0";
+const SW_VERSION = "comerciapp-v5.0.0";
 const CACHE_SHELL = `${SW_VERSION}-shell`;
 const CACHE_DATA = `${SW_VERSION}-data`;
 const CACHE_API = `${SW_VERSION}-api`;
@@ -26,24 +39,45 @@ const SHELL_ASSETS = [
   "/offline.html",
 ];
 
-// Endpoints de API que se cachean con stale-while-revalidate (lecturas)
-const API_CACHEABLE = [
-  "/api/dashboard",
-  "/api/products",
-  "/api/categories",
-  "/api/customers",
-  "/api/payment-methods",
-  "/api/store",
-  "/api/me",
-];
-
-// Endpoints que nunca se cachean (escrituras siempre van a la red)
+// Endpoints que nunca se cachean (escrituras siempre van a la red,
+// y lecturas sensibles que no deben servirse desde cache)
 const API_NEVER_CACHE = [
   "/api/auth",
   "/api/sales",
   "/api/cash-registers/close",
   "/api/print",
 ];
+
+// Mapa de invalidación: cuando una mutación (POST/PUT/PATCH/DELETE) a un
+// path cuyo prefix es `key` tiene éxito (2xx), se borran de CACHE_API todas
+// las entradas cuyo pathname empieza con cualquiera de los prefixes listados.
+// Así la próxima lectura GET va a la red en lugar de servir cache stale.
+//
+// Nota: /api/dashboard aparece en muchos lugares porque agrega métricas de
+// ventas, gastos, stock, clientes, etc. Casi cualquier mutación lo afecta.
+const INVALIDATION_MAP = {
+  "/api/products":        ["/api/products", "/api/dashboard"],
+  "/api/categories":      ["/api/categories", "/api/products", "/api/dashboard"],
+  "/api/customers":       ["/api/customers", "/api/dashboard"],
+  "/api/payment-methods": ["/api/payment-methods"],
+  "/api/expenses":        ["/api/expenses", "/api/dashboard"],
+  "/api/inventory":       ["/api/inventory", "/api/products", "/api/dashboard"],
+  "/api/cash-registers":  ["/api/cash-registers", "/api/dashboard"],
+  "/api/invoices":        ["/api/invoices", "/api/dashboard"],
+  "/api/credit-notes":    ["/api/credit-notes", "/api/dashboard"],
+  "/api/refunds":         ["/api/refunds", "/api/customers", "/api/dashboard"],
+  "/api/promotions":      ["/api/promotions"],
+  "/api/purchase-orders": ["/api/purchase-orders", "/api/inventory", "/api/products", "/api/dashboard"],
+  "/api/branches":        ["/api/branches", "/api/store"],
+  "/api/commissions":     ["/api/commissions"],
+  "/api/print-templates": ["/api/print-templates"],
+  "/api/store":           ["/api/store", "/api/me"],
+  "/api/me":              ["/api/me", "/api/store"],
+  "/api/loyalty":         ["/api/loyalty", "/api/customers"],
+  "/api/tax-config":      ["/api/tax-config"],
+  "/api/ecommerce":       ["/api/ecommerce"],
+  "/api/suppliers":       ["/api/suppliers"],
+};
 
 // ===== EVENTOS =====
 self.addEventListener("install", (event) => {
@@ -57,15 +91,17 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   console.log("[SW] Activando", SW_VERSION);
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => !k.startsWith(SW_VERSION))
-          .map((k) => caches.delete(k))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => !k.startsWith(SW_VERSION))
+            .map((k) => caches.delete(k))
+        )
       )
-    )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("message", (event) => {
@@ -73,7 +109,15 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
   if (event.data?.type === "GET_VERSION") {
-    event.ports[0].postMessage({ version: SW_VERSION });
+    event.ports[0]?.postMessage({ version: SW_VERSION });
+  }
+  // Permite al cliente limpiar la cache de API bajo demanda
+  if (event.data?.type === "CLEAR_API_CACHE") {
+    event.waitUntil(
+      caches.delete(CACHE_API).then(() => {
+        event.ports[0]?.postMessage({ ok: true });
+      })
+    );
   }
 });
 
@@ -82,11 +126,20 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Solo manejar GET para cacheo; otros métodos se dejan pasar (con cola offline si hay)
+  // Solo same-origin para no interferir con recursos externos
+  if (url.origin !== self.location.origin) return;
+
+  // Mutaciones (non-GET): interceptar para invalidar cache tras éxito.
+  // Si estamos offline, encolar para background sync.
   if (req.method !== "GET") {
-    // Para mutaciones POST/PUT/DELETE, interceptar si estamos offline
-    if (navigator?.onLine === false || !self.navigator.onLine) {
+    const online =
+      typeof navigator !== "undefined"
+        ? navigator.onLine
+        : self.navigator.onLine;
+    if (!online) {
       event.respondWith(handleOfflineMutation(req));
+    } else {
+      event.respondWith(handleOnlineMutation(req));
     }
     return;
   }
@@ -97,22 +150,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // API: stale-while-revalidate si está en la lista de cacheables
+  // API GET: network-first corto (red primero, cache como fallback offline).
+  // ANTES se usaba staleWhileRevalidate para algunos endpoints, pero eso
+  // devolvía datos viejos instantáneamente y rompía la actualización en
+  // tiempo real tras mutaciones. networkFirstShort garantiza datos frescos.
   if (url.pathname.startsWith("/api/")) {
     if (API_NEVER_CACHE.some((p) => url.pathname.startsWith(p))) {
-      return; // dejar pasar
+      return; // dejar pasar sin cachear
     }
-    if (API_CACHEABLE.some((p) => url.pathname.startsWith(p))) {
-      event.respondWith(staleWhileRevalidate(req, CACHE_API));
-      return;
-    }
-    // Otras APIs: network-first corto
     event.respondWith(networkFirstShort(req));
     return;
   }
 
-  // Assets estáticos: stale-while-revalidate
-  if (req.destination === "style" || req.destination === "script" || req.destination === "image" || req.destination === "font") {
+  // Assets estáticos: stale-while-revalidate (OK para assets inmutables con hash)
+  if (
+    req.destination === "style" ||
+    req.destination === "script" ||
+    req.destination === "image" ||
+    req.destination === "font"
+  ) {
     event.respondWith(staleWhileRevalidate(req, CACHE_SHELL));
     return;
   }
@@ -162,6 +218,59 @@ async function staleWhileRevalidate(req, cacheName) {
   return cached || fetchPromise;
 }
 
+// ===== MUTACIONES ONLINE (con invalidación de cache) =====
+// Intercepta POST/PUT/PATCH/DELETE cuando hay red, deja pasar la petición,
+// y tras una respuesta 2xx invalida las caches relacionadas para que la
+// próxima lectura GET vaya a la red y vea los datos actualizados.
+async function handleOnlineMutation(req) {
+  const res = await fetch(req);
+  if (res.ok) {
+    // Invalidar caches relacionadas (no bloquea la respuesta más de unos ms).
+    await invalidateCachesFor(req.url).catch((e) => {
+      console.warn("[SW] Error invalidando cache tras mutación:", e);
+    });
+  }
+  return res;
+}
+
+// ===== INVALIDACIÓN DE CACHE =====
+function getInvalidationPrefixes(pathname) {
+  for (const key of Object.keys(INVALIDATION_MAP)) {
+    if (pathname.startsWith(key)) {
+      return INVALIDATION_MAP[key];
+    }
+  }
+  return [];
+}
+
+async function invalidateCachesFor(requestUrl) {
+  let pathname;
+  try {
+    pathname = new URL(requestUrl).pathname;
+  } catch {
+    return;
+  }
+  const prefixes = getInvalidationPrefixes(pathname);
+  if (prefixes.length === 0) return;
+
+  const cache = await caches.open(CACHE_API);
+  const keys = await cache.keys();
+  const toDelete = keys.filter((key) => {
+    try {
+      const keyPath = new URL(key.url).pathname;
+      return prefixes.some((p) => keyPath.startsWith(p));
+    } catch {
+      return false;
+    }
+  });
+  await Promise.all(toDelete.map((key) => cache.delete(key)));
+  if (toDelete.length > 0) {
+    console.log(
+      `[SW] Invalidadas ${toDelete.length} entradas de cache tras mutación a ${pathname}`
+    );
+  }
+}
+
 // ===== MUTACIONES OFFLINE =====
 async function handleOfflineMutation(req) {
   const body = await req.clone().text();
@@ -189,9 +298,12 @@ async function handleOfflineMutation(req) {
 
   // Notificar a clientes
   const clients = await self.clients.matchAll();
-  clients.forEach((c) => c.postMessage({ type: "OFFLINE_QUEUED", id: op.id, url: op.url }));
+  clients.forEach((c) =>
+    c.postMessage({ type: "OFFLINE_QUEUED", id: op.id, url: op.url })
+  );
 
-  // Responder con una respuesta "aceptada" simulada (el frontend debe manejar la reconciliación)
+  // Responder con una respuesta "aceptada" simulada (el frontend debe
+  // manejar la reconciliación)
   return new Response(
     JSON.stringify({
       offline: true,
@@ -228,6 +340,11 @@ async function processOfflineQueue() {
       if (res.ok || res.status === 400 || res.status === 409) {
         // Éxito o error definitivo: eliminar de la cola
         await db.delete("offline-queue", op.id);
+        // Tras replay exitoso, invalidar caches relacionadas para que la
+        // próxima lectura vea el efecto de la operación replayed.
+        if (res.ok) {
+          await invalidateCachesFor(op.url).catch(() => {});
+        }
         // Notificar a clientes
         const data = await res.json().catch(() => ({}));
         const clients = await self.clients.matchAll();

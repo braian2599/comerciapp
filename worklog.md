@@ -773,3 +773,37 @@ Stage Summary:
   - Dev/VPS: dejar S3 sin configurar, usa FS local
   - Prod multi-instancia/Vercel: configurar S3_BUCKET + creds
   - Migración existente: correr `npx tsx scripts/migrate-certs-to-s3.ts`
+
+---
+Task ID: fix-realtime-refresh-sw
+Agent: main
+Task: Fix del bug "las listas no se actualizan en tiempo real, hay que recargar la página para ver los cambios". Análisis profundo del frontend, la API y el Service Worker.
+
+Work Log:
+- Audité las 19 vistas en src/components/views/ end-to-end: TODAS llaman a su función load() tras cada mutación (POST/PUT/DELETE). El wiring view-level NO era el bug.
+- Audité app-shell.tsx: cambia de vista con switch que retorna componentes distintos → las vistas se unmount/remount al navegar → useEffect re-firea. Tampoco era el bug.
+- Audité src/store/app-store.ts: solo tiene currentView + user/store. No hay caches de listas.
+- Audité src/lib/fetch.ts: safeFetchJSON usa cache:"no-store", pero esto NO bypassa al Service Worker (el SW intercepta antes que el HTTP cache).
+- Audité package.json: @tanstack/react-query está instalado pero SIN usar (cero imports en src/). No hay SWR.
+- Root cause encontrada en public/sw.js: los endpoints /api/products, /api/customers, /api/categories, /api/payment-methods, /api/dashboard, /api/store, /api/me usaban staleWhileRevalidate, que devuelve la cache STALE instantáneamente y revalida en background. Tras una mutación, load() pedía GET /api/products, el SW entregaba la respuesta cacheada vieja, y la lista no cambiaba hasta recargar.
+
+Fix aplicado en public/sw.js (v4.0 → v5.0):
+- Eliminado el array API_CACHEABLE y la rama staleWhileRevalidate para APIs.
+- TODAS las APIs GET ahora usan networkFirstShort: red primero (datos frescos), cache solo como fallback offline. Sigue habiendo soporte offline.
+- Agregada invalidación automática de cache tras mutaciones online: handleOnlineMutation intercepta POST/PUT/PATCH/DELETE, deja pasar a la red, y tras 2xx borra las caches relacionadas según INVALIDATION_MAP (21 entradas que cubren products, categories, customers, payment-methods, expenses, inventory, cash-registers, invoices, credit-notes, refunds, promotions, purchase-orders, branches, commissions, print-templates, store, me, loyalty, tax-config, ecommerce, suppliers).
+- Agregada invalidación tras replay de cola offline (processOfflineQueue): tras replay exitoso, invalidateCachesFor(op.url) para que la próxima lectura vea el efecto.
+- Bump SW_VERSION a commerciapp-v5.0.0: el evento activate flushea todas las caches viejas (v4.0.0) automáticamente.
+- Agregado guard same-origin (url.origin !== self.location.origin) para no interferir con recursos externos.
+- Agregado message handler CLEAR_API_CACHE para limpieza manual desde el cliente.
+- Activación inmediata: skipWaiting() en install + clients.claim() en activate. El nuevo SW toma control sin esperar a que cierren las pestañas.
+
+Stage Summary:
+- Archivo modificado: public/sw.js (303 → ~340 LOC)
+- Cambios: 1 estrategia de cache (SWR → networkFirstShort para APIs), 1 mecanismo nuevo (invalidación automática), 21 entradas en INVALIDATION_MAP
+- Build: ✓ Compiled successfully in 17.3s, sin errors/warnings
+- Validación de sintaxis: ✓ (new Function + checks de presencia de features)
+- Sin cambios en views, store, fetch.ts, ni API routes — el fix es 100% en el SW
+- Endpoints afectados (los que antes servían stale): /api/products, /api/categories, /api/customers, /api/payment-methods, /api/dashboard, /api/store, /api/me
+- Vistas que ahora actualizan en tiempo real: products-view, customers-view, settings-view (payment-methods), pos-view (products+customers), purchases-view (product dropdown), dashboard-view (metrics)
+- Comportamiento offline preservado: networkFirstShort cae a cache si la red falla; handleOfflineMutation encola mutaciones para background sync
+- Para que el fix tome efecto en el browser del usuario: el navegador detecta el nuevo sw.js en la próxima navegación/recarga. Con skipWaiting()+clients.claim(), el SW v5 activa inmediatamente y flushea caches v4. No requiere recargas múltiples.
