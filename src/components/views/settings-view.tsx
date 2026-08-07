@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { AfipConnectionPanel } from "@/components/afip-connection-panel";
 
 interface PaymentMethod {
   id: string;
@@ -948,6 +949,12 @@ export function SettingsView() {
               y cargá tu certificado.
             </div>
           )}
+
+          {/* Panel de conexión AFIP (solo relevante en producción) */}
+          <AfipConnectionPanel
+            taxConfig={taxConfig}
+            onTestSuccess={loadTaxConfig}
+          />
 
           <div className="flex justify-end">
             <Button onClick={handleSaveTax} disabled={taxSaving} className="bg-blue-600 hover:bg-blue-700">
