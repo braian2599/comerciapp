@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, getAuthOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 /**
@@ -14,63 +14,64 @@ import { db } from "@/lib/db";
  * Borrar o deshabilitar después de diagnosticar.
  */
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  // Probamos AMBAS formas:
+  // 1. authOptions (proxy lazy) — la que usan todos los endpoints
+  // 2. getAuthOptions() directo — bypass del proxy
+  // Si la #2 funciona y la #1 no, el proxy está roto.
+  const sessionViaProxy = await getServerSession(authOptions);
+  const sessionViaDirect = await getServerSession(getAuthOptions());
 
-  if (!session?.user) {
-    return NextResponse.json({
-      ok: false,
-      message: "No hay sesión activa",
-      hint: "Iniciá sesión primero.",
-    });
-  }
+  const uProxy = sessionViaProxy?.user as any;
+  const uDirect = sessionViaDirect?.user as any;
 
-  const u = session.user as any;
-
-  // Buscar el usuario en la DB para ver si tiene storeId
+  // Buscar el usuario en la DB
+  const email = uProxy?.email || uDirect?.email;
   let dbUser: any = null;
-  try {
-    dbUser = await db.user.findUnique({
-      where: { email: u.email.toLowerCase() },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        active: true,
-        storeId: true,
-        store: { select: { id: true, name: true, rubro: true } },
-      },
-    });
-  } catch (e: any) {
-    return NextResponse.json({
-      ok: false,
-      message: "Error consultando DB",
-      error: e?.message,
-    });
+  if (email) {
+    try {
+      dbUser = await db.user.findUnique({
+        where: { email: email.toLowerCase() },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          active: true,
+          storeId: true,
+          store: { select: { id: true, name: true, rubro: true } },
+        },
+      });
+    } catch (e: any) {
+      return NextResponse.json({
+        ok: false,
+        message: "Error consultando DB",
+        error: e?.message,
+      });
+    }
   }
 
   return NextResponse.json({
     ok: true,
     timestamp: new Date().toISOString(),
-    session: {
-      // Lo que llega al endpoint desde el JWT
-      hasSession: true,
-      userId: u.id ?? null,
-      email: u.email ?? null,
-      name: u.name ?? null,
-      role: u.role ?? null,
-      storeId: u.storeId ?? null,
-      storeName: u.storeName ?? null,
-      storeRubro: u.storeRubro ?? null,
-      // Lista todas las keys del token para debug
-      keys: Object.keys(u),
+    test: {
+      // Comparamos las dos formas
+      viaProxy: {
+        hasSession: !!uProxy,
+        storeId: uProxy?.storeId ?? null,
+        role: uProxy?.role ?? null,
+        keys: uProxy ? Object.keys(uProxy) : [],
+      },
+      viaDirect: {
+        hasSession: !!uDirect,
+        storeId: uDirect?.storeId ?? null,
+        role: uDirect?.role ?? null,
+        keys: uDirect ? Object.keys(uDirect) : [],
+      },
     },
     database: {
-      // Lo que realmente está en la DB
       userFound: !!dbUser,
       userId: dbUser?.id ?? null,
       email: dbUser?.email ?? null,
-      name: dbUser?.name ?? null,
       role: dbUser?.role ?? null,
       active: dbUser?.active ?? null,
       storeId: dbUser?.storeId ?? null,
@@ -79,31 +80,37 @@ export async function GET() {
     diagnosis: (() => {
       if (!dbUser) return { status: "BROKEN", message: "Usuario no encontrado en DB" };
       if (!dbUser.active) return { status: "BROKEN", message: "Usuario inactivo en DB" };
-      if (!dbUser.storeId) {
+
+      const proxyWorks = !!uProxy?.storeId;
+      const directWorks = !!uDirect?.storeId;
+
+      if (proxyWorks && directWorks) {
         return {
-          status: "BROKEN",
-          message:
-            "El usuario en la DB NO tiene storeId asignado. " +
-            "Esto significa que fue creado incorrectamente (probablemente " +
-            "directamente en la DB sin pasar por /api/register).",
-          fix: "Hay que asignarle un storeId al usuario manualmente.",
+          status: "OK",
+          message: "Ambas formas funcionan. Recargá la página de productos.",
         };
       }
-      if (!u.storeId) {
+      if (!proxyWorks && directWorks) {
+        return {
+          status: "PROXY_BROKEN",
+          message:
+            "El Proxy en auth.ts está rompiendo los callbacks de NextAuth. " +
+            "authOptions (proxy) NO propaga storeId, pero getAuthOptions() directo sí.",
+          fix: "Hay que eliminar el Proxy y exportar authOptions directamente.",
+        };
+      }
+      if (!proxyWorks && !directWorks) {
         return {
           status: "JWT_STALE",
           message:
-            "El usuario en la DB tiene storeId pero el JWT no. " +
-            "La sesión está cacheada/obsoleta.",
+            "Ninguna forma funciona. El JWT está completamente vacío de campos custom.",
           fix:
-            "Hacé logout COMPLETO: 1) F12 → Application → Clear Site Data. " +
-            "2) Cerrá todas las pestañas. 3) Volvé a entrar.",
+            "El problema está en el callback jwt() o authorize(). " +
+            "Posiblemente el JWT se generó antes del deploy y nunca se regeneró.",
         };
       }
-      return {
-        status: "OK",
-        message: "Todo bien, storeId está en sesión y en DB",
-      };
+      return { status: "UNKNOWN", message: "Estado no clasificado" };
     })(),
   });
 }
+
