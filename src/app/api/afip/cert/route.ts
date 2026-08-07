@@ -3,40 +3,35 @@
  * DELETE /api/afip/cert      — Eliminar certificado
  * GET /api/afip/cert         — Info del certificado actual (sin exponer sensible)
  *
+ * Storage: S3-compatible (R2/S3/B2/MinIO) con fallback a FS local.
+ * Ver lib/cert-storage.ts para detalles de la estrategia.
+ *
  * ROBUSTEZ:
  *  - Solo ADMIN/OWNER puede ejecutar cualquiera de los 3 verbos.
  *  - POST acepta multipart/form-data (Web API FormData en Next 16).
  *  - Validación de extensión (.p12, .pfx, .pem) y MIME type.
  *  - Límite de tamaño: 100KB (certificados AFIP son chicos, <50KB típicamente).
  *  - Validación inmediata: el certificado se lee/extrae con node-forge ANTES de
- *    persistir en FS, para detectar password incorrecta o archivo corrupto.
+ *    persistir en storage, para detectar password incorrecta o archivo corrupto.
  *  - Matching de CUIT: si TaxConfig.cuit está seteado, el CUIT del certificado
  *    debe coincidir. Si no coincide, se rechaza con error user-friendly.
  *    Si TaxConfig.cuit NO está seteado, se autocompleta con el del certificado.
  *  - La password del .p12 se encripta con AES-256-GCM (lib/crypto-utils.ts)
  *    ANTES de persistir en TaxConfig.certPassword.
- *  - Cuando se reemplaza el certificado, se borra el archivo anterior del FS
- *    y se invalida el TA cacheado (authToken=null, authTokenExpires=null).
+ *  - Cuando se reemplaza el certificado, se borra el archivo anterior del
+ *    storage (S3 + FS) y se invalida el TA cacheado.
  *  - Nombre de archivo seguro: `afip-${storeId}-${timestamp}.${ext}`.
  *    Nunca se usa el nombre original del archivo (previene path traversal y
  *    colisiones con otros stores).
- *  - DELETE borra el archivo físico + limpia todos los campos relacionados.
+ *  - DELETE borra el archivo físico (S3 + FS) + limpia todos los campos.
  *  - GET retorna info legible (subject, issuer, validez, fingerprint) pero
  *    NUNCA el contenido PEM ni la password.
- *
- * SERVERLESS (Vercel):
- *  - El FS es read-only excepto /tmp. Setear UPLOADS_DIR=/tmp/afip-certs.
- *  - Los archivos en /tmp NO persisten entre invocations, por lo que en
- *    producción se recomienda usar Vercel Blob o S3. Esta implementación
- *    usa FS local y es adecuado para dev/self-hosted. Para Vercel prod,
- *    migrar a blob storage (TODO futuro).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   extractCertInfoFromP12,
@@ -46,6 +41,13 @@ import {
   type CertInfo,
 } from "@/lib/cert-info";
 import { encryptSecret, decryptSecret } from "@/lib/crypto-utils";
+import {
+  putCertFile,
+  getCertFile,
+  deleteCertFile,
+  headCertFile,
+  getCertStorageConfig,
+} from "@/lib/cert-storage";
 
 // ===== Constantes =====
 
@@ -62,23 +64,6 @@ const ALLOWED_MIMES = [
 ];
 
 // ===== Helpers =====
-
-/**
- * Resuelve el directorio de uploads.
- *  - Si UPLOADS_DIR está seteado, usa ese.
- *  - Sino, usa /home/z/my-project/uploads/afip-certs (dev).
- *  - Crea el directorio si no existe.
- */
-async function getUploadsDir(): Promise<string> {
-  const base =
-    process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads", "afip-certs");
-  try {
-    await fs.mkdir(base, { recursive: true });
-  } catch (e: any) {
-    throw new Error(`No se pudo crear directorio de uploads ${base}: ${e.message}`);
-  }
-  return base;
-}
 
 function getExt(filename: string): string {
   const lower = filename.toLowerCase();
@@ -101,39 +86,14 @@ function buildDestFilename(storeId: string, ext: string): string {
 }
 
 /**
- * Borra un archivo del FS si existe, ignorando errores (best-effort).
- * Usado al reemplazar o eliminar certificados.
- */
-async function safeUnlink(filePath: string): Promise<void> {
-  try {
-    await fs.unlink(filePath);
-  } catch (e: any) {
-    if (e.code !== "ENOENT") {
-      // No fatal: el archivo puede no existir (registro viejo sin archivo)
-      console.warn(`[afip/cert] no se pudo borrar ${filePath}: ${e.message}`);
-    }
-  }
-}
-
-/**
- * Resuelve ruta absoluta de un path guardado en TaxConfig.certPath.
- * Soporta absolutas o relativas a UPLOADS_DIR.
- */
-async function resolveAbsPath(stored: string | null | undefined): Promise<string | null> {
-  if (!stored) return null;
-  if (path.isAbsolute(stored)) return stored;
-  const base = await getUploadsDir();
-  return path.join(base, stored);
-}
-
-/**
  * Construye la respuesta de info del certificado para el frontend.
  * No expone contenido PEM ni password.
  */
 function buildCertInfoResponse(
   info: CertInfo,
   certPath: string,
-  privateKeyPath: string | null
+  privateKeyPath: string | null,
+  storageInfo?: { source: "s3" | "fs" | "none"; s3Enabled: boolean }
 ) {
   return {
     hasCert: true,
@@ -150,6 +110,7 @@ function buildCertInfoResponse(
     expiringSoon: info.expiringSoon,
     fingerprintSha256: info.fingerprintSha256,
     serialNumber: info.serialNumber,
+    storage: storageInfo,
   };
 }
 
@@ -247,7 +208,6 @@ export async function POST(req: NextRequest) {
 
   // ---- Validar certificado según formato ----
   let certInfo: CertInfo;
-  let privateKeyPath: string | null = null;
 
   try {
     if (ext === ".p12" || ext === ".pfx") {
@@ -387,46 +347,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ---- Persistir archivo(s) en FS ----
-  const uploadsDir = await getUploadsDir();
+  // ---- Generar nombres de archivo ----
   const certFilename = buildDestFilename(storeId, ext);
-  const certAbsPath = path.join(uploadsDir, certFilename);
-  // Guardamos la ruta RELATIVA (solo filename) en la DB; resolveUploadPath la resuelve
-  const certRelativePath = certFilename;
+  const keyFilename = ext === ".p12" || ext === ".pfx" ? null : buildDestFilename(storeId, ".key");
 
-  let keyRelativePath: string | null = null;
-  let keyAbsPath: string | null = null;
-
+  // ---- Persistir archivo(s) en storage (S3 + FS local) ----
   try {
-    if (ext === ".p12" || ext === ".pfx") {
-      await fs.writeFile(certAbsPath, certBuffer);
-    } else {
-      // PEM: escribir cert + key
-      await fs.writeFile(certAbsPath, certBuffer);
-      const keyFilename = buildDestFilename(storeId, ".key");
-      keyAbsPath = path.join(uploadsDir, keyFilename);
-      keyRelativePath = keyFilename;
-      const keyBuffer = Buffer.from(
-        await (keyFile as File).arrayBuffer()
-      );
-      await fs.writeFile(keyAbsPath, keyBuffer);
+    await putCertFile(storeId, certFilename, certBuffer);
+    if (keyFilename && keyFile) {
+      const keyBuffer = Buffer.from(await keyFile.arrayBuffer());
+      await putCertFile(storeId, keyFilename, keyBuffer);
     }
   } catch (e: any) {
-    // Si falla la escritura, limpiar archivos parciales
-    await safeUnlink(certAbsPath);
-    if (keyAbsPath) await safeUnlink(keyAbsPath);
     return NextResponse.json(
-      { error: `No se pudo guardar el certificado en el servidor: ${e?.message}` },
+      { error: `No se pudo guardar el certificado en storage: ${e?.message}` },
       { status: 500 }
     );
   }
 
-  // ---- Borrar certificado anterior del FS ----
-  const oldCertAbs = await resolveAbsPath(taxConfig.certPath);
-  const oldKeyAbs = await resolveAbsPath(taxConfig.privateKeyPath);
-  // Best-effort: no fallar si no se puede borrar
-  if (oldCertAbs && oldCertAbs !== certAbsPath) await safeUnlink(oldCertAbs);
-  if (oldKeyAbs && oldKeyAbs !== keyAbsPath) await safeUnlink(oldKeyAbs);
+  // ---- Borrar certificado anterior del storage ----
+  if (taxConfig.certPath && taxConfig.certPath !== certFilename) {
+    await deleteCertFile(storeId, taxConfig.certPath).catch((e) => {
+      console.warn(`[afip/cert] no se pudo borrar cert anterior: ${e.message}`);
+    });
+  }
+  if (taxConfig.privateKeyPath && taxConfig.privateKeyPath !== keyFilename) {
+    await deleteCertFile(storeId, taxConfig.privateKeyPath).catch((e) => {
+      console.warn(`[afip/cert] no se pudo borrar key anterior: ${e.message}`);
+    });
+  }
 
   // ---- Actualizar TaxConfig ----
   // Encriptar password si es .p12
@@ -436,8 +385,8 @@ export async function POST(req: NextRequest) {
     await db.taxConfig.update({
       where: { storeId },
       data: {
-        certPath: certRelativePath,
-        privateKeyPath: keyRelativePath,
+        certPath: certFilename,
+        privateKeyPath: keyFilename,
         certPassword: encryptedPassword,
         // Autocompletar CUIT si no estaba seteado
         cuit: taxConfig.cuit || certInfo.cuit,
@@ -448,8 +397,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     // Si falla la DB, borrar los archivos nuevos para no dejar basura
-    await safeUnlink(certAbsPath);
-    if (keyAbsPath) await safeUnlink(keyAbsPath);
+    await deleteCertFile(storeId, certFilename).catch(() => {});
+    if (keyFilename) {
+      await deleteCertFile(storeId, keyFilename).catch(() => {});
+    }
     return NextResponse.json(
       { error: `No se pudo actualizar la configuración fiscal: ${e?.message}` },
       { status: 500 }
@@ -457,10 +408,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- Respuesta ----
+  const storageConfig = getCertStorageConfig();
   return NextResponse.json({
     ok: true,
     message: "Certificado cargado y validado correctamente",
-    cert: buildCertInfoResponse(certInfo, certRelativePath, keyRelativePath),
+    cert: buildCertInfoResponse(certInfo, certFilename, keyFilename, {
+      source: storageConfig.enabled ? "s3" : "fs",
+      s3Enabled: storageConfig.enabled,
+    }),
   });
 }
 
@@ -488,11 +443,13 @@ export async function DELETE() {
     );
   }
 
-  // Borrar archivos físicos
-  const certAbs = await resolveAbsPath(taxConfig.certPath);
-  const keyAbs = await resolveAbsPath(taxConfig.privateKeyPath);
-  if (certAbs) await safeUnlink(certAbs);
-  if (keyAbs) await safeUnlink(keyAbs);
+  // Borrar archivos físicos (S3 + FS)
+  const certDelete = await deleteCertFile(storeId, taxConfig.certPath);
+  if (taxConfig.privateKeyPath) {
+    const keyDelete = await deleteCertFile(storeId, taxConfig.privateKeyPath);
+    certDelete.deletedFromS3 = certDelete.deletedFromS3 || keyDelete.deletedFromS3;
+    certDelete.deletedFromFs = certDelete.deletedFromFs || keyDelete.deletedFromFs;
+  }
 
   // Limpiar campos en TaxConfig
   await db.taxConfig.update({
@@ -509,6 +466,7 @@ export async function DELETE() {
   return NextResponse.json({
     ok: true,
     message: "Certificado eliminado",
+    storage: certDelete,
   });
 }
 
@@ -538,20 +496,27 @@ export async function GET() {
     });
   }
 
-  // Leer archivo y extraer info
-  const certAbs = await resolveAbsPath(taxConfig.certPath);
-  if (!certAbs) {
-    return NextResponse.json({
-      hasCert: false,
-      format: null,
-      certPath: null,
-      privateKeyPath: null,
-    });
+  // Verificar existencia en storage
+  const head = await headCertFile(storeId, taxConfig.certPath);
+  if (!head.exists) {
+    return NextResponse.json(
+      {
+        hasCert: true,
+        format: null,
+        certPath: taxConfig.certPath,
+        privateKeyPath: taxConfig.privateKeyPath,
+        error:
+          "El certificado no se encuentra en el storage (S3 ni FS). Es posible que se haya perdido o que se haya cargado en otro servidor. Cargá el certificado nuevamente.",
+      },
+      { status: 200 }
+    );
   }
 
+  // Leer archivo desde storage
   let certBuffer: Buffer;
   try {
-    certBuffer = await fs.readFile(certAbs);
+    const result = await getCertFile(storeId, taxConfig.certPath);
+    certBuffer = result.buffer;
   } catch (e: any) {
     return NextResponse.json(
       {
@@ -559,13 +524,13 @@ export async function GET() {
         format: null,
         certPath: taxConfig.certPath,
         privateKeyPath: taxConfig.privateKeyPath,
-        error: `El archivo no existe en el servidor: ${certAbs}. Es posible que se haya perdido. Cargá el certificado nuevamente.`,
+        error: `No se pudo leer el certificado desde storage: ${e?.message}`,
       },
-      { status: 200 } // 200 con error para que la UI lo muestre
+      { status: 200 }
     );
   }
 
-  const ext = getExt(certAbs);
+  const ext = getExt(taxConfig.certPath);
   let certInfo: CertInfo;
   try {
     if (ext === ".p12" || ext === ".pfx") {
@@ -615,7 +580,16 @@ export async function GET() {
     );
   }
 
+  const storageConfig = getCertStorageConfig();
   return NextResponse.json(
-    buildCertInfoResponse(certInfo, taxConfig.certPath, taxConfig.privateKeyPath)
+    buildCertInfoResponse(
+      certInfo,
+      taxConfig.certPath,
+      taxConfig.privateKeyPath,
+      {
+        source: head.source === "s3" ? "s3" : "fs",
+        s3Enabled: storageConfig.enabled,
+      }
+    )
   );
 }

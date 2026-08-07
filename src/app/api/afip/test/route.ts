@@ -97,6 +97,103 @@ export async function POST(req: NextRequest) {
     detail: `CUIT=${taxConfig.cuit}, ptoVta=${taxConfig.puntoVenta}, env=${taxConfig.environment}`,
   });
 
+  // ---- Step 1.5: verificar storage (S3 o FS) ----
+  try {
+    const { pingS3, headCertFile, getCertStorageConfig } = await import(
+      "@/lib/cert-storage"
+    );
+    const storageConfig = getCertStorageConfig();
+    if (storageConfig.enabled) {
+      const ping = await pingS3();
+      if (ping.ok) {
+        steps.push({
+          name: "storage",
+          ok: true,
+          detail: `S3 OK: bucket=${ping.bucket}, region=${ping.region}${
+            ping.endpoint ? `, endpoint=${ping.endpoint}` : ""
+          }`,
+        });
+      } else {
+        steps.push({
+          name: "storage",
+          ok: false,
+          detail: `S3 configurado pero inaccesible: ${ping.error}`,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Storage S3 inaccesible: ${ping.error}`,
+            steps,
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      // FS local mode
+      const { promises: fs } = await import("node:fs");
+      const path = await import("node:path");
+      const uploadDir =
+        process.env.UPLOADS_DIR ||
+        path.join(process.cwd(), "uploads", "afip-certs");
+      try {
+        await fs.mkdir(uploadDir, { recursive: true });
+        await fs.access(uploadDir, fs.constants.W_OK);
+        steps.push({
+          name: "storage",
+          ok: true,
+          detail: `FS local OK: ${uploadDir} (S3 no configurado)`,
+        });
+      } catch (e: any) {
+        steps.push({
+          name: "storage",
+          ok: false,
+          detail: `FS local no escribible: ${uploadDir} (${e.message})`,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `FS local no escribible: ${e.message}`,
+            steps,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Verificar que el archivo del certificado exista en storage
+    const head = await headCertFile(storeId, taxConfig.certPath);
+    if (!head.exists) {
+      steps.push({
+        name: "certificado",
+        ok: false,
+        detail: `Archivo ${taxConfig.certPath} no encontrado en storage (S3 ni FS)`,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "El certificado no se encuentra en el storage. Re-subí el certificado desde la UI.",
+          steps,
+        },
+        { status: 400 }
+      );
+    }
+  } catch (e: any) {
+    steps.push({
+      name: "storage",
+      ok: false,
+      detail: `Error verificando storage: ${e?.message}`,
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Error verificando storage: ${e?.message}`,
+        steps,
+      },
+      { status: 400 }
+    );
+  }
+
   // ---- Step 2: leer certificado ----
   let certMaterial: { certPem: string; keyPem: string };
   try {

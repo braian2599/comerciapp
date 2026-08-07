@@ -36,6 +36,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto-utils";
+import { getCertFile } from "@/lib/cert-storage";
 import type { TaxConfig } from "@prisma/client";
 
 // ===== URLs AFIP =====
@@ -84,9 +85,10 @@ export interface AfipError {
  *  - .p12 / .pfx (binario PKCS#12): requiere certPassword para abrir.
  *  - .pem (texto): certPath = cert PEM, privateKeyPath = key PEM.
  *
- * En serverless (Vercel) los archivos deben estar en /tmp o en una ruta
- * dentro del proyecto. La subida de certificados se gestiona desde el
- * módulo /api/afip/cert (POST multipart).
+ * En serverless (Vercel) los archivos se guardan en S3-compatible storage
+ * (Cloudflare R2, AWS S3, Backblaze B2, MinIO) vía lib/cert-storage.ts.
+ * Si S3 no está configurado, se usa FS local (dev/self-hosted).
+ * Auto-migración: si el archivo está en FS pero no en S3, se migra on-demand.
  *
  * La contraseña del .p12 se guarda en TaxConfig.certPassword encriptada
  * con AES-256-GCM (ver lib/crypto-utils.ts). Aquí se desencripta antes de
@@ -101,19 +103,13 @@ export async function leerCertificadoYClave(
   if (!taxConfig.certPath) {
     throw new Error("Falta certPath en la configuración fiscal");
   }
-  const certAbs = resolveUploadPath(taxConfig.certPath);
-  let certBuffer: Buffer;
-  try {
-    certBuffer = await fs.readFile(certAbs);
-  } catch (e: any) {
-    throw new Error(
-      `No se pudo leer el certificado desde ${certAbs}: ${e.message}`
-    );
-  }
+  // Leer certificado desde S3 (o FS local con auto-migración a S3)
+  const certResult = await getCertFile(taxConfig.storeId, taxConfig.certPath);
+  const certBuffer = certResult.buffer;
 
   const isP12 =
-    certAbs.toLowerCase().endsWith(".p12") ||
-    certAbs.toLowerCase().endsWith(".pfx");
+    taxConfig.certPath.toLowerCase().endsWith(".p12") ||
+    taxConfig.certPath.toLowerCase().endsWith(".pfx");
 
   if (isP12) {
     // PKCS#12: extraer cert + key con node-forge
@@ -179,15 +175,8 @@ export async function leerCertificadoYClave(
       "Formato PEM requiere privateKeyPath en la configuración fiscal"
     );
   }
-  const keyAbs = resolveUploadPath(taxConfig.privateKeyPath);
-  let keyBuffer: Buffer;
-  try {
-    keyBuffer = await fs.readFile(keyAbs);
-  } catch (e: any) {
-    throw new Error(
-      `No se pudo leer la clave privada desde ${keyAbs}: ${e.message}`
-    );
-  }
+  const keyResult = await getCertFile(taxConfig.storeId, taxConfig.privateKeyPath);
+  const keyBuffer = keyResult.buffer;
   return {
     certPem: certBuffer.toString("utf-8"),
     keyPem: keyBuffer.toString("utf-8"),
@@ -195,10 +184,9 @@ export async function leerCertificadoYClave(
 }
 
 /**
- * Resuelve rutas relativas a un directorio de uploads.
- * Soporta:
- *  - Absolutas (/tmp/... o /home/...)
- *  - Relativas a /home/z/my-project/uploads/ (env UPLOADS_DIR override)
+ * @deprecated Usar lib/cert-storage.ts (getCertFile/putCertFile) que abstrae
+ * S3 + FS con auto-migración. Esta función se mantiene solo para compat
+ * con código legacy que pudiera referenciarla, pero ya no se usa internamente.
  */
 function resolveUploadPath(p: string): string {
   if (path.isAbsolute(p)) return p;

@@ -44,6 +44,7 @@ import {
   ShieldCheck,
   FileKey,
   Server,
+  HardDrive,
   Clock,
   RotateCw,
 } from "lucide-react";
@@ -84,6 +85,7 @@ type AfipStatus =
   | "unknown"
   | "connected"
   | "config_error"
+  | "storage_error"
   | "cert_error"
   | "wsaa_error"
   | "network_error";
@@ -95,6 +97,7 @@ const STATUS_META: Record<
   unknown: { label: "Sin verificar", color: "secondary", icon: AlertTriangle },
   connected: { label: "Conectado", color: "success", icon: CheckCircle2 },
   config_error: { label: "Config incompleta", color: "warning", icon: AlertTriangle },
+  storage_error: { label: "Storage inaccesible", color: "destructive", icon: XCircle },
   cert_error: { label: "Certificado inválido", color: "destructive", icon: XCircle },
   wsaa_error: { label: "WSAA rechazó", color: "destructive", icon: XCircle },
   network_error: { label: "Sin conexión", color: "destructive", icon: XCircle },
@@ -116,6 +119,7 @@ function deriveStatus(resp: AfipTestResponse): AfipStatus {
   }
 
   if (failed.name === "config") return "config_error";
+  if (failed.name === "storage") return "storage_error";
   if (failed.name === "certificado") return "cert_error";
   if (failed.name === "wsaa" || failed.name === "wsaa_cache") return "wsaa_error";
 
@@ -380,6 +384,7 @@ export function AfipConnectionPanel({
                     </>
                   )}
                   {status === "config_error" && "Falta CUIT, environment o certPath."}
+                  {status === "storage_error" && "S3 o FS local inaccesible. Verificá credenciales y permisos."}
                   {status === "cert_error" && "El certificado .p12 no se pudo leer (password incorrecta o archivo corrupto)."}
                   {status === "wsaa_error" && "AFIP rechazó el TRA firmado. Revisá CUIT emisor vs certificado."}
                   {status === "network_error" && "Timeout o sin respuesta de AFIP. Reintentá más tarde."}
@@ -622,6 +627,17 @@ export function AfipConnectionPanel({
               ]}
             />
           )}
+          {status === "storage_error" && (
+            <SuggestionBox
+              title="Storage inaccesible"
+              items={[
+                "Si usás S3/R2/B2/MinIO: verificá S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_ENDPOINT.",
+                "Verificá que las credenciales tengan permisos de lectura/escritura sobre el bucket.",
+                "Si usás FS local: verificá que UPLOADS_DIR exista y sea escribible.",
+                "Si migraste de FS a S3, los certs viejos se migran automáticamente al leerlos.",
+              ]}
+            />
+          )}
           {status === "network_error" && (
             <SuggestionBox
               title="Sin conexión con AFIP"
@@ -668,6 +684,7 @@ export function AfipConnectionPanel({
 
 const STEP_META: Record<string, { label: string; icon: typeof Server }> = {
   config: { label: "Configuración fiscal", icon: Server },
+  storage: { label: "Storage (S3/FS)", icon: HardDrive },
   certificado: { label: "Certificado digital", icon: FileKey },
   wsaa: { label: "WSAA (autenticación)", icon: ShieldCheck },
   wsaa_cache: { label: "Cache de token", icon: Clock },

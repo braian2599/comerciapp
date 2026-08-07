@@ -659,3 +659,117 @@ Stage Summary:
   - En Vercel prod, setear UPLOADS_DIR=/tmp/afip-certs (con nota: /tmp no persiste
     entre invocations, para prod real usar Vercel Blob o S3 — TODO futuro)
 - Sin cambios de schema (usa campos existentes)
+
+---
+Task ID: P3-afip-cert-s3-storage
+Agent: main (Super Z)
+Task: Migrar storage de certificados AFIP a S3-compatible (Cloudflare R2/AWS S3/Backblaze B2/MinIO) para resolver TODOS los escenarios futuros de deploy (VPS único, multi-instancia, Docker, Vercel serverless, restore de DB). Con auto-migración transparente desde FS local.
+
+Work Log:
+- Instalé @aws-sdk/client-s3 ^3.1105.0.
+- Diseñé estrategia de storage dual S3+FS con auto-migración:
+  - S3 PRIMARIO (si S3_BUCKET configurado): put/get/delete/head usan S3
+  - FS LOCAL siempre se escribe (cache + dev + migración)
+  - Si S3 falla al leer, fallback a FS
+  - Si archivo está en FS pero no en S3, se migra on-demand en background
+  - Si S3 no está configurado, se usa FS exclusivamente (dev mode)
+
+- Creé src/lib/cert-storage.ts (~330 LOC):
+  - getCertStorageConfig(): lee env vars, cachea config. enabled=false si no S3_BUCKET
+  - getS3Client(): S3Client singleton con credenciales desde env
+  - putCertFile(storeId, filename, buffer): escribe en FS + S3 (dual)
+  - getCertFile(storeId, filename): lee S3 → fallback FS → auto-migra a S3
+  - deleteCertFile(storeId, filename): borra de S3 y FS (best-effort)
+  - headCertFile(storeId, filename): verifica existencia (S3 primero, FS después)
+  - pingS3(): HeadObject sobre key inexistente para validar credenciales
+  - buildS3Key(storeId, filename): namespacing "afip-certs/{storeId}/{filename}"
+  - migrateToS3(): sube archivo en background (no bloquea al caller)
+
+- Refactoricé src/lib/afip-prod.ts:
+  - leerCertificadoYClave() ahora usa getCertFile() de cert-storage.ts
+  - Eliminado acceso directo a fs.readFile para certificados
+  - resolveUploadPath() marcado como @deprecated (mantenido para compat)
+  - Import de getCertFile desde cert-storage
+  - Sin cambios de signature (sigue aceptando TaxConfig que tiene storeId)
+
+- Refactoricé src/app/api/afip/cert/route.ts (~440 LOC):
+  - POST: putCertFile() para guardar (S3+FS dual). Borra anterior con deleteCertFile.
+  - GET: headCertFile() para verificar existencia, getCertFile() para leer.
+    Maneja caso "archivo no en storage" con error descriptivo.
+  - DELETE: deleteCertFile() borra S3+FS. Limpia DB.
+  - Respuesta incluye "storage" info: { source: "s3"|"fs", s3Enabled: bool }
+  - Eliminado código directo de fs/promises y path para archivos de cert
+
+- Actualicé /api/afip/test con nuevo paso "storage":
+  - Verifica S3 (si configurado) con pingS3() — credenciales OK?
+  - Verifica FS local escribible (si S3 no configurado)
+  - Verifica que el archivo del cert exista en storage con headCertFile()
+  - Si storage falla, retorna early con step storage=false
+
+- Actualicé src/components/afip-connection-panel.tsx:
+  - Nuevo estado AfipStatus "storage_error"
+  - STATUS_META con storage_error (label "Storage inaccesible", color destructive)
+  - deriveStatus mapea step "storage" → storage_error
+  - STEP_META con storage: { label: "Storage (S3/FS)", icon: HardDrive }
+  - Tooltip con descripción para storage_error
+  - SuggestionBox con troubleshooting de storage (S3 creds, UPLOADS_DIR, etc.)
+  - Import HardDrive de lucide-react
+
+- Creé scripts/migrate-certs-to-s3.ts (migración one-shot):
+  - Lee todos los TaxConfig con certPath
+  - Para cada uno, verifica si ya está en S3 con headCertFile()
+  - Si NO está en S3 pero está en FS, lo sube con putCertFile()
+  - Reporta: migrados, ya en S3, no encontrados, fallidos
+  - Idempotente: seguro ejecutar múltiples veces
+  - No modifica la DB (certPath se mantiene, solo cambia el backend)
+
+- Actualicé .env.example:
+  - Sección "Encriptación de secrets" con CERT_PASSWORD_ENCRYPTION_KEY
+  - Sección "Storage de certificados AFIP (S3-compatible)" con ejemplos de:
+    * Cloudflare R2 (recomendado, sin costo de egreso)
+    * AWS S3
+    * MinIO (self-hosted)
+  - Sección "Directorio local de uploads" con UPLOADS_DIR
+
+- Creé scripts/test-cert-storage.ts (32 tests):
+  - Test 1: Modo FS-only (S3 no configurado) — put/get/head/delete
+  - Test 2: GET de archivo inexistente tira error
+  - Test 3: DELETE best-effort (no falla si no existe)
+  - Test 4: S3 mockeado — PUT con S3 fallando sigue escribiendo en FS
+  - Test 5: Auto-migración — archivo en FS, S3 falla, getCertFile retorna desde FS
+  - Test 6: Config desde env vars (enabled true/false según S3_BUCKET)
+  - Test 7: pingS3 sin configurar retorna ok=false descriptivo
+  - Test 8: S3 key namespacing con storeId especial
+  - 32/32 OK
+
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 16.8s, 60/60 static pages OK
+
+Stage Summary:
+- Libs nuevas: 1 (cert-storage.ts ~330 LOC)
+- Libs modificadas: 1 (afip-prod.ts usa cert-storage, resolveUploadPath deprecated)
+- Endpoints modificados: 2 (/api/afip/cert refactorizado a cert-storage, /api/afip/test +step storage)
+- Componentes modificados: 1 (afip-connection-panel +estado storage_error, +step storage)
+- Scripts nuevos: 2 (migrate-certs-to-s3.ts, test-cert-storage.ts)
+- Tests de regresión: 32 (cert-storage) — 32/32 OK
+- Dependencia nueva: @aws-sdk/client-s3 ^3.1105.0
+- Docs: .env.example con ejemplos R2/S3/MinIO
+- Escenarios resueltos:
+  1. ✅ VPS único con FS (S3 no configurado) — funciona como antes
+  2. ✅ Múltiples instancias con LB — S3 compartido
+  3. ✅ Docker sin volúmenes — S3
+  4. ✅ Vercel serverless — S3
+  5. ✅ Restore de DB — los blobs viven en S3, no en el FS
+  6. ✅ Auto-migración FS→S3 sin downtime — on-demand al leer
+- Sin cambios de schema (usa campos existentes)
+- Comunicación inter-modular validada:
+  - leerCertificadoYClave → cert-storage.getCertFile (S3+FS)
+  - /api/afip/cert POST → cert-storage.putCertFile + deleteCertFile
+  - /api/afip/cert GET → cert-storage.headCertFile + getCertFile
+  - /api/afip/cert DELETE → cert-storage.deleteCertFile
+  - /api/afip/test → cert-storage.pingS3 + headCertFile
+  - AfipConnectionPanel → /api/afip/test → cert-storage (diagnóstico)
+- Configuración para deploy:
+  - Dev/VPS: dejar S3 sin configurar, usa FS local
+  - Prod multi-instancia/Vercel: configurar S3_BUCKET + creds
+  - Migración existente: correr `npx tsx scripts/migrate-certs-to-s3.ts`
