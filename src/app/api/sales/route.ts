@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { calculatePointsEarned, determineTier, pointsToCurrency, calculateMaxRedeemablePoints } from "@/lib/loyalty";
 import { assertCreditAvailable } from "@/lib/customer-account";
+import { decreaseStock } from "@/lib/stock";
 
 // GET: lista de ventas (con filtros)
 export async function GET(req: NextRequest) {
@@ -286,27 +287,19 @@ export async function POST(req: NextRequest) {
       include: { items: true },
     });
 
-    // Descontar stock y registrar movimientos
+    // Descontar stock y registrar movimientos usando lib/stock
+    // (unificado con refunds, anulación, OC, etc. para garantizar
+    // consistencia en signo, refType, validación de stock < 0, etc.)
     for (const item of items) {
-      const updated = await tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      });
-      if (updated.stock < 0) {
-        throw new Error(`Stock insuficiente para ${updated.name}`);
-      }
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          storeId,
-          userId: u.id,
-          type: "VENTA",
-          quantity: -item.quantity,
-          reason: `Venta ${newSale.id.slice(-6)}`,
-          refType: "Sale",
-          refId: newSale.id,
-        },
-      });
+      await decreaseStock(tx, {
+        productId: item.productId,
+        storeId,
+        userId: u.id,
+        quantity: item.quantity,
+        reason: `Venta ${newSale.id.slice(-6)}`,
+        refType: "Sale",
+        refId: newSale.id,
+      }, "VENTA");
     }
 
     // Si es venta en efectivo y hay caja abierta, registrar movimiento de caja

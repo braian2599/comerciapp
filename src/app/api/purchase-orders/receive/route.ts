@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { increaseStock } from "@/lib/stock";
 
 // POST: recibir una orden de compra pendiente → actualiza stock
 // body: { id }
@@ -26,26 +27,19 @@ export async function POST(req: NextRequest) {
   }
 
   const updated = await db.$transaction(async (tx) => {
+    // Incrementar stock usando lib/stock para consistencia
+    // (también actualiza costPrice al último costo de compra)
     for (const it of order.items) {
-      await tx.product.update({
-        where: { id: it.productId },
-        data: {
-          stock: { increment: it.quantity },
-          costPrice: it.unitCost, // actualizamos al último costo
-        },
-      });
-      await tx.stockMovement.create({
-        data: {
-          productId: it.productId,
-          storeId,
-          userId: u.id,
-          type: "COMPRA",
-          quantity: it.quantity,
-          reason: `Orden ${order.orderNumber} recibida`,
-          refType: "PurchaseOrder",
-          refId: order.id,
-        },
-      });
+      await increaseStock(tx, {
+        productId: it.productId,
+        storeId,
+        userId: u.id,
+        quantity: it.quantity,
+        reason: `Orden ${order.orderNumber} recibida`,
+        refType: "PurchaseOrder",
+        refId: order.id,
+        newCostPrice: it.unitCost,
+      }, "COMPRA");
     }
     return tx.purchaseOrder.update({
       where: { id },

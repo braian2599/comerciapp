@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { increaseStock } from "@/lib/stock";
 
 // GET: lista de órdenes de compra (con filtros)
 export async function GET(req: NextRequest) {
@@ -97,29 +98,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Si se recibe, actualizar stock y costo promedio
+    // Si se recibe, actualizar stock y costo usando lib/stock
     if (receive) {
       for (const it of newOrder.items) {
-        // Actualizar costo del producto al último costo de compra
-        await tx.product.update({
-          where: { id: it.productId },
-          data: {
-            stock: { increment: it.quantity },
-            costPrice: it.unitCost,
-          },
-        });
-        await tx.stockMovement.create({
-          data: {
-            productId: it.productId,
-            storeId,
-            userId: u.id,
-            type: "COMPRA",
-            quantity: it.quantity,
-            reason: `Orden ${orderNumber}`,
-            refType: "PurchaseOrder",
-            refId: newOrder.id,
-          },
-        });
+        // increaseStock con newCostPrice actualiza ambos campos en un solo update
+        // y registra el StockMovement type=COMPRA de forma consistente.
+        await increaseStock(tx, {
+          productId: it.productId,
+          storeId,
+          userId: u.id,
+          quantity: it.quantity,
+          reason: `Orden ${orderNumber}`,
+          refType: "PurchaseOrder",
+          refId: newOrder.id,
+          newCostPrice: it.unitCost,
+        }, "COMPRA");
       }
     }
 

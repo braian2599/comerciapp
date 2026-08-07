@@ -10,6 +10,7 @@ import {
   normalizeRefundMethod,
   applyCreditToCustomerAccount,
 } from "@/lib/customer-account";
+import { increaseStock } from "@/lib/stock";
 
 // GET /api/refunds - listar devoluciones
 export async function GET(req: NextRequest) {
@@ -229,27 +230,20 @@ export async function POST(req: NextRequest) {
       include: { items: true },
     });
 
-    // 6.3 Restituir stock + registrar movimiento
+    // 6.3 Restituir stock + registrar movimiento usando lib/stock.
     //     Usamos tipo "ENTRADA" (no "AJUSTE") para distinguir devoluciones de
     //     ajustes manuales en reportes de stock. Esto permite filtrar
     //     "entradas por devolución" sin ambigüedad.
     for (const item of refundItems) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { increment: item.quantity } },
-      });
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          storeId,
-          userId: u.id,
-          type: "ENTRADA",
-          quantity: item.quantity,
-          reason: `Devolución ${refundNumber}`,
-          refType: "Refund",
-          refId: newRefund.id,
-        },
-      });
+      await increaseStock(tx, {
+        productId: item.productId,
+        storeId,
+        userId: u.id,
+        quantity: item.quantity,
+        reason: `Devolución ${refundNumber}`,
+        refType: "Refund",
+        refId: newRefund.id,
+      }, "ENTRADA");
     }
 
     // 6.4 Registrar movimiento de caja si se entregó efectivo al cliente.

@@ -16,6 +16,7 @@
 
 import { db } from "@/lib/db";
 import { logSync } from "./ecommerce-sync-logger";
+import { decreaseStock } from "@/lib/stock";
 
 // ===== TIPOS =====
 export type Platform = "TIENDA_NUBE" | "WOOCOMMERCE" | "MERCADOLIBRE" | "SHOPIFY";
@@ -842,24 +843,27 @@ export async function syncOrdersInbound(storeId: string): Promise<SyncResult> {
         },
       });
 
-      // Descontar stock
+      // Descontar stock usando lib/stock para consistencia
+      // ANTES: esto usaba db.product.update directo + stockMovement.create
+      //        sin validar stockResultante < 0 — un pedido e-commerce podía
+      //        dejar el stock en negativo si había ventas simultáneas en POS.
+      // AHORA: decreaseStock valida y lanza error descriptivo si no hay stock.
+      //        El error se propaga al caller (try/catch exterior) y NO se
+      //        marca la orden como fulfilled (queda pendiente para reintentar).
       for (const i of items) {
-        await db.product.update({
-          where: { id: i.product.id },
-          data: { stock: { decrement: i.quantity } },
-        });
-        await db.stockMovement.create({
-          data: {
+        await decreaseStock(
+          db,
+          {
             productId: i.product.id,
             storeId,
             userId: adminUser.id,
-            type: "VENTA",
-            quantity: -i.quantity,
-            reason: "Pedido e-commerce",
-            refType: "Sale",
+            quantity: i.quantity,
+            reason: `Pedido e-commerce ${o.externalId}`,
+            refType: "Ecommerce",
             refId: sale.id,
           },
-        });
+          "VENTA"
+        );
       }
 
       // Marcar como enviado si autoFulfill

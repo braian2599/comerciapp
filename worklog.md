@@ -153,3 +153,109 @@ Stage Summary:
   - overpayment: validado con getCustomerBalance antes de aceptar pago
 - Sin cambios de schema (no requiere migración nueva)
 - Build: ✓ Compiled successfully
+
+---
+Task ID: P2.2-P2.4-stock-unification
+Agent: main (Super Z)
+Task: Completar P2.2 (validar prorrateo) y P2.4 (unificar movimientos de stock en lib/stock.ts). Ajustes profundos y robustos, sin dejar datos al azar ni comunicación inter-modular fallida.
+
+Work Log:
+- P2.2 (prorrateo de devolución al backend): auditado y verificado OK.
+  - lib/refund-calc.ts ya existe y centraliza calculateRefundTotals().
+  - /api/refunds/preview usa calculateRefundTotals (línea 64).
+  - /api/refunds POST usa calculateRefundTotals (línea 122).
+  - Frontend refunds-view usa calculateRefundTotals solo para DISPLAY (no envía montos al backend).
+  - Backend siempre recalcula con snapshot de Sale + SaleItems desde la DB.
+  - No requiere cambios adicionales.
+
+- P2.4 (unificar movimientos de stock): auditado, encontré 10 lugares con lógica duplicada:
+  1. POST /api/sales (descuento por venta)
+  2. POST /api/sales/annul (reintegro por anulación)
+  3. POST /api/refunds (reintegro por devolución)
+  4. POST /api/purchase-orders (recepción desde crear OC)
+  5. POST /api/purchase-orders/receive (recepción de OC pendiente)
+  6. POST /api/inventory (entrada/salida manual)
+  7. POST /api/products (stock inicial al crear producto)
+  8. PUT /api/products (ajuste al editar stock manualmente)
+  9. POST /api/products/import (masivo create + update)
+  10. lib/ecommerce.ts (pedido web sincronizado)
+
+- Inconsistencias detectadas en las 10 implementaciones:
+  a. Solo 3/10 validaban stockResultante < 0 (sales, inventory, products PUT).
+     Ecommerce y products/import NO validaban → stock podía quedar negativo.
+  b. Solo 5/10 seteaban refType+refId. Products POST/PUT e import NO lo hacían.
+  c. Tipo del StockMovement era string libre → typos imposibles de detectar.
+  d. Convención de signo inconsistente: algunas guardaban cantidad positiva,
+     otras con signo (sales usaba -quantity, inventory usaba signedQty).
+  e. Products PUT hacía update del producto + stockMovement.create por separado
+     → si el segundo fallaba, el stock quedaba actualizado sin movimiento.
+  f. Purchase orders duplicaba lógica de actualización de costPrice en 2 lugares.
+  g. Ecommerce no propagaba errores de stock insuficiente (silently negative).
+
+- Creé src/lib/stock.ts (~330 LOC con JSDoc detallado):
+  - decreaseStock(tx, params, type="VENTA"|"SALIDA"): descuenta stock, valida
+    stockResultante < 0 (salvo allowNegative=true), registra StockMovement
+    con quantity negativa.
+  - increaseStock(tx, params, type="COMPRA"|"ENTRADA"): incrementa stock,
+    opcionalmente actualiza costPrice, registra StockMovement con quantity
+    positiva.
+  - setStock(tx, params): setea stock absoluto, calcula diff, registra
+    AJUSTE con diff signado.
+  - bulkStockMovement(tx, ops[]): aplica varios movimientos en una tx.
+  - assertStockAvailable(dbOrTx, productId, quantity): validación read-only.
+  - Tipos canonicos: StockMovementType (union), StockRefType (union).
+  - Todas las funciones aceptan tx | db para usar dentro o fuera de transacciones.
+
+- Refactoricé los 10 lugares:
+  - POST /api/sales: usa decreaseStock(tx, ..., "VENTA"). Valida stock < 0 con
+    mensaje descriptivo (incluye nombre del producto).
+  - POST /api/sales/annul: usa increaseStock(tx, ..., "ENTRADA"). Agregué
+    refType="Sale" que antes no estaba.
+  - POST /api/refunds: usa increaseStock(tx, ..., "ENTRADA"). Mantiene refType="Refund".
+  - POST /api/purchase-orders: usa increaseStock(tx, ..., "COMPRA") con
+    newCostPrice=it.unitCost. Eliminé duplicación de lógica de costPrice.
+  - POST /api/purchase-orders/receive: igual que arriba.
+  - POST /api/inventory: usa decreaseStock/increaseStock según type. Validación
+    de tipo agregada (string union). Manejo de errores con try/catch y 400.
+  - POST /api/products: mantiene stock en create del producto, pero registra
+    StockMovement con refType="InventoryAdjustment" y refId=product.id.
+  - PUT /api/products: ahora envuelve update + setStock en una sola tx
+    (atomicidad garantizada). Si el stock cambió, se usa setStock que registra
+    AJUSTE con diff signado.
+  - POST /api/products/import: agrega refType="ProductImport" + refId en
+    ambos casos (create y update).
+  - lib/ecommerce.ts: usa decreaseStock(db, ..., "VENTA"). Valida stock < 0
+    (antes no lo hacía). refType="Ecommerce". Si falla, el error se propaga
+    y la orden NO se marca como fulfilled (queda pendiente para reintentar).
+
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 15.8s, 58/58 static pages OK
+
+Stage Summary:
+- Bugs críticos resueltos:
+  1. Ecommerce podía dejar stock negativo (no validaba stockResultante)
+  2. Products/import podía dejar stock negativo (no validaba)
+  3. Products PUT no era atómico entre update y stockMovement (podía quedar inconsistente)
+  4. 5 lugares no seteaban refType → movimientos sin trazabilidad
+  5. Inconsistencia de signo en quantity del StockMovement
+  6. Tipos string libre en StockMovement.type (sin validación compile-time)
+
+- Libs nuevas: 1 (src/lib/stock.ts, ~330 LOC)
+- Endpoints refactorizados: 8 (sales POST, sales/annul POST, refunds POST,
+  purchase-orders POST, purchase-orders/receive POST, inventory POST,
+  products POST, products PUT, products/import POST, ecommerce.ts)
+- Sin cambios de schema (no requiere migración)
+- Comunicación inter-modular validada:
+  - sales → stock: decreaseStock con type="VENTA"
+  - sales/annul → stock: increaseStock con type="ENTRADA"
+  - refunds → stock: increaseStock con type="ENTRADA"
+  - purchase-orders → stock: increaseStock con type="COMPRA" + newCostPrice
+  - inventory → stock: decrease/increaseStock con type="SALIDA"/"ENTRADA"
+  - products → stock: stockMovement directo para stock inicial, setStock para edición
+  - ecommerce → stock: decreaseStock con type="VENTA" y validación de stock
+- Todos los movimientos ahora tienen:
+  - type tipado (compile-time check)
+  - quantity con signo consistente (negativo=salida, positivo=entrada)
+  - refType + refId para trazabilidad (excepto stock inicial que usa InventoryAdjustment)
+  - reason descriptivo
+  - validación de stockResultante >= 0 (salvo allowNegative explícito)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { decreaseStock, increaseStock } from "@/lib/stock";
 
 // Movimientos de stock
 export async function GET(req: NextRequest) {
@@ -46,27 +47,48 @@ export async function POST(req: NextRequest) {
   if (!productId || !quantity || !type) {
     return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
   }
-  const signedQty = type === "ENTRADA" ? Math.abs(quantity) : -Math.abs(quantity);
+  if (type !== "ENTRADA" && type !== "SALIDA") {
+    return NextResponse.json({ error: "Tipo inválido (debe ser ENTRADA o SALIDA)" }, { status: 400 });
+  }
 
-  const movement = await db.$transaction(async (tx) => {
-    const updated = await tx.product.update({
-      where: { id: productId },
-      data: { stock: { increment: signedQty } },
-    });
-    if (updated.stock < 0) {
-      throw new Error("Stock resultante negativo");
+  // Usar lib/stock para garantizar validación de stock<0 y registro consistente.
+  // ANTES: usaba increment(signedQty) que podía dejar stock negativo en SALIDA
+  // si el usuario mandaba un número mayor al stock actual.
+  // AHORA: decreaseStock valida stockResultante>=0 y lanza error descriptivo.
+  let movement;
+  try {
+    if (type === "ENTRADA") {
+      await db.$transaction(async (tx) => {
+        await increaseStock(tx, {
+          productId,
+          storeId,
+          userId: u.id,
+          quantity: Math.abs(quantity),
+          reason,
+          refType: "InventoryAdjustment",
+        }, "ENTRADA");
+      });
+    } else {
+      await db.$transaction(async (tx) => {
+        await decreaseStock(tx, {
+          productId,
+          storeId,
+          userId: u.id,
+          quantity: Math.abs(quantity),
+          reason,
+          refType: "InventoryAdjustment",
+        }, "SALIDA");
+      });
     }
-    return tx.stockMovement.create({
-      data: {
-        productId,
-        storeId,
-        userId: u.id,
-        type,
-        quantity: signedQty,
-        reason,
-      },
+    // Buscar el último movimiento creado para devolverlo al frontend
+    movement = await db.stockMovement.findFirst({
+      where: { productId, userId: u.id, reason, type },
+      orderBy: { createdAt: "desc" },
+      include: { product: { select: { name: true, unit: true } }, user: { select: { name: true } } },
     });
-  });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Error al registrar movimiento" }, { status: 400 });
+  }
 
   return NextResponse.json(movement);
 }

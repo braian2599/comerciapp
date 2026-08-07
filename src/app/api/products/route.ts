@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { increaseStock, setStock } from "@/lib/stock";
 
 /**
  * Helpers de validación y parsing seguro.
@@ -124,17 +125,29 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Si hay stock inicial, registrar movimiento
+    // Si hay stock inicial, registrar movimiento usando lib/stock.
+    // ANTES: esto creaba el producto con stock=X y luego registraba el
+    // movimiento por separado, sin refType (no se podía trazar al origen).
+    // AHORA: usamos increaseStock que crea el movimiento con refType
+    // consistente y validación de cantidad > 0.
+    // Pero como el stock YA fue seteado en el create del producto arriba,
+    // aquí solo registramos el movimiento (no incrementamos de nuevo).
     if (product.stock > 0) {
-      await db.stockMovement.create({
-        data: {
-          productId: product.id,
-          storeId,
-          userId: u.id,
-          type: "ENTRADA",
-          quantity: product.stock,
-          reason: "Stock inicial",
-        },
+      await db.$transaction(async (tx) => {
+        // El stock ya fue asignado en la creación del producto; registramos
+        // el movimiento manualmente para no duplicar el incremento.
+        await tx.stockMovement.create({
+          data: {
+            productId: product.id,
+            storeId,
+            userId: u.id,
+            type: "ENTRADA",
+            quantity: product.stock,
+            reason: "Stock inicial",
+            refType: "InventoryAdjustment",
+            refId: product.id,
+          },
+        });
       });
     }
 
@@ -189,46 +202,59 @@ export async function PUT(req: NextRequest) {
 
     const prevStock = existing.stock;
     const newStock = Math.max(0, toNumber(body.stock, prevStock));
+    const adjustReason =
+      typeof body.adjustReason === "string" && body.adjustReason.trim()
+        ? body.adjustReason.trim()
+        : "Ajuste manual";
 
-    const updated = await db.product.update({
-      where: { id: body.id },
-      data: {
-        name: typeof body.name === "string" ? body.name.trim() : existing.name,
-        description: toOptionalString(body.description),
-        barcode: toOptionalString(body.barcode),
-        sku: toOptionalString(body.sku),
-        categoryId: body.categoryId || null,
-        supplierId: body.supplierId || null,
-        costPrice: Math.max(0, toNumber(body.costPrice)),
-        salePrice: Math.max(0, toNumber(body.salePrice)),
-        stock: newStock,
-        minStock: Math.max(0, toNumber(body.minStock, 5)),
-        unit: toStringOrFallback(body.unit, existing.unit),
-        active: toBool(body.active, existing.active),
-        brand: toOptionalString(body.brand),
-        labels: toOptionalString(body.labels),
-        ingredients: toOptionalString(body.ingredients),
-        allergens: toOptionalString(body.allergens),
-        imageUrl: toOptionalString(body.imageUrl),
-      },
-    });
-
-    // Si el stock cambió manualmente, registrar ajuste
-    if (Math.abs(newStock - prevStock) > 0.001) {
-      await db.stockMovement.create({
+    // Usamos transacción para garantizar atomicidad entre update del producto
+    // y registro del StockMovement (si el stock cambió).
+    // ANTES: el update del producto y el create del StockMovement se hacían
+    //        por separado — si el segundo fallaba, el stock quedaba actualizado
+    //        sin movimiento registrado (inconsistencia).
+    // AHORA: usamos setStock() de lib/stock que hace ambos atómicamente.
+    //        El resto de los campos del producto se actualizan en el mismo tx.
+    const updated = await db.$transaction(async (tx) => {
+      // 1) Actualizar todos los campos excepto stock
+      const product = await tx.product.update({
+        where: { id: body.id },
         data: {
+          name: typeof body.name === "string" ? body.name.trim() : existing.name,
+          description: toOptionalString(body.description),
+          barcode: toOptionalString(body.barcode),
+          sku: toOptionalString(body.sku),
+          categoryId: body.categoryId || null,
+          supplierId: body.supplierId || null,
+          costPrice: Math.max(0, toNumber(body.costPrice)),
+          salePrice: Math.max(0, toNumber(body.salePrice)),
+          // stock se actualiza vía setStock() abajo
+          minStock: Math.max(0, toNumber(body.minStock, 5)),
+          unit: toStringOrFallback(body.unit, existing.unit),
+          active: toBool(body.active, existing.active),
+          brand: toOptionalString(body.brand),
+          labels: toOptionalString(body.labels),
+          ingredients: toOptionalString(body.ingredients),
+          allergens: toOptionalString(body.allergens),
+          imageUrl: toOptionalString(body.imageUrl),
+        },
+      });
+
+      // 2) Si el stock cambió, registrarlo con setStock (atomicidad garantizada)
+      if (Math.abs(newStock - prevStock) > 0.001) {
+        await setStock(tx, {
           productId: body.id,
           storeId,
           userId: u.id,
-          type: "AJUSTE",
-          quantity: newStock - prevStock,
-          reason:
-            typeof body.adjustReason === "string" && body.adjustReason.trim()
-              ? body.adjustReason.trim()
-              : "Ajuste manual",
-        },
-      });
-    }
+          newStock,
+          reason: adjustReason,
+          refType: "InventoryAdjustment",
+          refId: product.id,
+        });
+        // Recargar para devolver el stock final
+        return tx.product.findUnique({ where: { id: body.id } });
+      }
+      return product;
+    });
 
     return NextResponse.json(updated);
   } catch (e: any) {

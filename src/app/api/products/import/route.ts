@@ -385,6 +385,9 @@ export async function POST(req: NextRequest) {
                 type: "ENTRADA",
                 quantity: product.stock,
                 reason: "Importación masiva",
+                // Agregamos refType para trazabilidad (P2.4)
+                refType: "ProductImport",
+                refId: product.id,
               },
             });
           }
@@ -446,6 +449,8 @@ export async function POST(req: NextRequest) {
                 type: "AJUSTE",
                 quantity: updatedProduct.stock - prev.stock,
                 reason: "Importación masiva",
+                refType: "ProductImport",
+                refId: existingId,
               },
             });
           }
