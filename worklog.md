@@ -336,3 +336,95 @@ Stage Summary:
   - /api/refunds → customer-account: applyCreditToCustomerAccount (P2.1)
   - /api/refunds → invoices: emitirNotaDeCredito si emitCreditNote (P2.3)
 - Sin cambios de schema (no requiere migración)
+
+---
+Task ID: P3-afip-produccion
+Agent: main (Super Z)
+Task: Implementar integración real AFIP producción (WSAA + WSFEv1) para facturas y notas de crédito. Sin dependencias pagas ni binarios externos.
+
+Work Log:
+- Audité el estado previo: lib/afip.ts tenía 2 placeholders
+  (solicitarCaeProduccion y solicitarCaeNotaCreditoProduccion) que
+  retornaban error "no implementado". El modo demo funcionaba pero
+  producción no estaba cableada.
+- Decisiones de arquitectura:
+  - NO usar @afipsdk/afip.js (comercial, requiere licencia).
+  - NO usar el package `soap` (problemático en Vercel serverless).
+  - SÍ usar `node-forge` para firma PKCS#7 (libre, sin openssl binario).
+  - SÍ usar `fetch` nativo para SOAP/HTTPS (Node 18+).
+- Instalé node-forge ^1.4.0.
+
+- Creé src/lib/afip-prod.ts (~730 LOC):
+  - leerCertificadoYClave(): soporta .p12 (PKCS#12 con password) y
+    .pem (cert + key separados). Extrae PEMs con node-forge.
+  - generarTRAXml(): TRA para servicio wsfe, 12h expiración (máx AFIP).
+  - firmarTRA(): CMS PKCS#7 sobre TRA con SHA-256 + RSA via node-forge.
+  - obtenerTokenAcceso(): cache en TaxConfig.authToken +
+    authTokenExpires. Renueva 1h antes de expirar. POST SOAP WSAA.
+  - buildFECAESolicitarEnvelope(): construye SOAP envelope completo
+    con Auth, FeCabReq, FeDetReq, AlicIva, Tributos, CbtesAsoc (NC).
+  - feCAESolicitar(): POST al WSFEv1 con timeout 30s.
+  - parseFECAEResponse(): parser robusto con 4 casos:
+    1. SOAP fault → error transporte
+    2. Errors globales (cabecera) → AFIP no procesó
+    3. Resultado=R + Errors detalle → comprobante rechazado
+    4. Resultado=A + CAE + CAEFchVto → OK
+  - decodeXmlEntities(): 8 entities HTML clásicas + 7 entities
+    AFIP-specific (&acute;, &aacute;, ...) + numeric (&#NN; / &#xNN;).
+  - fetchWithTimeout(): AbortController con 30s.
+  - resolveUploadPath(): soporta absolutas o relativas a UPLOADS_DIR.
+
+- Actualicé src/lib/afip.ts:
+  - solicitarCaeProduccion(): reemplazado placeholder por implementación
+    real que llama obtenerTokenAcceso + feCAESolicitar.
+  - solicitarCaeNotaCreditoProduccion(): igual pero con CbtesAsoc
+    apuntando a la factura original (tipo + ptoVta + numero desde
+    originalInvoice). Requerido por AFIP para NC.
+  - formatAfipDate(): helper nuevo para YYYYMMDD.
+
+- Creé /api/afip/test (POST, solo ADMIN):
+  - Diagnóstico SIN emitir comprobante.
+  - 3 pasos: validar TaxConfig → leer cert → obtener TA del WSAA.
+  - Retorna steps[] con ok + detail por cada paso, tokenExpiresAt,
+    cuit, puntoVenta, environment.
+  - Útil para que el usuario pruebe la conexión antes de emitir.
+
+- Tests scripts/test-afip-parsing.ts (27 tests):
+  - 8 casos de parsing SOAP cubiertos (éxito, observaciones, rechazo
+    global, rechazo detalle, SOAP fault, formato inesperado, fechas,
+    entity decoding).
+  - 27/27 OK.
+
+- Bugs encontrados y corregidos durante desarrollo:
+  1. CRÍTICO: parseFECAEResponse trataba errores a nivel detalle
+     (Resultado=R, dentro de FECAEDetResponse > Errors) como errores
+     globales, retornando ok=false sin resultado=R. Esto hacía que
+     el usuario no supiera si el rechazo fue global o del comprobante.
+     Fix: remover <FeDetResp> del bloque antes de buscar errores
+     globales, para que solo se detecten los Errors a nivel cabecera.
+  2. decodeXmlEntities no decodificaba entities AFIP-specific como
+     &acute; (muy común en mensajes de error). Fix: agregar 7 entities
+     adicionales + soporte para numeric (&#NN; / &#xNN;).
+
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 16.6s, 59/59 static pages OK
+- Commit: 1a0d779
+- Push: ✓ origin/main
+
+Stage Summary:
+- Libs nuevas: 1 (src/lib/afip-prod.ts, ~730 LOC con JSDoc detallado)
+- Libs refactorizadas: 1 (src/lib/afip.ts, 2 placeholders reemplazados
+  por implementación real)
+- Endpoints nuevos: 1 (/api/afip/test POST, diagnóstico de conexión)
+- Tests de regresión: 27 (scripts/test-afip-parsing.ts)
+- Dependencia nueva: node-forge ^1.4.0 (libre, serverless-friendly)
+- Bugs críticos resueltos: 2 (parsing detalle vs cabecera + entities)
+- Comunicación inter-modular validada:
+  - emitirFactura → afip-prod: config→cert→TA→FECAE
+  - emitirNotaDeCredito → afip-prod: igual + CbtesAsoc
+  - /api/afip/test → afip-prod: diagnóstico sin emisión
+  - TaxConfig.authToken/authTokenExpires: cache compartido con
+    renovación automática 1h antes de expirar
+- Sin cambios de schema (usa campos existentes)
+- Modo demo sigue funcionando sin cambios (env=homologacion o sin
+  certPath → generarCaeSimulado)
