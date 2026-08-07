@@ -849,3 +849,39 @@ Stage Summary:
   6. Retry: si una factura quedó RECHAZADA/PENDIENTE, POST /api/invoices la borra y reemite sin bloquear.
 - Non-blocking garantizado: el cobro NUNCA llama AFIP directamente. /api/sales es puramente DB. /api/invoices se llama después, separado, y su fallo no afecta la venta.
 - Sin cambios en: refunds, credit-notes, reports, dashboard, printer, AFIP prod (afip-prod.ts). Todos estos ya leen de sale.invoice, así que automáticamente muestran CAE cuando la factura se emite.
+
+---
+Task ID: P1.1-P1.2-robustez-fetch-ecommerce
+Agent: main
+Task: Verificar y robustecer P1.1 (endpoint /api/ecommerce/test) y P1.2 (migrar fetches crudos a safeFetchJSON). Soluciones robustas que no pierdan datos.
+
+Work Log:
+- Audité el estado actual con agente Explore: P1.1 ya estaba hecho (endpoint robusto con redacción de secrets, validación por plataforma, latencia) y P1.2 también (los 9 fetches del plan ya estaban migrados). Pero el audit encontró 3 issues de robustez que arrglé:
+
+Fix 1 — pos-view.tsx printThermalSale (doble POST a /api/print):
+  - ANTES: hacía safeFetchJSON (L713, solo para check, sin returnFormat) y después safeFetchBlob (L719, con returnFormat:"blob"). Dos HTTP round-trips por cada ticket. Si el primero fallaba, el segundo igual se ejecutaba. El primero generaba el ticket completo en server y lo descartaba.
+  - AHORA: un solo safeFetchBlob con returnFormat:"blob". safeFetchBlob maneja errores HTTP leyendo el body como texto y extrayendo { error } del server, así que no perdemos info de error. Mismo UX, mitad de requests, sin work desperdiciado.
+
+Fix 2 — auth-screen.tsx (fetch crudo en register y seed):
+  - ANTES: handleRegister L78 usaba fetch + res.json() — si el server devolvía 500 con body vacío o HTML (Next.js crashea), res.json() revienta con "Unexpected end of JSON input" y el usuario ve ese mensaje críptico en vez del error real. handleSeedDemo L113 tenía el mismo bug, y encima L115 hacía throw new Error(data.error) donde data.error podía ser undefined → e.message era "undefined".
+  - AHORA: ambas migradas a safeFetchJSON. handleRegister usa regRes.error del helper. handleSeedDemo valida que seedRes.data exista y que credentials.email/password estén presentes antes de hacer signIn — si el server no devolvió credenciales, lanza error descriptivo en vez de hacer signIn con undefined.
+
+Fix 3 — ecommerce.ts adapters ML y Shopify (testConnection eran stubs):
+  - ANTES: mercadoLibreAdapter.testConnection solo chequeaba que accessToken estuviera seteado y devolvía "ok: true" sin hacer ping real. shopifyAdapter.testConnection igual. Si el usuario configuraba credenciales mal, "Probar conexión" le decía que todo estaba bien y se enteraba recién al sincronizar.
+  - AHORA: 
+    * ML: GET https://api.mercadolibre.com/users/me con Authorization: Bearer {token}. Si res.ok, lee nickname/first_name/id y arma mensaje "Conectado a ML como {nick}". Si no ok, lee body como texto y arma mensaje "ML respondió {status}: {body slice 200 chars}".
+    * Shopify: normaliza apiUrl (quita trailing slash), arma Basic auth con Buffer.from(apiKey:apiSecret).toString("base64"), hace GET {apiUrl}/admin/api/2024-01/shop.json. Si ok, lee shop.name/domain. Si no, mensaje con status + body slice.
+    * Ambos con try/catch que devuelve error descriptivo en vez de tirar excepción.
+  - La validación de campos ahora también requiere apiSecret para Shopify (antes solo apiUrl + apiKey).
+
+Stage Summary:
+- Archivos modificados: 3 (pos-view.tsx, auth-screen.tsx, ecommerce.ts)
+- Fixes aplicados: 3 (doble-call colapsado, 2 fetches crudos migrados, 2 adapters con ping real)
+- Build: ✓ Compiled successfully in 18.4s, 0 errores en src/
+- Comunicación inter-modular validada:
+  - pos-view → /api/print (un solo safeFetchBlob, errores preservados)
+  - auth-screen → /api/register, /api/seed (safeFetchJSON, parsing seguro)
+  - ecommerce-view → /api/ecommerce/test → getAdapter().testConnection() → ML/Shopify APIs reales
+- Datos preservados: en ningún caso se pierde info de error del server. safeFetchJSON/Blob leen body como texto SIEMPRE y parsean JSON solo si es válido.
+- Adapters ML/Shopify ahora validan credenciales de verdad — el usuario se entera de errores de config en el botón "Probar conexión", no recién al sincronizar.
+- Sin cambios en schema, sin migraciones, sin nuevas dependencias.

@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import { Store, Loader2, Sparkles } from "lucide-react";
 import { RUBROS } from "@/lib/constants";
+import { safeFetchJSON } from "@/lib/fetch";
 
 export function AuthScreen() {
   const router = useRouter();
@@ -75,9 +76,8 @@ export function AuthScreen() {
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/register", {
+      const regRes = await safeFetchJSON<any>("/api/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           storeName,
           rubro,
@@ -88,9 +88,8 @@ export function AuthScreen() {
           currencySymbol: "$",
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Error al registrar");
+      if (!regRes.ok) {
+        throw new Error(regRes.error || "Error al registrar");
       }
       toast.success("Tienda creada! Iniciando sesión...");
       // Auto login
@@ -110,13 +109,18 @@ export function AuthScreen() {
   async function handleSeedDemo() {
     setSeedLoading(true);
     try {
-      const res = await fetch("/api/seed", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const seedRes = await safeFetchJSON<any>("/api/seed", { method: "POST" });
+      if (!seedRes.ok || !seedRes.data) {
+        throw new Error(seedRes.error || "Error al crear tienda demo");
+      }
+      const { credentials } = seedRes.data;
+      if (!credentials?.email || !credentials?.password) {
+        throw new Error("La respuesta del server no incluyó credenciales");
+      }
       toast.success("Tienda demo creada! Iniciando sesión...");
       await signIn("credentials", {
-        email: data.credentials.email,
-        password: data.credentials.password,
+        email: credentials.email,
+        password: credentials.password,
         redirect: false,
       });
       router.refresh();

@@ -707,15 +707,13 @@ export function PosView() {
   }, [customerId]);
 
   // ─── Impresión térmica ──────────────────────────────────────────────────────
+  // Un solo POST a /api/print con returnFormat:"blob". El endpoint devuelve
+  // el binario ESC/POS directamente (Content-Type: application/octet-stream).
+  // safeFetchBlob maneja errores HTTP leyendo el body como texto y extrayendo
+  // el mensaje { error } del server, así que no perdemos info de error.
   async function printThermalSale() {
     if (!lastSale?.id) return;
     try {
-      const printRes = await safeFetchJSON<any>("/api/print", {
-        method: "POST",
-        body: JSON.stringify({ type: "TICKET", saleId: lastSale.id }),
-      });
-      if (!printRes.ok) throw new Error(printRes.error);
-
       const blobRes = await safeFetchBlob("/api/print", {
         method: "POST",
         body: JSON.stringify({

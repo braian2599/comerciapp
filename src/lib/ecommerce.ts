@@ -493,7 +493,25 @@ const mercadoLibreAdapter: EcommerceAdapter = {
   platform: "MERCADOLIBRE",
   async testConnection(config) {
     if (!config.accessToken) return { ok: false, message: "Falta access token" };
-    return { ok: true, message: "MercadoLibre (modo limitado - solo lectura)" };
+    try {
+      const res = await fetch("https://api.mercadolibre.com/users/me", {
+        headers: { Authorization: `Bearer ${config.accessToken}` },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return {
+          ok: false,
+          message: `ML respondió ${res.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+        };
+      }
+      const data = await res.json();
+      return {
+        ok: true,
+        message: `Conectado a ML como ${data.nickname || data.first_name || `usuario ${data.id}`}`,
+      };
+    } catch (e: any) {
+      return { ok: false, message: e.message || "Error de red contra ML" };
+    }
   },
   async pushProduct(config, product) {
     return { ok: false, message: "MercadoLibre requiere publicación vía ML Publisher (no soportado aún)" };
@@ -581,8 +599,34 @@ function mapMLOrder(o: any): RemoteOrder {
 const shopifyAdapter: EcommerceAdapter = {
   platform: "SHOPIFY",
   async testConnection(config) {
-    if (!config.apiUrl || !config.apiKey) return { ok: false, message: "Faltan datos" };
-    return { ok: true, message: "Shopify (modo limitado)" };
+    if (!config.apiUrl || !config.apiKey || !config.apiSecret) {
+      return { ok: false, message: "Faltan API URL, API Key o API Secret" };
+    }
+    try {
+      const base = config.apiUrl.replace(/\/+$/, "");
+      const auth = Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString("base64");
+      const res = await fetch(`${base}/admin/api/2024-01/shop.json`, {
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return {
+          ok: false,
+          message: `Shopify respondió ${res.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+        };
+      }
+      const data = await res.json();
+      const shop = data.shop;
+      return {
+        ok: true,
+        message: `Conectado a ${shop?.name || shop?.domain || base}`,
+      };
+    } catch (e: any) {
+      return { ok: false, message: e.message || "Error de red contra Shopify" };
+    }
   },
   async pushProduct(config, product) {
     return { ok: false, message: "Shopify requiere Admin API (no implementado)" };
