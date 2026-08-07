@@ -504,3 +504,158 @@ Stage Summary:
   - AfipConnectionPanel → /api/afip/test: POST con AbortController
   - /api/afip/test → afip-prod: lee cert + obtiene TA
   - onTestSuccess → loadTaxConfig: refresca taxConfig con TA cacheado
+
+---
+Task ID: P3-afip-cert-upload
+Agent: main (Super Z)
+Task: Implementar upload de certificado AFIP (.p12/.pfx o .pem) desde la UI con métodos robustos y complejos para evitar fallas. Incluye encriptación de la password, validación del certificado al subir, matching de CUIT, y eliminación segura.
+
+Work Log:
+- Audité el estado previo:
+  - lib/afip-prod.ts ya tenía leerCertificadoYClave() que soporta .p12 y .pem
+  - TaxConfig ya tenía campos certPath, privateKeyPath, certPassword (en plaintext)
+  - No había endpoint para subir certificados
+  - No había UI para subir certificados (el formulario solo tenía CUIT, razon social, etc.)
+  - Aviso estático "Esto se hace mediante un archivo de configuración en el servidor"
+- Detecté 5 problemas de robustez:
+  1. certPassword se guardaba en plaintext en la DB
+  2. No había validación del certificado al subir (password incorrecta se detectaba solo al emitir factura)
+  3. No había matching CUIT del certificado vs TaxConfig.cuit
+  4. leerCertificadoYClave iteraba safeContents.bags (API legacy); node-forge moderno usa safeBags
+  5. No había forma de eliminar un certificado cargado (ni del FS ni de la DB)
+
+- Creé src/lib/crypto-utils.ts (~155 LOC):
+  - encryptSecret(plain): AES-256-GCM con IV aleatorio de 12 bytes
+  - decryptSecret(stored): soporta formato v1:ivHex:tagHex:cipherHex + backward-compat
+    con strings plaintext (registros viejos sin encriptar)
+  - isEncryptedSecret(stored): utilidad para diagnóstico
+  - Key desde CERT_PASSWORD_ENCRYPTION_KEY (hex 64 chars) o SHA-256(NEXTAUTH_SECRET)
+  - En dev sin ninguna de las dos, usa fallback con warning (NO prod)
+
+- Creé src/lib/cert-info.ts (~205 LOC):
+  - extractCertInfoFromP12(buffer, password): extrae CertInfo de .p12/.pfx
+  - extractCertInfoFromPem(pem): extrae CertInfo de cert PEM
+  - CertInfo: subject, issuer, cuit, validFrom, validTo, daysUntilExpiry,
+    expired, expiringSoon (≤30 días), fingerprintSha256, serialNumber, format
+  - extractCuitFromAttrs(): busca CUIT en CN → serialNumber → OU (formato AFIP)
+  - parseCuit(): normaliza a 11 dígitos, acepta "30-71234567-8", "CUIT xxx", etc.
+  - validarCuitConDigito(): algoritmo módulo 11 del dígito verificador
+  - cuitMatches(): comparación robusta de CUITs con ruido (guiones, prefijos)
+  - buildCertInfo(): construye respuesta + calcula fingerprint SHA-256
+
+- Actualicé src/lib/afip-prod.ts:
+  - leerCertificadoYClave() ahora desencripta certPassword con decryptSecret()
+    antes de pasarla a node-forge. Backward-compat: si viene plaintext, lo usa tal cual.
+  - Arreglé iteración de safeContents: ahora soporta tanto .safeBags (node-forge
+    moderno) como .bags (legacy). Esto era un bug latente que habría fallado con
+    .p12 generados por node-forge y posiblemente con algunos .p12 reales.
+
+- Creé src/app/api/afip/cert/route.ts (~410 LOC):
+  - POST (multipart/form-data):
+    * Valida ADMIN/OWNER
+    * Lee TaxConfig actual
+    * Parsea FormData: cert (File), key (File opcional para .pem), password (string)
+    * Valida extensión (.p12, .pfx, .pem, .cer) y MIME type
+    * Valida tamaño (max 100KB)
+    * Lee bytes y valida certificado con node-forge ANTES de persistir
+    * .p12: requiere password, valida que abra
+    * .pem: requiere key file aparte, valida BEGIN CERTIFICATE y PRIVATE KEY
+    * Valida que el certificado no esté vencido
+    * Extrae CUIT del certificado y valida dígito verificador
+    * Si TaxConfig.cuit está seteado, valida coincidencia (rechaza si no coincide)
+    * Si TaxConfig.cuit NO está seteado, lo autocompleta con el del certificado
+    * Genera nombre de archivo seguro: afip-${storeId}-${timestamp}.${ext}
+      (evita path traversal, colisiones entre stores)
+    * Persiste cert (y key si .pem) en UPLOADS_DIR/afip-certs/
+    * Borra cert anterior del FS (best-effort, no falla si no existe)
+    * Encripta password con AES-256-GCM antes de persistir
+    * Actualiza TaxConfig: certPath, privateKeyPath, certPassword encriptada,
+      cuit (si autocompletado), authToken=null, authTokenExpires=null
+      (invalida TA cacheado porque cambió el cert)
+    * Si falla la DB, borra archivos nuevos para no dejar basura
+  - DELETE:
+    * Borra archivos físicos (cert + key)
+    * Limpia certPath, privateKeyPath, certPassword, authToken, authTokenExpires
+  - GET:
+    * Lee el cert actual, extrae info legible (subject, issuer, CUIT, validez, fingerprint)
+    * NUNCA expone contenido PEM ni password
+    * Maneja casos: sin cert, archivo perdido, password no desencriptable, formato corrupto
+    * Retorna hasCert=true + error en esos casos para que la UI los muestre
+
+- Creé src/components/afip-certificate-uploader.tsx (~580 LOC):
+  - Card con header "Certificado Digital AFIP" + badge de estado (Vigente/Por vencer/Vencido)
+  - Sección de info del cert actual: formato, CUIT, subject, issuer, fechas de validez,
+    fingerprint SHA-256, path del archivo. Botón "Eliminar" con confirmación.
+  - Formulario de upload (solo si no hay cert):
+    * Drag & drop + click para certificado (.p12/.pfx/.pem/.cer)
+    * Drag & drop + click para clave privada (.key/.pem) — solo si .pem
+    * Input de password con toggle de visibilidad — solo si .p12/.pfx
+    * Validación client-side de extensión y tamaño antes de subir
+    * Botón "Subir y validar certificado" con estado loading
+    * Botón "Limpiar" para resetear formulario
+    * Nota de seguridad: "La contraseña se encripta con AES-256-GCM antes de guardar"
+  - AbortController + timeout 30s en upload
+  - Manejo de errores: red, timeout, 403 (no-admin), 400 (validación server)
+  - Mensajes user-friendly según tipo de error
+  - Refresh automático de info del cert después de upload/delete exitoso
+  - Callback onCertChange para que settings-view refresque taxConfig
+  - Dialog de confirmación de delete con warnings sobre impacto
+
+- Integré en src/components/views/settings-view.tsx:
+  - Import AfipCertificateUploader
+  - Eliminé el aviso estático "Esto se hace mediante un archivo de configuración en el servidor"
+  - Inserté <AfipCertificateUploader> entre el formulario y el AfipConnectionPanel
+  - Pasa taxConfig y onCertChange=loadTaxConfig (refresca después de upload/delete)
+
+- Creé directorio uploads/afip-certs/ con .gitkeep
+- Actualicé .gitignore:
+  - *.p12, *.pfx (certificados binarios)
+  - uploads/afip-certs/* con excepción de .gitkeep
+  - *.pem ya estaba
+
+- Tests scripts/test-cert-upload.ts (64 tests):
+  - crypto-utils: round-trip plain, empty, unicode, IV aleatorio, backward-compat,
+    datos corruptos (formato inválido, hex inválido, auth tag inválido)
+  - cert-info: parseCuit (válido, guiones, prefijos, edge cases)
+  - cert-info: validarCuitConDigito (CUITs válidos calculados con helper, inválidos)
+  - cert-info: cuitMatches (iguales, con ruido, distintos)
+  - cert-info: extractCuitFromAttrs (CN, CN guionado, serialNumber, OU, sin CUIT)
+  - cert-info: extracción de .p12 auto-firmado generado on-the-fly
+    (format, CUIT, subject, expired, fingerprint, password incorrecta throws)
+  - cert-info: detección de cert vencido (-10 días)
+  - cert-info: detección de cert por vencer (+15 días)
+  - 64/64 OK
+
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 18.6s, 60/60 static pages OK
+- Ruta /api/afip/cert registrada en el manifest
+
+Stage Summary:
+- Libs nuevas: 2 (crypto-utils.ts ~155 LOC, cert-info.ts ~205 LOC)
+- Libs modificadas: 1 (afip-prod.ts: desencripta password + fix iteración safeBags)
+- Endpoints nuevos: 1 (/api/afip/cert con POST/DELETE/GET)
+- Componentes nuevos: 1 (afip-certificate-uploader.tsx ~580 LOC)
+- Componentes modificados: 1 (settings-view.tsx integración)
+- Tests de regresión: 64 (scripts/test-cert-upload.ts)
+- Directorio nuevo: uploads/afip-certs/ (gitignored except .gitkeep)
+- Bugs resueltos:
+  1. certPassword en plaintext → ahora AES-256-GCM encriptado
+  2. Sin validación al subir → validación completa (formato, password, CUIT, vencimiento)
+  3. Sin matching CUIT → compara CUIT del cert con TaxConfig, autocompleta si vacío
+  4. Iteración safeBags vs bags → soporta ambos formatos (node-forge moderno + legacy)
+  5. Sin eliminación → DELETE borra archivo + limpia DB + invalida TA cacheado
+- Comunicación inter-modular validada:
+  - settings-view → AfipCertificateUploader: taxConfig + onCertChange callback
+  - AfipCertificateUploader → /api/afip/cert (POST multipart, DELETE, GET)
+  - /api/afip/cert → cert-info: extracción de info + validación de CUIT
+  - /api/afip/cert → crypto-utils: encriptación de password
+  - /api/afip/cert → TaxConfig: persiste certPath, privateKeyPath, certPassword,
+    invalida authToken/authTokenExpires
+  - leerCertificadoYClave → crypto-utils: desencripta password antes de usarla
+  - AfipCertificateUploader → AfipConnectionPanel: el test de conexión ahora
+    funcionará porque el cert ya está cargado y validado
+- Robustez serverless:
+  - UPLOADS_DIR env var configurable (default /home/z/my-project/uploads/afip-certs)
+  - En Vercel prod, setear UPLOADS_DIR=/tmp/afip-certs (con nota: /tmp no persiste
+    entre invocations, para prod real usar Vercel Blob o S3 — TODO futuro)
+- Sin cambios de schema (usa campos existentes)

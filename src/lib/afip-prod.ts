@@ -35,6 +35,7 @@ import forge from "node-forge";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { db } from "@/lib/db";
+import { decryptSecret } from "@/lib/crypto-utils";
 import type { TaxConfig } from "@prisma/client";
 
 // ===== URLs AFIP =====
@@ -85,7 +86,12 @@ export interface AfipError {
  *
  * En serverless (Vercel) los archivos deben estar en /tmp o en una ruta
  * dentro del proyecto. La subida de certificados se gestiona desde el
- * módulo /api/tax-config con multer u otra estrategia similar.
+ * módulo /api/afip/cert (POST multipart).
+ *
+ * La contraseña del .p12 se guarda en TaxConfig.certPassword encriptada
+ * con AES-256-GCM (ver lib/crypto-utils.ts). Aquí se desencripta antes de
+ * pasarla a node-forge. Si el registro viene de una versión vieja sin
+ * encriptar, decryptSecret() lo retorna tal cual (backward-compat).
  *
  * @throws Error si no encuentra los archivos o la password es incorrecta.
  */
@@ -116,15 +122,27 @@ export async function leerCertificadoYClave(
         "El certificado es .p12 pero falta certPassword en la configuración"
       );
     }
+    // Desencriptar password (backward-compat: si viene plaintext lo retorna igual)
+    let plainPassword: string;
+    try {
+      plainPassword = decryptSecret(taxConfig.certPassword);
+    } catch (e: any) {
+      throw new Error(
+        `No se pudo desencriptar certPassword: ${e.message}. Re-cargá el certificado desde la UI.`
+      );
+    }
     const p12Asn1 = forge.asn1.fromDer(certBuffer.toString("binary"));
-    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, taxConfig.certPassword);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, plainPassword);
 
     let certPem = "";
     let keyPem = "";
 
     // Buscar el certificado y la clave privada en los safeBags
+    // node-forge moderno usa .safeBags; .bags es legacy. Soportamos ambos.
     for (const safeContents of p12.safeContents) {
-      for (const bag of safeContents.bags) {
+      const bags =
+        (safeContents as any).safeBags || (safeContents as any).bags || [];
+      for (const bag of bags) {
         if (bag.type === forge.pki.oids.certBag && bag.attributes?.localKeyId) {
           const cert = (bag as any).cert;
           if (cert) certPem = forge.pki.certificateToPem(cert);
@@ -135,7 +153,7 @@ export async function leerCertificadoYClave(
             try {
               const privateKey = forge.pki.decryptPrivateKeyInfo(
                 key,
-                taxConfig.certPassword
+                plainPassword
               );
               if (privateKey) keyPem = forge.pki.privateKeyToPem(privateKey);
             } catch {

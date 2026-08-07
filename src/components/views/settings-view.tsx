@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AfipConnectionPanel } from "@/components/afip-connection-panel";
+import { AfipCertificateUploader } from "@/components/afip-certificate-uploader";
 
 interface PaymentMethod {
   id: string;
@@ -934,14 +935,6 @@ export function SettingsView() {
             </div>
           </div>
 
-          {taxForm.environment === "produccion" && (
-            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-800">
-              <strong>Modo Producción:</strong> Para emitir facturas reales necesitás cargar el certificado digital (.p12)
-              obtenido en AFIP. Esto se hace mediante un archivo de configuración en el servidor.
-              Mientras tanto, usá modo Homologación (genera CAE simulado para pruebas).
-            </div>
-          )}
-
           {taxForm.environment === "homologacion" && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-800">
               <strong>Modo Demo:</strong> Las facturas emitidas generan un CAE simulado de 14 dígitos
@@ -949,6 +942,12 @@ export function SettingsView() {
               y cargá tu certificado.
             </div>
           )}
+
+          {/* Subida de certificado digital */}
+          <AfipCertificateUploader
+            taxConfig={taxConfig}
+            onCertChange={loadTaxConfig}
+          />
 
           {/* Panel de conexión AFIP (solo relevante en producción) */}
           <AfipConnectionPanel

@@ -26,6 +26,12 @@ node_modules
 .DS_Store
 *.pem
 
+# AFIP certificates (sensitive)
+*.p12
+*.pfx
+uploads/afip-certs/*
+!uploads/afip-certs/.gitkeep
+
 # debug
 npm-debug.log*
 yarn-debug.log*
