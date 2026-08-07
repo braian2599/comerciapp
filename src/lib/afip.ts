@@ -17,6 +17,11 @@
 
 import { db } from "@/lib/db";
 import { TaxConfig, Invoice } from "@prisma/client";
+import {
+  obtenerTokenAcceso,
+  feCAESolicitar,
+  type FeCaeParams,
+} from "@/lib/afip-prod";
 
 // ===== CONSTANTES =====
 export const AFIP_TIPOS_COMPROBANTE = {
@@ -700,8 +705,7 @@ export async function emitirNotaDeCredito(
  * A diferencia de la factura, una NC debe incluir el array `CbtesAsoc`
  * apuntando a la factura original (tipo + ptoVta + nro).
  *
- * TODO: integración real con @afipsdk/afip.js cuando el cliente cargue
- * certificado de producción. Por ahora retorna error claro.
+ * Implementación: delega a lib/afip-prod.ts (WSAA + WSFEv1 con fetch + node-forge).
  */
 async function solicitarCaeNotaCreditoProduccion(params: {
   taxConfig: TaxConfig;
@@ -718,34 +722,76 @@ async function solicitarCaeNotaCreditoProduccion(params: {
   resultado?: string;
   error?: string;
 }> {
-  // TODO: implementar con @afipsdk/afip.js
-  // Pasos:
-  // 1. Verificar token WSAA vigente, si no, solicitar nuevo.
-  // 2. Llamar a FECAESolicitar con:
-  //    - CbteTipo = params.tipoComprobante (3, 8, 13, 53 o 21)
-  //    - PtoVta = params.puntoVenta
-  //    - CbteNro = params.numero
-  //    - Concepto = same que factura original
-  //    - DocTipo + DocNro = same que factura original
-  //    - ImpNeto, ImpIVA, ImpTotal (positivos, montos de la NC)
-  //    - CbtesAsoc = [{ Tipo: <tipo original>, PtoVta: <pto original>, Nro: <nro original> }]
-  // 3. Verificar ErroresArray y obtener CAE + vencimiento.
-  return {
-    ok: false,
-    error: "Integración AFIP producción para NC no implementada. Use modo demo o cargue el SDK.",
-  };
+  try {
+    // 1. Obtener TA (token de acceso WSAA). Cache en TaxConfig.authToken.
+    const ta = await obtenerTokenAcceso(params.taxConfig, "wsfe");
+
+    // 2. Mapear concepto literal → código AFIP
+    const conceptoCode =
+      params.datos.concepto === "PRODUCTOS"
+        ? 1
+        : params.datos.concepto === "SERVICIOS"
+          ? 2
+          : 3;
+
+    // 3. Mapear tipo de documento del receptor (snapshot de la factura original)
+    const docTipo = params.datos.clienteCuit
+      ? 80 // CUIT
+      : 99; // sin identificar
+    const docNro = params.datos.clienteCuit
+      ? parseInt(params.datos.clienteCuit.replace(/\D/g, ""), 10) || 0
+      : 0;
+
+    // 4. Construir payload FECAESolicitar con CbtesAsoc apuntando a la
+    //    factura original. AFIP exige tipo + ptoVta + número de la fac original.
+    const feParams: FeCaeParams = {
+      tipoComprobante: params.tipoComprobante, // 3=NC-A, 8=NC-B, 13=NC-C
+      puntoVenta: params.puntoVenta,
+      numero: params.numero,
+      concepto: conceptoCode,
+      docTipo,
+      docNro,
+      impNeto: params.datos.netoGravado,
+      impIVA: params.datos.ivaAmount,
+      impTotal: params.datos.total,
+      impNoGravado: params.datos.noGravado || 0,
+      impExento: params.datos.exento || 0,
+      ivaAlicuota: getAlicuotaIvaCode(params.datos.ivaRate),
+      ivaBaseImp: params.datos.netoGravado,
+      fechaCbte: formatAfipDate(params.datos.fecha),
+      comprobantesAsociados: [
+        {
+          tipo: getTipoComprobanteCode(params.originalInvoice.tipo),
+          puntoVenta: params.originalInvoice.puntoVenta,
+          numero: params.originalInvoice.numero,
+        },
+      ],
+    };
+
+    // 5. Llamar a WSFEv1
+    const result = await feCAESolicitar(params.taxConfig, ta, feParams);
+    return result;
+  } catch (e: any) {
+    return {
+      ok: false,
+      error:
+        e?.message ||
+        "Error inesperado al contactar AFIP para emitir nota de crédito",
+    };
+  }
 }
 
 
 // ===== PRODUCCIÓN: SOLICITAR CAE A AFIP WSFEv1 =====
 /**
- * Implementación real de solicitud de CAE a AFIP.
- * Requiere:
- *   - Certificado y clave privada cargados
- *   - Token de acceso WSAA vigente
+ * Implementación real de solicitud de CAE a AFIP para facturas.
+ * Delega a lib/afip-prod.ts (WSAA + WSFEv1 con fetch + node-forge).
  *
- * Por ahora está implementado como placeholder con TODO.
- * La integración real requiere librerías como @afipsdk/afip.js o afip.ts
+ * Requiere:
+ *   - TaxConfig.environment = 'produccion'
+ *   - TaxConfig.certPath (archivo .p12 con password o .pem)
+ *   - TaxConfig.privateKeyPath (solo si certPath es .pem)
+ *   - Punto de venta habilitado en AFIP
  */
 async function solicitarCaeProduccion(params: {
   taxConfig: TaxConfig;
@@ -761,29 +807,63 @@ async function solicitarCaeProduccion(params: {
   resultado?: string;
   error?: string;
 }> {
-  // TODO: Implementar integración real con AFIP WSFEv1
-  // Pasos:
-  // 1. Verificar token WSAA vigente, si no, solicitar nuevo con certificado
-  // 2. Llamar a FECAESolicitar con los datos de la factura
-  // 3. Verificar errores (ErroresArray)
-  // 4. Obtener CAE y fecha de vencimiento
-  // 5. Si hay observaciones pero CAE, retornar igual
-  //
-  // Recomendado: usar @afipsdk/afip.js
-  // npm install @afipsdk/afip.js
-  // import { Afip } from '@afipsdk/afip.js';
-  //
-  // const afip = new Afip({
-  //   CUIT: params.taxConfig.cuit,
-  //   cert: params.taxConfig.certPath,
-  //   key: params.taxConfig.privateKeyPath,
-  //   production: true,
-  // });
+  try {
+    // 1. Obtener TA (token de acceso WSAA). Cache en TaxConfig.authToken.
+    const ta = await obtenerTokenAcceso(params.taxConfig, "wsfe");
 
-  return {
-    ok: false,
-    error: "Integración AFIP producción no implementada. Use modo demo o cargue el SDK.",
-  };
+    // 2. Mapear concepto literal → código AFIP
+    const conceptoCode =
+      params.datos.concepto === "PRODUCTOS"
+        ? 1
+        : params.datos.concepto === "SERVICIOS"
+          ? 2
+          : 3;
+
+    // 3. Mapear tipo de documento del receptor
+    const docTipo = params.datos.clienteCuit ? 80 : 99;
+    const docNro = params.datos.clienteCuit
+      ? parseInt(params.datos.clienteCuit.replace(/\D/g, ""), 10) || 0
+      : 0;
+
+    // 4. Construir payload FECAESolicitar (sin CbtesAsoc — es factura original)
+    const feParams: FeCaeParams = {
+      tipoComprobante: params.tipoComprobante,
+      puntoVenta: params.puntoVenta,
+      numero: params.numero,
+      concepto: conceptoCode,
+      docTipo,
+      docNro,
+      impNeto: params.datos.netoGravado,
+      impIVA: params.datos.ivaAmount,
+      impTotal: params.datos.total,
+      impNoGravado: params.datos.noGravado || 0,
+      impExento: params.datos.exento || 0,
+      ivaAlicuota: getAlicuotaIvaCode(params.datos.ivaRate),
+      ivaBaseImp: params.datos.netoGravado,
+      fechaCbte: formatAfipDate(params.datos.fecha),
+    };
+
+    // 5. Llamar a WSFEv1
+    const result = await feCAESolicitar(params.taxConfig, ta, feParams);
+    return result;
+  } catch (e: any) {
+    return {
+      ok: false,
+      error:
+        e?.message ||
+        "Error inesperado al contactar AFIP para emitir factura",
+    };
+  }
+}
+
+/**
+ * Formatea una Date como YYYYMMDD (formato esperado por AFIP FchEmis).
+ */
+function formatAfipDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
 }
 
 // ===== ANULACIÓN DE FACTURA =====
