@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { increaseStock, setStock } from "@/lib/stock";
+import { requireStoreId } from "@/lib/session-utils";
 
 /**
  * Helpers de validación y parsing seguro.
@@ -100,6 +101,8 @@ export async function POST(req: NextRequest) {
   }
 
   const storeId = u.storeId;
+  const storeIdErr = requireStoreId(storeId);
+  if (storeIdErr) return storeIdErr;
 
   try {
     const product = await db.product.create({
@@ -188,6 +191,8 @@ export async function PUT(req: NextRequest) {
   }
 
   const storeId = u.storeId;
+  const storeIdErr = requireStoreId(storeId);
+  if (storeIdErr) return storeIdErr;
 
   try {
     const existing = await db.product.findFirst({
