@@ -259,3 +259,80 @@ Stage Summary:
   - refType + refId para trazabilidad (excepto stock inicial que usa InventoryAdjustment)
   - reason descriptivo
   - validación de stockResultante >= 0 (salvo allowNegative explícito)
+
+---
+Task ID: P2.2-refund-prorrateo-hardening
+Agent: main (Super Z)
+Task: Re-auditar y robustecer el prorrateo de devolución (P2.2). Ajustes profundos, sin dejar datos al azar.
+
+Work Log:
+- Re-audité el flujo completo del prorrateo: lib/refund-calc.ts +
+  /api/refunds POST + /api/refunds/preview + refunds-view.tsx.
+- Encontré 7 bugs en la re-auditoría profunda (la auditoría previa había
+  dicho "OK" pero no fue lo suficientemente profunda):
+  1. CRÍTICO: isTotal=true cuando lengths coincidían aunque las
+     cantidades fueran parciales. Ej: venta 2 items (qty 10,10), pedir
+     devolver 5+5 → isTotal=true, se persistían 10+10. Pérdida real.
+  2. POST /api/refunds no envolvía req.json() en try/catch → JSON
+     malformado = 500 en vez de 400.
+  3. No validaba Array.isArray(body.items) → items="foo" rompía runtime.
+  4. No validaba typeof body.saleId → saleId=123/null causaba 404
+     silencioso o comportamiento indefinido.
+  5. No rechazaba saleItemId duplicados → [{A,3},{A,3}] sumaba 6 y
+     pasaba validación.
+  6. No había redondeo monetario → drift de centavos tras N refunds.
+  7. sale.subtotal=0 con items era fallback mágico (saleSubtotal ||
+     refundSubtotal) → snapshot corrupto silenciosamente aceptado.
+
+- Refactoricé lib/refund-calc.ts:
+  - signature cambió a (sale, requestedItems: unknown) para validación
+    defensiva dentro de la lib.
+  - normalizeRequestedItems(): valida Array, tipos, duplicados,
+    pertenencia, rangos. Lanza Error user-friendly en cada caso.
+  - isTotal ahora se determina AFTER de procesar items: true IFF
+    TODOS los items de la venta están en la solicitud Y cada cantidad
+    es exactamente la original.
+  - En devolución total explícita (items=[]), los componentes son
+    exactamente sale.{discount,tax,surcharge} para garantizar
+    refundTotal === sale.total sin drift.
+  - roundMoney(): todos los montos a 2 decimales.
+  - Validación de snapshot: sale.subtotal > 0 si hay items.
+
+- Actualicé /api/refunds POST:
+  - req.json() envuelto en try/catch → 400 en JSON malformado.
+  - Validación de tipos básicos (saleId, items, refundMethod) ANTES
+    de tocar la DB.
+  - body.items pasado directo a calculateRefundTotals (la lib valida).
+
+- Actualicé /api/refunds/preview:
+  - Mismas validaciones de entrada que POST.
+
+- Creé scripts/test-refund-calc.ts (43 tests de regresión):
+  - Devolución total explícita (3 formas: [], undefined, null).
+  - BUG CRÍTICO: cantidades parciales de todos los items → isTotal=false.
+  - Cantidades totales de todos los items → isTotal=true.
+  - Prorrateo proporcional (descuento, IVA, recargo).
+  - Redondeo a 2 decimales (verifica ≤2 decimales en todos los campos).
+  - Validaciones: duplicados, inexistentes, qty inválida, items no-array,
+    snapshot inconsistente, item sin saleItemId, item sin quantity.
+  - 43/43 OK.
+
+- Type-check ✓ limpio en src/
+- Build ✓ Compiled successfully in 15.4s, 58/58 static pages OK
+- Commit: d451534
+- Push: ✓ origin/main
+
+Stage Summary:
+- Bugs críticos resueltos: 7 (1 crítico de pérdida de dinero + 6 robustez)
+- Libs refactorizadas: 1 (lib/refund-calc.ts, ~290 LOC)
+- Endpoints endurecidos: 2 (/api/refunds POST, /api/refunds/preview POST)
+- Tests de regresión: 43 (scripts/test-refund-calc.ts)
+- Comunicación inter-modular validada:
+  - refunds-view → /api/refunds/preview: solo display, no envía montos
+  - refunds-view → /api/refunds POST: solo {saleId, items, method, reason,
+    notes, emitCreditNote}. Backend recalcula todo desde DB snapshot.
+  - /api/refunds → stock: increaseStock con type=ENTRADA (P2.4)
+  - /api/refunds → customers: stats + loyaltyPoints prorrateados (P2.1)
+  - /api/refunds → customer-account: applyCreditToCustomerAccount (P2.1)
+  - /api/refunds → invoices: emitirNotaDeCredito si emitCreditNote (P2.3)
+- Sin cambios de schema (no requiere migración)
