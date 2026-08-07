@@ -558,6 +558,7 @@ export function ProductsView() {
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead className="hidden md:table-cell">Categoría</TableHead>
+                    <TableHead className="hidden lg:table-cell">Proveedor</TableHead>
                     <TableHead className="text-right">Costo</TableHead>
                     <TableHead className="text-right">Precio</TableHead>
                     <TableHead className="text-right">Stock</TableHead>
@@ -583,6 +584,13 @@ export function ProductsView() {
                       <TableCell className="hidden md:table-cell">
                         {p.category ? (
                           <Badge variant="outline">{p.category.name}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {p.supplier ? (
+                          <span>{p.supplier.name}</span>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}

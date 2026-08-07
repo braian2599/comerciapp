@@ -17,6 +17,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -45,6 +55,8 @@ import {
   CheckCircle2,
   Clock,
   Upload,
+  Ban,
+  AlertTriangle,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime } from "@/lib/constants";
@@ -124,6 +136,9 @@ export function PurchasesView() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [orderFilter, setOrderFilter] = useState("all");
+  const [orderSupplierFilter, setOrderSupplierFilter] = useState("all");
+  const [orderFromFilter, setOrderFromFilter] = useState("");
+  const [orderToFilter, setOrderToFilter] = useState("");
 
   // Nueva OC
   const [ocOpen, setOcOpen] = useState(false);
@@ -133,10 +148,17 @@ export function PurchasesView() {
   const [ocNotes, setOcNotes] = useState("");
   const [ocSaving, setOcSaving] = useState(false);
   const [ocReceiveNow, setOcReceiveNow] = useState(true);
+  // Modo edición: si está seteado, el diálogo de OC opera en modo PUT
+  const [ocEditingId, setOcEditingId] = useState<string | null>(null);
 
   // Detalle
   const [detailOrder, setDetailOrder] = useState<PurchaseOrder | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  // Anular
+  const [annulOrder, setAnnulOrder] = useState<PurchaseOrder | null>(null);
+  const [annulReason, setAnnulReason] = useState("");
+  const [annulLoading, setAnnulLoading] = useState(false);
 
   async function loadSuppliers() {
     try {
@@ -151,7 +173,13 @@ export function PurchasesView() {
   async function loadOrders() {
     setOrdersLoading(true);
     try {
-      const data = await safeFetchArray<PurchaseOrder>("/api/purchase-orders?limit=100");
+      const params = new URLSearchParams();
+      params.set("limit", "200");
+      if (orderFilter !== "all") params.set("status", orderFilter);
+      if (orderSupplierFilter !== "all") params.set("supplierId", orderSupplierFilter);
+      if (orderFromFilter) params.set("from", orderFromFilter);
+      if (orderToFilter) params.set("to", orderToFilter);
+      const data = await safeFetchArray<PurchaseOrder>(`/api/purchase-orders?${params.toString()}`);
       setOrders(data);
     } catch (e: any) {
       toast.error("Error al cargar órdenes", { description: e?.message });
@@ -173,8 +201,12 @@ export function PurchasesView() {
 
   useEffect(() => {
     loadSuppliers();
-    loadOrders();
   }, []);
+
+  useEffect(() => {
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderFilter, orderSupplierFilter, orderFromFilter, orderToFilter]);
 
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((s) => {
@@ -185,9 +217,10 @@ export function PurchasesView() {
   }, [suppliers, supSearch]);
 
   const filteredOrders = useMemo(() => {
-    if (orderFilter === "all") return orders;
-    return orders.filter((o) => o.status === orderFilter);
-  }, [orders, orderFilter]);
+    // Los filtros de status, supplier y fecha se aplican en el backend,
+    // pero mantenemos este memo por si llegara a haber diferencias (race conditions).
+    return orders;
+  }, [orders]);
 
   async function saveSupplier() {
     if (!supForm.name) {
@@ -231,7 +264,28 @@ export function PurchasesView() {
     setOcItems([]);
     setOcNotes("");
     setOcReceiveNow(true);
+    setOcEditingId(null);
     if (products.length === 0) loadProducts();
+    setOcOpen(true);
+  }
+
+  function openEditOC(o: PurchaseOrder) {
+    setOcEditingId(o.id);
+    setOcSupplierId(o.supplier && (o.supplier as any).id ? (o.supplier as any).id : "");
+    // Cargar items del detailOrder (si está abierto) o del row directamente
+    const source = (detailOrder && detailOrder.id === o.id ? detailOrder : o);
+    setOcItems(
+      source.items.map((it: PurchaseOrderItem) => ({
+        productId: it.productId,
+        quantity: it.quantity,
+        unitCost: it.unitCost,
+      }))
+    );
+    setOcNotes(o.notes || "");
+    // En edición no se puede cambiar el flag de recepción (la orden ya está decidida)
+    setOcReceiveNow(false);
+    if (products.length === 0) loadProducts();
+    setDetailOpen(false);
     setOcOpen(true);
   }
 
@@ -270,25 +324,68 @@ export function PurchasesView() {
     setOcSaving(true);
     try {
       const supplier = suppliers.find((s) => s.id === ocSupplierId);
-      const { ok, error } = await safeFetchJSON("/api/purchase-orders", {
-        method: "POST",
+      const isEdit = !!ocEditingId;
+      const { ok, error, data } = await safeFetchJSON<any>("/api/purchase-orders", {
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierId: ocSupplierId || null,
-          supplierName: supplier?.name || "Sin proveedor",
-          items: ocItems,
-          notes: ocNotes,
-          receive: ocReceiveNow,
-        }),
+        body: JSON.stringify(
+          isEdit
+            ? {
+                id: ocEditingId,
+                supplierId: ocSupplierId || null,
+                supplierName: supplier?.name || "Sin proveedor",
+                items: ocItems,
+                notes: ocNotes,
+              }
+            : {
+                supplierId: ocSupplierId || null,
+                supplierName: supplier?.name || "Sin proveedor",
+                items: ocItems,
+                notes: ocNotes,
+                receive: ocReceiveNow,
+              }
+        ),
       });
       if (!ok) throw new Error(error);
-      toast.success(ocReceiveNow ? "Orden registrada y mercadería ingresada al stock" : "Orden creada (pendiente de recepción)");
+      if (data?._warning) {
+        toast.warning(data._warning, { duration: 8000 });
+      }
+      toast.success(isEdit ? "Orden actualizada" : ocReceiveNow ? "Orden registrada y mercadería ingresada al stock" : "Orden creada (pendiente de recepción)");
       setOcOpen(false);
+      setOcEditingId(null);
       loadOrders();
     } catch (e: any) {
       toast.error("Error al guardar orden", { description: e?.message });
     } finally {
       setOcSaving(false);
+    }
+  }
+
+  async function annulOC() {
+    if (!annulOrder) return;
+    setAnnulLoading(true);
+    try {
+      const { ok, error, data } = await safeFetchJSON<any>("/api/purchase-orders/annul", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: annulOrder.id,
+          reason: annulReason || undefined,
+        }),
+      });
+      if (!ok) throw new Error(error);
+      if (data?._warning) {
+        toast.warning(data._warning, { duration: 10000 });
+      }
+      toast.success("Orden anulada");
+      setAnnulOrder(null);
+      setAnnulReason("");
+      setDetailOpen(false);
+      loadOrders();
+    } catch (e: any) {
+      toast.error("Error al anular orden", { description: e?.message });
+    } finally {
+      setAnnulLoading(false);
     }
   }
 
@@ -331,18 +428,67 @@ export function PurchasesView() {
         {/* ÓRDENES */}
         <TabsContent value="orders" className="space-y-4">
           <Card>
-            <CardContent className="p-3 flex flex-wrap gap-2 items-center">
-              <Select value={orderFilter} onValueChange={setOrderFilter}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="PENDIENTE">Pendientes</SelectItem>
-                  <SelectItem value="RECIBIDA">Recibidas</SelectItem>
-                  <SelectItem value="ANULADA">Anuladas</SelectItem>
-                </SelectContent>
-              </Select>
+            <CardContent className="p-3 flex flex-wrap gap-2 items-end">
+              <div className="space-y-1">
+                <Label className="text-xs">Estado</Label>
+                <Select value={orderFilter} onValueChange={setOrderFilter}>
+                  <SelectTrigger className="w-36 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+                    <SelectItem value="RECIBIDA">Recibidas</SelectItem>
+                    <SelectItem value="ANULADA">Anuladas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Proveedor</Label>
+                <Select value={orderSupplierFilter} onValueChange={setOrderSupplierFilter}>
+                  <SelectTrigger className="w-44 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {suppliers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Desde</Label>
+                <Input
+                  type="date"
+                  value={orderFromFilter}
+                  onChange={(e) => setOrderFromFilter(e.target.value)}
+                  className="h-9 w-40"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Hasta</Label>
+                <Input
+                  type="date"
+                  value={orderToFilter}
+                  onChange={(e) => setOrderToFilter(e.target.value)}
+                  className="h-9 w-40"
+                />
+              </div>
+              {(orderFilter !== "all" || orderSupplierFilter !== "all" || orderFromFilter || orderToFilter) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setOrderFilter("all");
+                    setOrderSupplierFilter("all");
+                    setOrderFromFilter("");
+                    setOrderToFilter("");
+                  }}
+                >
+                  Limpiar
+                </Button>
+              )}
               <span className="text-sm text-muted-foreground ml-auto">
                 {filteredOrders.length} órdenes
               </span>
@@ -379,7 +525,7 @@ export function PurchasesView() {
                     </TableHeader>
                     <TableBody>
                       {filteredOrders.map((o) => (
-                        <TableRow key={o.id}>
+                        <TableRow key={o.id} className={o.status === "ANULADA" ? "opacity-50" : ""}>
                           <TableCell className="font-mono text-xs">{o.orderNumber}</TableCell>
                           <TableCell className="text-xs">
                             {formatDateTime(o.orderedAt)}
@@ -400,6 +546,10 @@ export function PurchasesView() {
                               <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
                                 <Clock className="w-3 h-3 mr-1" /> Pendiente
                               </Badge>
+                            ) : o.status === "ANULADA" ? (
+                              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                                <Ban className="w-3 h-3 mr-1" /> Anulada
+                              </Badge>
                             ) : (
                               <Badge variant="outline">{o.status}</Badge>
                             )}
@@ -417,13 +567,38 @@ export function PurchasesView() {
                               Ver
                             </Button>
                             {o.status === "PENDIENTE" && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => openEditOC(o)}
+                                  title="Editar"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 text-indigo-700"
+                                  onClick={() => receiveOrder(o.id)}
+                                >
+                                  Recibir
+                                </Button>
+                              </>
+                            )}
+                            {o.status !== "ANULADA" && (
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="h-8 text-indigo-700"
-                                onClick={() => receiveOrder(o.id)}
+                                size="icon"
+                                className="h-8 w-8 text-red-600"
+                                onClick={() => {
+                                  setAnnulOrder(o);
+                                  setAnnulReason("");
+                                }}
+                                title="Anular"
                               >
-                                Recibir
+                                <Ban className="w-3.5 h-3.5" />
                               </Button>
                             )}
                           </TableCell>
@@ -551,14 +726,17 @@ export function PurchasesView() {
         </TabsContent>
       </Tabs>
 
-      {/* Diálogo nueva OC */}
+      {/* Diálogo nueva/editar OC */}
       <Dialog open={ocOpen} onOpenChange={setOcOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva orden de compra</DialogTitle>
+            <DialogTitle>
+              {ocEditingId ? `Editar orden de compra` : "Nueva orden de compra"}
+            </DialogTitle>
             <DialogDescription>
-              Registrá la mercadería que comprás a un proveedor. Podés recibirla ahora
-              (actualiza stock) o dejarla pendiente.
+              {ocEditingId
+                ? "Modificá los items o las notas de la orden pendiente. El total se recalcula automáticamente."
+                : "Registrá la mercadería que comprás a un proveedor. Podés recibirla ahora (actualiza stock) o dejarla pendiente."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -678,6 +856,7 @@ export function PurchasesView() {
                 checked={ocReceiveNow}
                 onChange={(e) => setOcReceiveNow(e.target.checked)}
                 className="w-4 h-4 accent-indigo-600"
+                disabled={!!ocEditingId}
               />
               Recibir mercadería ahora (actualiza stock y costo de productos)
             </label>
@@ -692,7 +871,11 @@ export function PurchasesView() {
               className="bg-indigo-600 hover:bg-indigo-700"
             >
               {ocSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {ocReceiveNow ? "Registrar y recibir" : "Crear orden pendiente"}
+              {ocEditingId
+                ? "Guardar cambios"
+                : ocReceiveNow
+                ? "Registrar y recibir"
+                : "Crear orden pendiente"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -716,9 +899,14 @@ export function PurchasesView() {
                   className={
                     detailOrder.status === "RECIBIDA"
                       ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-100"
+                      : detailOrder.status === "ANULADA"
+                      ? "bg-red-50 text-red-700 border border-red-200"
                       : "bg-amber-100 text-amber-800 hover:bg-amber-100"
                   }
                 >
+                  {detailOrder.status === "RECIBIDA" && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                  {detailOrder.status === "PENDIENTE" && <Clock className="w-3 h-3 mr-1" />}
+                  {detailOrder.status === "ANULADA" && <Ban className="w-3 h-3 mr-1" />}
                   {detailOrder.status}
                 </Badge>
                 {detailOrder.receivedAt && (
@@ -766,18 +954,40 @@ export function PurchasesView() {
           )}
           <DialogFooter>
             {detailOrder?.status === "PENDIENTE" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => openEditOC(detailOrder)}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Editar
+                </Button>
+                <Button
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                  onClick={() => {
+                    receiveOrder(detailOrder.id);
+                    setDetailOpen(false);
+                  }}
+                >
+                  <PackagePlus className="w-4 h-4 mr-2" />
+                  Recibir mercadería
+                </Button>
+              </>
+            )}
+            {detailOrder && detailOrder.status !== "ANULADA" && (
               <Button
-                className="bg-indigo-600 hover:bg-indigo-700"
+                variant="outline"
+                className="text-red-700 border-red-200 hover:bg-red-50"
                 onClick={() => {
-                  receiveOrder(detailOrder.id);
-                  setDetailOpen(false);
+                  setAnnulOrder(detailOrder);
+                  setAnnulReason("");
                 }}
               >
-                <PackagePlus className="w-4 h-4 mr-2" />
-                Recibir mercadería
+                <Ban className="w-4 h-4 mr-2" />
+                Anular
               </Button>
             )}
-            <Button variant="outline" onClick={() => setDetailOpen(false)}>
+            <Button variant="ghost" onClick={() => setDetailOpen(false)}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -850,6 +1060,60 @@ export function PurchasesView() {
         entityLabelPlural="proveedores"
         onImported={loadSuppliers}
       />
+
+      {/* Diálogo confirmar anulación */}
+      <AlertDialog open={!!annulOrder} onOpenChange={(o) => !o && setAnnulOrder(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Anular orden {annulOrder?.orderNumber}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Vas a anular la orden de compra. Esta acción se puede hacer en órdenes
+                  pendientes o ya recibidas.
+                </p>
+                {annulOrder?.status === "RECIBIDA" && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-2 text-xs text-amber-800">
+                    <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
+                    <strong>Atención:</strong> Esta orden ya fue recibida y su stock ingresó
+                    al inventario. Al anularla, se descontará el stock de cada producto.
+                    Si alguno ya se vendió y queda negativo, deberás hacer un ajuste manual
+                    en Inventario.
+                  </div>
+                )}
+                {annulOrder?.status === "PENDIENTE" && (
+                  <p className="text-xs text-muted-foreground">
+                    Como la orden estaba pendiente, no se modifica el stock.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Motivo (opcional)</Label>
+            <Textarea
+              value={annulReason}
+              onChange={(e) => setAnnulReason(e.target.value)}
+              placeholder="Ej: error de carga, proveedor canceló, etc."
+              rows={2}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                annulOC();
+              }}
+              disabled={annulLoading}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {annulLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Anular orden
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

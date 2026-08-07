@@ -964,3 +964,50 @@ Stage Summary:
   - Expense y PurchaseOrder sin flujo de edición (PUT)
   - PurchaseOrder sin acción "Anular"
   - Tablas de Product/Promotion/Invoice no muestran algunos campos secundarios (supplier, priority, caeVencimiento, etc.)
+
+---
+Task ID: completar-modulos-incompletos
+Agent: main (Super Z)
+Task: Arreglar vacíos funcionales detectados por el usuario: CashRegister.branchId no se seteaba desde UI; CashMovement.paymentMethod hardcodeado a EFECTIVO; sin filtros en Promociones/Sucursales/Reglas de Comisión/Cajas; sin PUT en Gastos/Órdenes de Compra; PurchaseOrder sin acción Anular; columnas faltantes (supplier en productos, priority en promos, caeVencimiento en facturas).
+
+Work Log:
+- Audité todos los módulos afectados: leí cash-register-view.tsx, promotions-view.tsx, branches-view.tsx, commissions-view.tsx, expenses-view.tsx, purchases-view.tsx, products-view.tsx, invoices-view.tsx + sus APIs correspondientes + el schema Prisma para confirmar que los campos existen en DB.
+- Confirmé que NO hacían falta migraciones: CashRegister.branchId, CashMovement.paymentMethod, Promotion.priority, Invoice.caeVencimiento, PurchaseOrder.status (ANULADA) y Product.supplierId ya existen en schema.prisma. Todos los cambios son de API + UI.
+- **CashRegister (multi-sucursal)**:
+  - API `GET /api/cash-registers`: agregué filtros `branchId` (con soporte para "null" = sin sucursal), `from`, `to`. Agregué `include: { branch }` para devolver la sucursal asociada.
+  - API `POST /api/cash-registers`: agregué `branchId` al body, validación de que la sucursal pertenece al store y está activa, y `data: { branchId }` en el create.
+  - API `POST /api/cash-registers/close`: agregué `include: { branch }` en la respuesta.
+  - UI: agregué selector de sucursal en diálogo "Abrir caja", cargando branches desde /api/branches. Agregué panel de filtros (Estado/Sucursal/Desde/Hasta) en el historial. Agregué columna "Sucursal" en la tabla de historial. Agregué badge de sucursal en el card "Apertura" del panel principal.
+- **CashMovement.paymentMethod (no más hardcodeo EFECTIVO)**:
+  - API `POST /api/cash-registers/movements`: ya aceptaba `paymentMethod` en body; lo dejé con default "EFECTIVO" para retrocompatibilidad.
+  - UI: agregué estado `movPaymentMethod` + selector en el diálogo de movimiento manual. Carga los métodos de pago activos desde /api/payment-methods y arma las opciones normalizadas (uppercase + underscore). Si no hay configurados, usa fallback EFECTIVO/TRANSFERENCIA/TARJETA. Agregué columna "Método" en la tabla de movimientos. Nota en el diálogo: solo EFECTIVO afecta el arqueo; los demás se registran para auditoría.
+- **Gastos — PUT completo**:
+  - API `PUT /api/expenses`: nuevo handler que valida admin, busca el gasto existente, elimina el movimiento de caja anterior (si existía con refType="Expense"), actualiza el gasto, y crea un nuevo movimiento de caja si el método es EFECTIVO y hay caja abierta. Solo ADMIN.
+  - API `GET /api/expenses`: agregué filtro `paymentMethod`.
+  - UI: agregué flujo de edición completo (openEdit, dialog con prefilled values, botón Editar en tabla, dialog dual new/edit, button label "Guardar cambios" en edición).
+- **Órdenes de Compra — PUT + Anular**:
+  - API `PUT /api/purchase-orders`: nuevo handler con reglas robustas:
+    - Solo ADMIN.
+    - Órdenes ANULADA no se pueden editar.
+    - Órdenes RECIBIDA solo pueden editar `notes` (los items ya entraron a stock).
+    - Órdenes PENDIENTE pueden editar items (se reemplazan todos en una tx, recalcula total), supplier y notes.
+  - API `POST /api/purchase-orders/annul` (nuevo archivo): anula orden PENDIENTE o RECIBIDA. Si era RECIBIDA, descuenta el stock de cada item con `decreaseStock` + `allowNegative: true` (permite stock negativo si ya se vendió, pero registra el movimiento SALIDA para trazabilidad). Devuelve `_warning` si algún producto quedó negativo.
+  - API `GET /api/purchase-orders`: agregué filtros `supplierId`, `from`, `to`.
+  - UI: agregué estado `ocEditingId` para modo edición del diálogo OC. Título dinámico "Nueva orden" / "Editar orden de compra". Botón Editar en tabla (solo para PENDIENTE). Botón Editar en diálogo de detalle (solo para PENDIENTE). Checkbox "Recibir ahora" deshabilitado en modo edición. Botón Anular en tabla y en diálogo de detalle. Diálogo de confirmación de anulación con alerta específica para RECIBIDA (stock se va a revertir). Toast warning si quedan productos con stock negativo. Filtros en tab de órdenes: Estado + Proveedor + Desde + Hasta.
+- **Filtros en Promociones**: agregué search (nombre/descripción), filterType, filterScope, filterActive (Todas/Activas/Pausadas). Panel de filtros con botón Limpiar y contador `filtered/total`. Empty state específico cuando hay filtros pero no resultados.
+- **Filtros en Sucursales**: agregué search (nombre/código/dirección/encargado/teléfono), filterActive (Todas/Activas/Inactivas). Panel de filtros con Limpiar + contador. Empty state específico.
+- **Filtros en Reglas de Comisión**: agregué ruleSearch (nombre/tipo/vendedor), ruleFilterUser, ruleFilterActive. Panel de filtros con Limpiar + contador. Empty state específico. Solo afecta al tab "Reglas"; el tab "Comisiones generadas" ya tenía sus propios filtros (status, user, from, to).
+- **Columnas faltantes**:
+  - Productos: agregué columna "Proveedor" (hidden en lg para no saturar pantallas chicas), mostrando `p.supplier?.name` con fallback "—". El campo ya venía del API (`include: { supplier: true }`).
+  - Promociones: agregué columna "Prioridad" entre Alcance y Vigencia, con Badge coloreado (indigo si priority > 0).
+  - Facturas: agregué columna "Venc. CAE" entre CAE y Estado, mostrando `formatDate(inv.caeVencimiento)`. El campo ya venía del API. Agregué `overflow-x-auto` wrapper porque la tabla ahora tiene 12 columnas.
+- **TypeScript + build check**: corrí `npx tsc --noEmit` y arreglé los dos errores que introduje: agregué `active?` al interface Branch en cash-register-view.tsx, y agregué imports de AlertDialog en purchases-view.tsx. Los demás errores TS son pre-existentes (import-dialog.tsx, pos-view.tsx, auth.ts, scripts de test). `npx next build` compiló exitosamente en 17.5s sin errores.
+
+Stage Summary:
+- **CashRegister**: multi-sucursal completo — branchId se setea desde UI al abrir caja, se filtra por sucursal en historial, se muestra en card de apertura y columna de historial.
+- **CashMovement**: paymentMethod totalmente configurable desde UI; el selector carga métodos activos del store con fallback. Columna Método agregada a tabla de movimientos.
+- **Filtros completos en 4 vistas**: Promociones (4 filtros), Sucursales (2 filtros), Reglas de Comisión (3 filtros), Cajas (4 filtros).
+- **PUT en Gastos y OC**: ambos con flujo de edición completo; PUT de gastos maneja correctamente la transición de EFECTIVO→otro y viceversa (elimina y recrea CashMovement); PUT de OC respeta reglas de negocio (ANULADA no se edita, RECIBIDA solo notes, PENDIENTE edita items con recálculo de total).
+- **PurchaseOrder Anular**: endpoint nuevo /api/purchase-orders/annul con manejo robusto de stock (descuenta con allowNegative para no bloquear anulación si ya se vendió). UI con diálogo de confirmación contextual (warning específico para RECIBIDA).
+- **Columnas faltantes**: supplier en productos (responsive lg), priority en promos, caeVencimiento en facturas. Todas con datos ya existentes en API responses.
+- **Build**: `next build` exitoso. 0 errores de compilación.

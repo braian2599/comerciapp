@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,8 @@ import {
   Percent,
   Gift,
   TrendingUp,
+  Search,
+  Filter as FilterIcon,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/constants";
 import { useAppStore } from "@/store/app-store";
@@ -141,6 +143,12 @@ export function PromotionsView() {
   const [form, setForm] = useState<any>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Filtros
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [filterScope, setFilterScope] = useState("all");
+  const [filterActive, setFilterActive] = useState("all");
 
   async function load() {
     setLoading(true);
@@ -265,6 +273,26 @@ export function PromotionsView() {
   const activeCount = promotions.filter((p) => p.active).length;
   const totalUsages = promotions.reduce((sum, p) => sum + p.usageCount, 0);
 
+  // Aplicar filtros client-side (la cantidad de promos es pequeña, no justifica backend)
+  const filtered = useMemo(() => {
+    return promotions.filter((p) => {
+      if (filterType !== "all" && p.type !== filterType) return false;
+      if (filterScope !== "all" && p.scope !== filterScope) return false;
+      if (filterActive === "active" && !p.active) return false;
+      if (filterActive === "paused" && p.active) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (
+          !p.name.toLowerCase().includes(q) &&
+          !(p.description || "").toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [promotions, filterType, filterScope, filterActive, search]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -322,6 +350,82 @@ export function PromotionsView() {
         </Card>
       </div>
 
+      {/* Filtros */}
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[200px] space-y-1">
+            <Label className="text-xs">Buscar</Label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Nombre o descripción..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Tipo</Label>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-36 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {PROMO_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Alcance</Label>
+            <Select value={filterScope} onValueChange={setFilterScope}>
+              <SelectTrigger className="w-40 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {SCOPES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Estado</Label>
+            <Select value={filterActive} onValueChange={setFilterActive}>
+              <SelectTrigger className="w-32 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="active">Activas</SelectItem>
+                <SelectItem value="paused">Pausadas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {(search || filterType !== "all" || filterScope !== "all" || filterActive !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setFilterType("all");
+                setFilterScope("all");
+                setFilterActive("all");
+              }}
+            >
+              Limpiar
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground ml-auto">
+            {filtered.length} / {promotions.length}
+          </span>
+        </CardContent>
+      </Card>
+
       {/* Tabla */}
       <Card>
         <CardContent className="p-0">
@@ -334,6 +438,11 @@ export function PromotionsView() {
               <Tag className="w-12 h-12 mx-auto mb-3 opacity-30" />
               <p>No hay promociones. Crea la primera.</p>
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <FilterIcon className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>No hay promociones que coincidan con los filtros.</p>
+            </div>
           ) : (
             <div className="overflow-x-auto max-h-[70vh]">
               <Table>
@@ -342,6 +451,7 @@ export function PromotionsView() {
                     <TableHead>Nombre</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Alcance</TableHead>
+                    <TableHead className="text-center">Prioridad</TableHead>
                     <TableHead>Vigencia</TableHead>
                     <TableHead>Usos</TableHead>
                     <TableHead>Estado</TableHead>
@@ -349,7 +459,7 @@ export function PromotionsView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {promotions.map((p) => (
+                  {filtered.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell>
                         <div>
@@ -377,6 +487,14 @@ export function PromotionsView() {
                         {p.scope === "CART" && "Carrito"}
                         {p.scope === "CATEGORY" && p.category?.name}
                         {p.scope === "PRODUCT" && p.product?.name}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={p.priority > 0 ? "bg-indigo-50 text-indigo-700 border-indigo-200" : ""}
+                        >
+                          {p.priority}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         <div>Desde {formatDate(p.startDate)}</div>

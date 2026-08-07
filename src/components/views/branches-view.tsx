@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +50,8 @@ import {
   MapPin,
   Phone,
   Star,
+  Search,
+  Filter as FilterIcon,
 } from "lucide-react";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 
@@ -78,6 +87,10 @@ export function BranchesView() {
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Filtros
+  const [search, setSearch] = useState("");
+  const [filterActive, setFilterActive] = useState("all");
+
   async function load() {
     setLoading(true);
     try {
@@ -94,6 +107,26 @@ export function BranchesView() {
   useEffect(() => {
     load();
   }, []);
+
+  const filtered = useMemo(() => {
+    return branches.filter((b) => {
+      if (filterActive === "active" && !b.active) return false;
+      if (filterActive === "inactive" && b.active) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (
+          !b.name.toLowerCase().includes(q) &&
+          !b.code.toLowerCase().includes(q) &&
+          !(b.address || "").toLowerCase().includes(q) &&
+          !(b.manager || "").toLowerCase().includes(q) &&
+          !(b.phone || "").includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [branches, search, filterActive]);
 
   function openNew() {
     setForm(emptyForm);
@@ -227,6 +260,52 @@ export function BranchesView() {
         </Card>
       </div>
 
+      {/* Filtros */}
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[200px] space-y-1">
+            <Label className="text-xs">Buscar</Label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Nombre, código, dirección, encargado..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Estado</Label>
+            <Select value={filterActive} onValueChange={setFilterActive}>
+              <SelectTrigger className="w-32 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="active">Activas</SelectItem>
+                <SelectItem value="inactive">Inactivas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {(search || filterActive !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setFilterActive("all");
+              }}
+            >
+              Limpiar
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground ml-auto">
+            {filtered.length} / {branches.length}
+          </span>
+        </CardContent>
+      </Card>
+
       {/* Tabla */}
       <Card>
         <CardContent className="p-0">
@@ -238,6 +317,11 @@ export function BranchesView() {
             <div className="p-12 text-center text-muted-foreground">
               <StoreIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
               <p>No hay sucursales. Crea la primera.</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <FilterIcon className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>No hay sucursales que coincidan con los filtros.</p>
             </div>
           ) : (
             <Table>
@@ -254,7 +338,7 @@ export function BranchesView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {branches.map((b) => (
+                {filtered.map((b) => (
                   <TableRow key={b.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">

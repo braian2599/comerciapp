@@ -45,6 +45,7 @@ import {
   Plus,
   Loader2,
   Trash2,
+  Pencil,
   TrendingDown,
   Calendar,
   Receipt,
@@ -64,10 +65,35 @@ export const EXPENSE_CATEGORIES = [
   { value: "OTROS", label: "Otros", icon: "package" },
 ];
 
+const PAYMENT_METHODS = [
+  { value: "EFECTIVO", label: "Efectivo" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+  { value: "TARJETA", label: "Tarjeta" },
+];
+
+interface Expense {
+  id: string;
+  category: string;
+  description: string;
+  amount: number;
+  paymentMethod: string;
+  date: string;
+  user?: { name: string };
+}
+
+const emptyForm = {
+  id: "",
+  category: "OTROS",
+  description: "",
+  amount: 0,
+  paymentMethod: "EFECTIVO",
+  date: new Date().toISOString().slice(0, 10),
+};
+
 export function ExpensesView() {
   const { store } = useAppStore();
   const symbol = store?.currencySymbol || "$";
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [total, setTotal] = useState(0);
   const [porCategoria, setPorCategoria] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -75,15 +101,11 @@ export function ExpensesView() {
   const [filterCat, setFilterCat] = useState("all");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState("all");
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    category: "OTROS",
-    description: "",
-    amount: 0,
-    paymentMethod: "EFECTIVO",
-    date: new Date().toISOString().slice(0, 10),
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<any>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -94,6 +116,7 @@ export function ExpensesView() {
       if (filterCat !== "all") params.set("category", filterCat);
       if (filterFrom) params.set("from", filterFrom);
       if (filterTo) params.set("to", filterTo);
+      if (filterPaymentMethod !== "all") params.set("paymentMethod", filterPaymentMethod);
       const { ok, data, error } = await safeFetchJSON<any>(`/api/expenses?${params.toString()}`);
       if (!ok) throw new Error(error);
       setExpenses(Array.isArray(data?.expenses) ? data.expenses : []);
@@ -111,7 +134,26 @@ export function ExpensesView() {
 
   useEffect(() => {
     load();
-  }, [filterCat, filterFrom, filterTo]);
+  }, [filterCat, filterFrom, filterTo, filterPaymentMethod]);
+
+  function openNew() {
+    setForm({ ...emptyForm });
+    setEditingId(null);
+    setOpen(true);
+  }
+
+  function openEdit(e: Expense) {
+    setForm({
+      id: e.id,
+      category: e.category,
+      description: e.description,
+      amount: e.amount,
+      paymentMethod: e.paymentMethod,
+      date: new Date(e.date).toISOString().slice(0, 10),
+    });
+    setEditingId(e.id);
+    setOpen(true);
+  }
 
   async function save() {
     if (!form.description || form.amount <= 0) {
@@ -120,21 +162,25 @@ export function ExpensesView() {
     }
     setSaving(true);
     try {
+      const isEdit = !!editingId;
+      const payload = {
+        ...(isEdit ? { id: editingId } : {}),
+        category: form.category,
+        description: form.description,
+        amount: Number(form.amount),
+        paymentMethod: form.paymentMethod,
+        date: form.date,
+      };
       const { ok, error } = await safeFetchJSON("/api/expenses", {
-        method: "POST",
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (!ok) throw new Error(error);
-      toast.success("Gasto registrado");
+      toast.success(isEdit ? "Gasto actualizado" : "Gasto registrado");
       setOpen(false);
-      setForm({
-        category: "OTROS",
-        description: "",
-        amount: 0,
-        paymentMethod: "EFECTIVO",
-        date: new Date().toISOString().slice(0, 10),
-      });
+      setForm({ ...emptyForm });
+      setEditingId(null);
       load();
     } catch (e: any) {
       toast.error("Error al guardar gasto", { description: e?.message });
@@ -166,7 +212,7 @@ export function ExpensesView() {
           </p>
         </div>
         <Button
-          onClick={() => setOpen(true)}
+          onClick={openNew}
           className="bg-red-600 hover:bg-red-700"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -218,6 +264,20 @@ export function ExpensesView() {
             </Select>
           </div>
           <div className="space-y-1">
+            <Label className="text-xs">Método de pago</Label>
+            <Select value={filterPaymentMethod} onValueChange={setFilterPaymentMethod}>
+              <SelectTrigger className="w-36 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {PAYMENT_METHODS.map((pm) => (
+                  <SelectItem key={pm.value} value={pm.value}>{pm.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs">Desde</Label>
             <Input
               type="date"
@@ -235,12 +295,13 @@ export function ExpensesView() {
               className="h-9 w-40"
             />
           </div>
-          {(filterCat !== "all" || filterFrom || filterTo) && (
+          {(filterCat !== "all" || filterFrom || filterTo || filterPaymentMethod !== "all") && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setFilterCat("all");
+                setFilterPaymentMethod("all");
                 setFilterFrom("");
                 setFilterTo("");
               }}
@@ -263,7 +324,7 @@ export function ExpensesView() {
             <div className="p-12 text-center">
               <TrendingDown className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
               <p className="text-sm text-muted-foreground">
-                No hay gastos registrados en este período
+                No hay gastos registrados con estos filtros
               </p>
             </div>
           ) : (
@@ -295,7 +356,7 @@ export function ExpensesView() {
                         </TableCell>
                         <TableCell className="text-sm">{e.description}</TableCell>
                         <TableCell className="text-center text-xs">
-                          {e.paymentMethod}
+                          <Badge variant="outline">{e.paymentMethod}</Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium text-red-700">
                           -{formatCurrency(e.amount, symbol)}
@@ -307,8 +368,18 @@ export function ExpensesView() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEdit(e)}
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 text-red-600"
                             onClick={() => setDeleteId(e.id)}
+                            title="Eliminar"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
@@ -323,13 +394,17 @@ export function ExpensesView() {
         </CardContent>
       </Card>
 
-      {/* Diálogo nuevo gasto */}
+      {/* Diálogo nuevo/editar gasto */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Registrar gasto</DialogTitle>
+            <DialogTitle>
+              {editingId ? "Editar gasto" : "Registrar gasto"}
+            </DialogTitle>
             <DialogDescription>
-              Los gastos en efectivo se descontarán automáticamente de la caja abierta.
+              {editingId
+                ? "Modificá los datos del gasto. Si cambiás el método de pago o el monto, el movimiento de caja asociado se actualizará."
+                : "Los gastos en efectivo se descontarán automáticamente de la caja abierta."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -364,6 +439,7 @@ export function ExpensesView() {
                 <Label>Monto *</Label>
                 <Input
                   type="number"
+                  step="1"
                   value={form.amount || ""}
                   onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
                   className="text-lg font-medium"
@@ -388,11 +464,16 @@ export function ExpensesView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-                  <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-                  <SelectItem value="TARJETA">Tarjeta</SelectItem>
+                  {PAYMENT_METHODS.map((pm) => (
+                    <SelectItem key={pm.value} value={pm.value}>{pm.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {form.paymentMethod === "EFECTIVO" && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                  Si hay una caja abierta, se registrará automáticamente un egreso en ella.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -405,7 +486,7 @@ export function ExpensesView() {
               className="bg-red-600 hover:bg-red-700"
             >
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Registrar gasto
+              {editingId ? "Guardar cambios" : "Registrar gasto"}
             </Button>
           </DialogFooter>
         </DialogContent>

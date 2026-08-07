@@ -46,6 +46,8 @@ import {
   Percent,
   TrendingUp,
   Coins,
+  Search,
+  Filter as FilterIcon,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import {
@@ -124,6 +126,11 @@ export function CommissionsView() {
   const [editingRule, setEditingRule] = useState<Partial<CommissionRule> | null>(null);
   const [savingRule, setSavingRule] = useState(false);
 
+  // Rules filters
+  const [ruleSearch, setRuleSearch] = useState("");
+  const [ruleFilterActive, setRuleFilterActive] = useState("all");
+  const [ruleFilterUser, setRuleFilterUser] = useState("all");
+
   // Commissions state
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [summary, setSummary] = useState<CommissionSummary[]>([]);
@@ -197,6 +204,26 @@ export function CommissionsView() {
       { total: 0, pending: 0, paid: 0, count: 0 }
     );
   }, [summary]);
+
+  // Aplicar filtros a las reglas client-side
+  const filteredRules = useMemo(() => {
+    return rules.filter((r) => {
+      if (ruleFilterActive === "active" && !r.active) return false;
+      if (ruleFilterActive === "inactive" && r.active) return false;
+      if (ruleFilterUser !== "all" && r.userId !== ruleFilterUser) return false;
+      if (ruleSearch) {
+        const q = ruleSearch.toLowerCase();
+        if (
+          !r.name.toLowerCase().includes(q) &&
+          !r.type.toLowerCase().includes(q) &&
+          !(r.user?.name || "").toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [rules, ruleFilterActive, ruleFilterUser, ruleSearch]);
 
   async function saveRule() {
     if (!editingRule) return;
@@ -332,6 +359,67 @@ export function CommissionsView() {
             </CardContent>
           </Card>
 
+          {/* Filtros de reglas */}
+          <Card>
+            <CardContent className="p-3 flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-[180px] space-y-1">
+                <Label className="text-xs">Buscar</Label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Nombre, tipo o vendedor..."
+                    value={ruleSearch}
+                    onChange={(e) => setRuleSearch(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Vendedor</Label>
+                <Select value={ruleFilterUser} onValueChange={setRuleFilterUser}>
+                  <SelectTrigger className="w-44 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Estado</Label>
+                <Select value={ruleFilterActive} onValueChange={setRuleFilterActive}>
+                  <SelectTrigger className="w-32 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="active">Activas</SelectItem>
+                    <SelectItem value="inactive">Inactivas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(ruleSearch || ruleFilterActive !== "all" || ruleFilterUser !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setRuleSearch("");
+                    setRuleFilterActive("all");
+                    setRuleFilterUser("all");
+                  }}
+                >
+                  Limpiar
+                </Button>
+              )}
+              <span className="text-sm text-muted-foreground ml-auto">
+                {filteredRules.length} / {rules.length}
+              </span>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardContent className="p-0">
               {loadingRules ? (
@@ -344,6 +432,13 @@ export function CommissionsView() {
                   <Percent className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
                   <p className="text-sm text-muted-foreground">
                     No hay reglas de comisión configuradas
+                  </p>
+                </div>
+              ) : filteredRules.length === 0 ? (
+                <div className="p-12 text-center">
+                  <FilterIcon className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    No hay reglas que coincidan con los filtros.
                   </p>
                 </div>
               ) : (
@@ -363,7 +458,7 @@ export function CommissionsView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rules.map((r) => (
+                      {filteredRules.map((r) => (
                         <TableRow key={r.id}>
                           <TableCell className="font-medium">{r.name}</TableCell>
                           <TableCell>{r.user.name}</TableCell>

@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   const register = await db.cashRegister.findFirst({
     where: { id, storeId, status: "ABIERTA" },
-    include: { movements: true, sales: true },
+    include: { movements: true, sales: true, branch: { select: { id: true, name: true, code: true } } },
   });
   if (!register) {
     return NextResponse.json({ error: "Caja no encontrada o ya cerrada" }, { status: 404 });
@@ -55,7 +55,11 @@ export async function POST(req: NextRequest) {
       difference,
       notes: notes ? (register.notes ? `${register.notes}\n---\n${notes}` : notes) : register.notes,
     },
-    include: { user: { select: { name: true } }, movements: true },
+    include: {
+      user: { select: { name: true } },
+      branch: { select: { id: true, name: true, code: true } },
+      movements: true,
+    },
   });
 
   return NextResponse.json(updated);

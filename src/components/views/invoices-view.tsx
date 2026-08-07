@@ -378,6 +378,7 @@ export function InvoicesView() {
               <p>No hay facturas para mostrar</p>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -390,6 +391,7 @@ export function InvoicesView() {
                   <TableHead className="text-right">IVA</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>CAE</TableHead>
+                  <TableHead>Venc. CAE</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -422,6 +424,9 @@ export function InvoicesView() {
                     <TableCell className="text-right">{formatCurrency(inv.ivaAmount, symbol)}</TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(inv.total, symbol)}</TableCell>
                     <TableCell className="font-mono text-xs">{inv.cae || "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {inv.caeVencimiento ? formatDate(inv.caeVencimiento) : "-"}
+                    </TableCell>
                     <TableCell>
                       {inv.status === "EMITIDA" && (
                         <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
@@ -457,6 +462,7 @@ export function InvoicesView() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
