@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Fragment } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { handleLogout } from "@/lib/logout";
 import { useAppStore, ViewKey } from "@/store/app-store";
 import { DashboardView } from "@/components/views/dashboard-view";
 import { PosView } from "@/components/views/pos-view";
@@ -406,7 +407,7 @@ export function AppShell() {
                 <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: "/" })}
+                  onClick={() => handleLogout(signOut as any)}
                   className="text-red-600 focus:text-red-700"
                 >
                   <LogOut className="w-4 h-4 mr-2" />

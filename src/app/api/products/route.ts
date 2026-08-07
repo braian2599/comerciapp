@@ -290,9 +290,13 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
 
+  const storeId = u.storeId;
+  const storeIdErr = requireStoreId(storeId);
+  if (storeIdErr) return storeIdErr;
+
   try {
     const existing = await db.product.findFirst({
-      where: { id, storeId: u.storeId },
+      where: { id, storeId },
     });
     if (!existing) {
       return NextResponse.json(
@@ -301,15 +305,55 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Soft delete: marcar como inactivo en lugar de borrar para preservar ventas históricas
-    await db.product.update({
-      where: { id },
-      data: { active: false },
-    });
+    // Contar referencias que impiden borrar (ventas, OCs, refunds).
+    // StockMovement y Promotion NO impiden borrar (Cascade / SetNull).
+    const [salesCount, purchasesCount, refundsCount] = await Promise.all([
+      db.saleItem.count({ where: { productId: id } }),
+      db.purchaseOrderItem.count({ where: { productId: id } }),
+      db.refundItem.count({ where: { productId: id } }),
+    ]);
 
-    return NextResponse.json({ ok: true });
+    const totalRefs = salesCount + purchasesCount + refundsCount;
+
+    if (totalRefs > 0) {
+      // Tiene historia: NO se puede borrar. Devolvemos info útil.
+      const details: string[] = [];
+      if (salesCount > 0) details.push(`${salesCount} venta(s)`);
+      if (purchasesCount > 0) details.push(`${purchasesCount} orden(es) de compra`);
+      if (refundsCount > 0) details.push(`${refundsCount} devolución(es)`);
+      return NextResponse.json(
+        {
+          error:
+            `No se puede eliminar porque tiene ${details.join(", ")} asociadas. ` +
+            "Estos registros históricos necesitan que el producto exista. " +
+            "Si no querés verlo más en el POS, desactivá el producto con el switch 'Activo'.",
+          blocked: true,
+          refs: { sales: salesCount, purchases: purchasesCount, refunds: refundsCount },
+        },
+        { status: 409 }
+      );
+    }
+
+    // Sin historia: hard delete. Se borra el producto + StockMovements
+    // (cascade) + Promotions (SetNull).
+    await db.product.delete({ where: { id } });
+
+    return NextResponse.json({ ok: true, deleted: true });
   } catch (e: any) {
     console.error("[DELETE /api/products] error:", e);
+    // Prisma puede tirar P2003 (foreign key constraint) si nos olvidamos
+    // de alguna relación. Lo manejamos graceful.
+    if (e?.code === "P2003") {
+      return NextResponse.json(
+        {
+          error:
+            "No se puede eliminar porque hay otros registros que dependen de este producto. " +
+            "Desactivá el producto con el switch 'Activo' en su lugar.",
+          blocked: true,
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: "No se pudo eliminar el producto" },
       { status: 500 }

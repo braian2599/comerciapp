@@ -324,7 +324,11 @@ export function ProductsView() {
       if (!ok) throw new Error(error);
       toast.success(form.id ? "Producto actualizado" : "Producto creado");
       setFormOpen(false);
-      load();
+      // AWAIT load() para asegurar que la lista se actualice antes de
+      // cerrar el spinner. Sin await, el finally setSaving(false)
+      // puede ejecutarse antes de que load() termine, dejando UI
+      // inconsistente.
+      await load();
     } catch (e: any) {
       const msg = e?.message || "No se pudo guardar el producto";
       toast.error("Error al guardar el producto", { description: msg });
@@ -341,9 +345,9 @@ export function ProductsView() {
         { method: "DELETE" }
       );
       if (!ok) throw new Error(error);
-      toast.success("Producto desactivado");
+      toast.success("Producto eliminado");
       setDeleteId(null);
-      load();
+      await load();
     } catch (e: any) {
       toast.error("Error al eliminar", { description: e.message });
     }
@@ -360,7 +364,7 @@ export function ProductsView() {
       toast.success("Categoría creada");
       setNewCatName("");
       setCatDialogOpen(false);
-      load();
+      await load();
     } catch (e: any) {
       toast.error("Error al crear categoría", { description: e.message });
     }
@@ -374,7 +378,7 @@ export function ProductsView() {
       });
       if (!ok) throw new Error(error);
       toast.success("Categoría eliminada");
-      load();
+      await load();
     } catch (e: any) {
       toast.error("Error al eliminar categoría", { description: e.message });
     }
@@ -1118,10 +1122,11 @@ export function ProductsView() {
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Desactivar producto?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
             <AlertDialogDescription>
-              El producto se marcará como inactivo y no aparecerá en el POS.
-              Las ventas históricas se conservan. Podés reactivarlo cuando quieras.
+              El producto se eliminará permanentemente. Si tiene ventas,
+              órdenes de compra o devoluciones asociadas, no se podrá borrar
+              y te avisaremos cuáles son los impedimentos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1130,7 +1135,7 @@ export function ProductsView() {
               onClick={handleDelete}
               className="bg-red-600 hover:bg-red-700"
             >
-              Desactivar
+              Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
