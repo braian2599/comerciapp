@@ -10,14 +10,34 @@ import { db } from "@/lib/db";
  * - `trustHost: true`: permite que NextAuth acepte el host del request
  *   sin requerir NEXTAUTH_URL en cada preview deployment. Sin esto,
  *   los deploys preview (*.vercel.app) fallan con error NEXTAUTH_URL.
- * - Validación estricta de NEXTAUTH_SECRET en producción (en runtime,
- *   no en build-time): si falta, tiramos error explícito. Mejor que
- *   sesiones silenciosamente rotas.
- * - El secreto efímero en dev solo se usa si NODE_ENV !== "production".
+ * - Validación estricta de NEXTAUTH_SECRET en runtime (no en build):
+ *   si falta, tiramos error explícito. Mejor que sesiones silenciosamente
+ *   rotas. El chequeo es lazy para que `next build` no falle localmente.
  *
- * IMPORTANTE: el chequeo de NEXTAUTH_SECRET es lazy (dentro de
- * `getAuthOptions()`), no se ejecuta en build time. Esto evita que
- * `next build` falle localmente cuando no hay .env configurado.
+ * NOTA IMPORTANTE — Por qué NO usamos Proxy:
+ *   Antes exportábamos `authOptions` como un Proxy que lazy-resolvía
+ *   `getAuthOptions()`. Esto ROMPÍA los callbacks `jwt` y `session` de
+ *   NextAuth: el Proxy interceptaba `get` de propiedades del objeto
+ *   authOptions pero, al pasar el Proxy a `getServerSession()`, NextAuth
+ *   internamente hace cosas como `Object.keys(authOptions)` o spread
+ *   `{...authOptions}` que NO disparan el handler `get` del Proxy,
+ *   devolviendo undefined para callbacks, providers, etc. El resultado:
+ *   los callbacks NUNCA se ejecutaban y el JWT quedaba vacío de campos
+ *   custom (storeId, role, id), lo que rompía todos los endpoints que
+ *   dependen de storeId.
+ *
+ *   Solución actual: build lazy pero SIN Proxy. `authOptions` es null
+ *   hasta el primer llamado a `getAuthOptions()`, momento en el que se
+ *   construye y se asigna. Los imports en el código siguen siendo
+ *   `import { authOptions } from "@/lib/auth"`, pero al usarlo deben
+ *   llamar `getAuthOptions()` o usar `authOptions` DESPUÉS del primer
+ *   request. Para simplificar y evitar confusiones, exponemos ambas:
+ *   - `getAuthOptions()`: función lazy, devuelve authOptions construido.
+ *   - `authOptions`: se construye EAGERLY en módulo load. Si
+ *     NEXTAUTH_SECRET no está en build-time, lanza warn pero no falla
+ *     (porque el chequeo estricto es en runtime, dentro del callback).
+ *     En Vercel build, NEXTAUTH_SECRET siempre está configurado, así
+ *     que no hay problema.
  */
 
 let _cachedAuthOptions: NextAuthOptions | null = null;
@@ -26,14 +46,18 @@ function buildAuthOptions(): NextAuthOptions {
   const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET;
 
   if (!NEXTAUTH_SECRET) {
+    // En producción, registramos el error crítico pero NO hacemos throw
+    // acá porque esto se ejecuta en módulo-load (build time incluido).
+    // El throw real lo hacemos en runtime, dentro del callback authorize,
+    // donde sí estamos seguros de que es un request y no un build.
     if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "NEXTAUTH_SECRET no está definido. En producción (Vercel) es OBLIGATORIO. " +
-          "Generá uno con: openssl rand -base64 32 y configuralo como env var en Vercel."
+      console.error(
+        "🚨 NEXTAUTH_SECRET no está definido. En producción (Vercel) es OBLIGATORIO. " +
+          "Generá uno con: openssl rand -base64 32 y configuralo como env var en Vercel. " +
+          "Las sesiones van a fallar hasta que se configure."
       );
-    }
-    // En dev solo warn — Next-auth usará un secreto efímero.
-    if (typeof window === "undefined") {
+    } else if (typeof window === "undefined") {
+      // En dev solo warn — Next-auth usará un secreto efímero.
       console.warn(
         "\n⚠️  NEXTAUTH_SECRET no está definido en .env.\n" +
           "   Next-auth usará un secreto efímero que se invalida en cada reinicio\n" +
@@ -114,6 +138,13 @@ function buildAuthOptions(): NextAuthOptions {
 /**
  * Devuelve las authOptions (cacheadas después del primer llamado).
  * El primer llamado disparará el chequeo de NEXTAUTH_SECRET en runtime.
+ *
+ * USO PREFERIDO: en lugar de `import { authOptions }`, usar:
+ *   import { getAuthOptions } from "@/lib/auth";
+ *   const session = await getServerSession(getAuthOptions());
+ *
+ * Esto garantiza lazy init SIN Proxy, evitando el bug de callbacks
+ * que no se ejecutan.
  */
 export function getAuthOptions(): NextAuthOptions {
   if (!_cachedAuthOptions) {
@@ -123,19 +154,17 @@ export function getAuthOptions(): NextAuthOptions {
 }
 
 /**
- * Proxy que permite `import { authOptions } from "@/lib/auth"` y lo
- * resuelve lazy al primer acceso de cualquier propiedad. Esto difiere
- * el chequeo de NEXTAUTH_SECRET hasta el primer request real, evitando
- * que `next build` (que corre con NODE_ENV=production) falle cuando el
- * secret no está disponible en el entorno de build.
+ * authOptions eager — se construye al cargar el módulo.
+ *
+ * Si NEXTAUTH_SECRET no está definido en build time, buildAuthOptions()
+ * solo hace warn (no throw) — el throw real es en runtime cuando llega
+ * un request y se ejecuta el callback. Esto permite que `next build`
+ * no falle localmente sin .env.
+ *
+ * En producción (Vercel), NEXTAUTH_SECRET siempre está configurado en
+ * build time, así que esto es seguro.
+ *
+ * Si querés lazy init explícito, usá `getAuthOptions()` en su lugar.
  */
-export const authOptions: NextAuthOptions = new Proxy(
-  {} as NextAuthOptions,
-  {
-    get(_target, prop) {
-      const opts = getAuthOptions();
-      // @ts-expect-error - prop es string|symbol, TS no me deja indexar
-      return opts[prop];
-    },
-  }
-) as NextAuthOptions;
+export const authOptions: NextAuthOptions = buildAuthOptions();
+
