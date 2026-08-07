@@ -807,3 +807,45 @@ Stage Summary:
 - Vistas que ahora actualizan en tiempo real: products-view, customers-view, settings-view (payment-methods), pos-view (products+customers), purchases-view (product dropdown), dashboard-view (metrics)
 - Comportamiento offline preservado: networkFirstShort cae a cache si la red falla; handleOfflineMutation encola mutaciones para background sync
 - Para que el fix tome efecto en el browser del usuario: el navegador detecta el nuevo sw.js en la próxima navegación/recarga. Con skipWaiting()+clients.claim(), el SW v5 activa inmediatamente y flushea caches v4. No requiere recargas múltiples.
+
+---
+Task ID: opcion-b-facturacion-flexible
+Agent: main
+Task: Implementar "Opción B" de facturación flexible: cada método de pago se configura una vez con "requiere factura", el POS guía al usuario (botón "Facturar ahora" si requiere), se puede facturar después desde el módulo Facturas, y el cobro nunca depende de AFIP en tiempo real.
+
+Work Log:
+- Audité el estado actual: PaymentMethod no tenía flag de factura, POS no tenía concepto de "facturar ahora", invoices-view ya tenía "facturar después", Sale↔Invoice ya era 1:1, AFIP ya funcionaba (demo + prod). El cobro ya no llamaba AFIP.
+- Fase 1 — Schema: agregué `requiresInvoice Boolean @default(false)` a PaymentMethod en prisma/schema.prisma con comentario explicativo. Generé migration SQL a mano en prisma/migrations/20260808000001_add_payment_method_requires_invoice/migration.sql (la DB local es SQLite pero prod es Postgres; Vercel aplicará la migration en deploy). Regeneré Prisma Client.
+- Fase 2 — API payment-methods: extendí POST y PUT en src/app/api/payment-methods/route.ts para aceptar y persistir `requiresInvoice: Boolean(body.requiresInvoice)`.
+- Fase 2b — API invoices: en src/app/api/invoices/route.ts, cambié el bloque "La venta ya tiene factura asociada" por lógica de retry: si la invoice existente está EMITIDA o ANULADA, bloquea (no se puede refacturar); si está RECHAZADA o PENDIENTE, la borra y permite reemitir. Preserva la constraint unique saleId.
+- Fase 3 — Settings UI: en src/lib/types.ts agregué `requiresInvoice: boolean` a PaymentMethod. En src/components/views/settings-view.tsx: actualicé interface local, agregué `requiresInvoice: false` a methodForm y openNewMethod, agregué columna "Factura" en la tabla con badge "Requiere" (amber), y en el diálogo de editar/crear agregué un Switch "Requiere factura" con bloque destacado azul/amber y texto explicativo de Opción B.
+- Fase 4 — POS UI (src/components/views/pos-view.tsx):
+  - Refactoricé processSale para aceptar parámetro `facturarAhora: boolean`. Tras persistir la venta con POST /api/sales, si facturarAhora=true, llama POST /api/invoices con { saleId, concepto: 'PRODUCTOS' }. Si la factura falla (AFIP caído, TA expirado, CUIT inválido), NO revierte la venta — toast de error y deja la venta persistida para retry desde Facturas. Si funciona, toast con numeroCompleto + CAE.
+  - Importé FileText de lucide-react.
+  - En el confirm dialog, si selectedMethod.requiresInvoice: muestro bloque azul destacado explicando que el método requiere factura y que puede facturarse ahora o después; si hay cliente seleccionado, ofrezco DOS botones: "Facturar ahora" (azul, llama processSale(true)) y "Facturar después" (índigo, llama processSale(false)). Si no hay cliente, solo "Facturar después" y aviso que para facturar ahora hace falta cliente.
+  - setLastSale ahora incluye `invoice` (null si no se facturó o falló) y `facturarAhoraIntentado` (bool).
+- Fase 4b — POS receipt: en el Sheet de recibo, agregué tres bloques condicionales después del cliente:
+  1. Si lastSale.invoice existe: bloque verde con "Factura {tipo} · {numeroCompleto}", CAE, vencimiento CAE, "Autorizada por AFIP".
+  2. Si no hay invoice pero facturarAhoraIntentado=true: bloque amber "Factura pendiente" con instrucciones de retry.
+  3. Si no hay invoice y el método requiere factura: bloque azul "Pendiente de facturar" con instrucciones de emitir desde Facturas.
+- Fase 5 — Invoices view (src/components/views/invoices-view.tsx): en load(), las ventas pendientes de facturar ahora se ordenan con requiresInvoice=true primero (más recientes dentro de cada grupo). En el dropdown del diálogo "Nueva Factura", cada item muestra "★ " prefix y "(requiere factura)" suffix cuando corresponde, para que el usuario identifique rápidamente las urgentes.
+- Fase 6 — Build: ✓ Compiled successfully in 19.6s. Type-check en src/: 0 errores. Scripts legacy con errores preexistentes (no relacionados, no se incluyen en build de Next.js).
+
+Stage Summary:
+- Schema: 1 campo nuevo (PaymentMethod.requiresInvoice Boolean @default(false))
+- Migration: 1 archivo SQL nuevo (20260808000001_add_payment_method_requires_invoice)
+- APIs modificadas: 2 (payment-methods POST/PUT +requiresInvoice; invoices POST retry logic)
+- Tipos: 2 (types.ts PaymentMethod +requiresInvoice; settings-view interface local +requiresInvoice)
+- UI Settings: 1 Switch nuevo "Requiere factura" con bloque explicativo + 1 columna "Factura" en tabla con badge
+- UI POS: processSale refactorizado con parámetro facturarAhora + confirm dialog con bloque destacado y 2 botones + receipt con 3 bloques condicionales (factura OK / pendiente / pendiente de facturar)
+- UI Invoices: sort requiresInvoice-primero + label "★ (requiere factura)" en dropdown
+- Build: ✓ Compiled successfully in 19.6s, 0 errores en src/
+- Flujo Opción B implementado end-to-end:
+  1. Admin marca "Requiere factura" en un método de pago (ej: Transferencia) desde Configuración → Métodos de pago
+  2. Cajero cobra con ese método → confirm dialog muestra bloque azul "Este método requiere factura" + botones "Facturar ahora" / "Facturar después"
+  3. Si "Facturar ahora": POST /api/sales persiste venta → POST /api/invoices emite factura contra AFIP → receipt muestra bloque verde con CAE. Si AFIP falla, venta queda persistida y receipt muestra bloque amber "Factura pendiente".
+  4. Si "Facturar después": venta persistida, receipt muestra bloque azul "Pendiente de facturar".
+  5. Desde Facturas: el dropdown ordena primero las ventas con requiresInvoice, marcadas con "★ (requiere factura)".
+  6. Retry: si una factura quedó RECHAZADA/PENDIENTE, POST /api/invoices la borra y reemite sin bloquear.
+- Non-blocking garantizado: el cobro NUNCA llama AFIP directamente. /api/sales es puramente DB. /api/invoices se llama después, separado, y su fallo no afecta la venta.
+- Sin cambios en: refunds, credit-notes, reports, dashboard, printer, AFIP prod (afip-prod.ts). Todos estos ya leen de sale.invoice, así que automáticamente muestran CAE cuando la factura se emite.

@@ -87,8 +87,20 @@ export function InvoicesView() {
         safeFetchJSON<any>("/api/tax-config"),
       ]);
       setInvoices(inv);
-      // Solo ventas sin factura y completadas
-      setSales(sal.filter((s: any) => !s.invoice && s.status === "COMPLETADA"));
+      // Solo ventas sin factura y completadas.
+      // Opción B: ordenamos para que aparezcan primero las ventas cuyo
+      // método de pago tiene requiresInvoice=true (son las que el usuario
+      // marcó como "requiere factura" pero todavía no facturó).
+      const pending = sal
+        .filter((s: any) => !s.invoice && s.status === "COMPLETADA")
+        .sort((a: any, b: any) => {
+          const aReq = a.paymentMethodRef?.requiresInvoice ? 1 : 0;
+          const bReq = b.paymentMethodRef?.requiresInvoice ? 1 : 0;
+          if (aReq !== bReq) return bReq - aReq; // requiresInvoice primero
+          // dentro del mismo grupo, más recientes primero
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+      setSales(pending);
       if (tax.ok && tax.data && !Array.isArray(tax.data) && typeof tax.data === "object") {
         setTaxConfig(tax.data);
       }
@@ -445,7 +457,9 @@ export function InvoicesView() {
                   ) : (
                     sales.slice(0, 50).map((s: any) => (
                       <SelectItem key={s.id} value={s.id}>
+                        {s.paymentMethodRef?.requiresInvoice ? "★ " : ""}
                         {formatDate(s.createdAt)} - {s.customer?.name || "Consumidor Final"} - {formatCurrency(s.total, symbol)}
+                        {s.paymentMethodRef?.requiresInvoice ? " (requiere factura)" : ""}
                       </SelectItem>
                     ))
                   )}

@@ -66,8 +66,28 @@ export async function POST(req: NextRequest) {
     if (!saleData) {
       return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
     }
+    // Opción B: si la venta ya tiene una factura EMITIDA, no se puede
+    // refacturar (una venta = una factura). Pero si la factura previa está
+    // RECHAZADA o PENDIENTE (AFIP caído, error de TA, CUIT inválido, etc.),
+    // permitimos retry: borramos la invoice fallida para que emitirFactura
+    // pueda crear una nueva. Esto preserva la constraint unique saleId.
     if (saleData.invoice) {
-      return NextResponse.json({ error: "La venta ya tiene factura asociada" }, { status: 400 });
+      const prevStatus = saleData.invoice.status;
+      if (prevStatus === "EMITIDA") {
+        return NextResponse.json(
+          { error: "La venta ya tiene factura asociada (EMITIDA)" },
+          { status: 400 }
+        );
+      }
+      if (prevStatus === "ANULADA") {
+        return NextResponse.json(
+          { error: "La factura anterior fue anulada. No se puede refacturar la venta." },
+          { status: 400 }
+        );
+      }
+      // RECHAZADA o PENDIENTE → borrar para permitir retry
+      await db.invoice.delete({ where: { id: saleData.invoice.id } });
+      saleData.invoice = null; // para que emitirFactura no la considere
     }
     if (saleData.status === "ANULADA") {
       return NextResponse.json({ error: "No se puede facturar una venta anulada" }, { status: 400 });

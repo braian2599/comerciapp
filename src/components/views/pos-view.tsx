@@ -50,6 +50,7 @@ import {
   AlertCircle,
   Check,
   Save,
+  FileText,
 } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
 import { formatCurrency, unitLabel } from "@/lib/constants";
@@ -743,7 +744,11 @@ export function PosView() {
   }
 
   // ─── Procesar venta ──────────────────────────────────────────────────────────
-  async function processSale() {
+  // Opción B: `facturarAhora` controla si, tras persistir la venta, se llama
+  // sincrónicamente a /api/invoices para emitir factura contra AFIP. La venta
+  // se persiste PRIMERO (no depende de AFIP); si la facturación falla, la
+  // venta ya está guardada y el usuario puede reintentar desde Facturas.
+  async function processSale(facturarAhora: boolean = false) {
     if (cart.length === 0) {
       toast.error("El carrito está vacío");
       return;
@@ -754,6 +759,10 @@ export function PosView() {
     }
     if (selectedMethod?.type === "CUENTA" && !customerId) {
       toast.error("Para cuenta corriente tenés que seleccionar un cliente");
+      return;
+    }
+    if (facturarAhora && !customerId) {
+      toast.error("Para facturar necesitás seleccionar un cliente con CUIT/DNI");
       return;
     }
     setProcessing(true);
@@ -781,6 +790,46 @@ export function PosView() {
       }
       const data = saleRes.data;
       toast.success("Venta registrada!");
+
+      // Opción B: si el usuario eligió facturar ahora, intentamos emitir la
+      // factura contra AFIP. Si falla (AFIP caído, TA expirado, CUIT
+      // inválido, etc.), NO revertimos la venta — ya está persistida.
+      // Mostramos un toast con el error y dejamos la venta marcada como
+      // "pendiente de facturar" para que el usuario pueda reintentar desde
+      // el módulo Facturas.
+      let invoiceData: any = null;
+      if (facturarAhora) {
+        try {
+          const invRes = await safeFetchJSON<any>("/api/invoices", {
+            method: "POST",
+            body: JSON.stringify({
+              saleId: data.id,
+              concepto: "PRODUCTOS",
+            }),
+          });
+          if (invRes.ok && invRes.data) {
+            invoiceData = invRes.data;
+            toast.success(
+              `Factura ${invoiceData.numeroCompleto} emitida. CAE: ${invoiceData.cae}`,
+              { description: "La factura fue autorizada por AFIP." }
+            );
+          } else {
+            // La venta ya está guardada — avisar pero no fallar.
+            toast.error("No se pudo emitir la factura", {
+              description:
+                invRes.error ||
+                "AFIP rechazó la solicitud. Podés reintentar desde Facturas.",
+            });
+          }
+        } catch (invErr: any) {
+          toast.error("No se pudo emitir la factura", {
+            description:
+              invErr?.message ||
+              "Error de red. La venta quedó registrada; reintentá desde Facturas.",
+          });
+        }
+      }
+
       setLastSale({
         ...data,
         items: cart,
@@ -794,6 +843,8 @@ export function PosView() {
         appliedPromotion,
         pointsUsed: effectivePointsToRedeem,
         pointsEarned: data.loyaltyPointsEarned || 0,
+        invoice: invoiceData, // null si no se facturó o si falló
+        facturarAhoraIntentado: facturarAhora,
       });
       setConfirmOpen(false);
       setReceiptOpen(true);
@@ -1491,6 +1542,31 @@ export function PosView() {
                 saldarla después.
               </div>
             )}
+
+            {selectedMethod?.requiresInvoice && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <FileText className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-blue-900 space-y-1">
+                    <p className="font-medium">
+                      Este método de pago requiere factura
+                    </p>
+                    <p>
+                      Podés facturar ahora (AFIP emite CAE en el acto) o
+                      confirmar la venta y facturarla después desde el módulo
+                      Facturas. El cobro no depende de AFIP — la venta se
+                      registra primero.
+                    </p>
+                    {!customerId && (
+                      <p className="text-amber-700">
+                        Para facturar ahora necesitás seleccionar un cliente
+                        con CUIT/DNI.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -1502,9 +1578,23 @@ export function PosView() {
             >
               Cancelar
             </Button>
+            {selectedMethod?.requiresInvoice && customerId && (
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                onClick={() => processSale(true)}
+                disabled={processing}
+              >
+                {processing ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <FileText className="w-4 h-4 mr-2" />
+                )}
+                Facturar ahora
+              </Button>
+            )}
             <Button
               className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-              onClick={processSale}
+              onClick={() => processSale(false)}
               disabled={processing}
             >
               {processing ? (
@@ -1512,7 +1602,9 @@ export function PosView() {
               ) : (
                 <CheckCircle2 className="w-4 h-4 mr-2" />
               )}
-              Confirmar venta
+              {selectedMethod?.requiresInvoice
+                ? "Facturar después"
+                : "Confirmar venta"}
             </Button>
           </div>
         </DialogContent>
@@ -1779,6 +1871,58 @@ export function PosView() {
                   Cliente: <strong>{lastSale.customer.name}</strong>
                 </p>
               )}
+
+              {lastSale.invoice ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 space-y-1.5">
+                  <div className="flex items-center gap-2 text-emerald-800">
+                    <FileText className="w-4 h-4" />
+                    <span className="font-semibold text-sm">
+                      Factura {lastSale.invoice.tipo} ·{" "}
+                      {lastSale.invoice.numeroCompleto}
+                    </span>
+                  </div>
+                  {lastSale.invoice.cae && (
+                    <p className="text-xs text-emerald-700">
+                      CAE: <strong>{lastSale.invoice.cae}</strong>
+                    </p>
+                  )}
+                  {lastSale.invoice.caeVencimiento && (
+                    <p className="text-xs text-emerald-700">
+                      Vto. CAE:{" "}
+                      {new Date(lastSale.invoice.caeVencimiento).toLocaleDateString("es-AR")}
+                    </p>
+                  )}
+                  <p className="text-xs text-emerald-600">
+                    Autorizada por AFIP
+                  </p>
+                </div>
+              ) : lastSale.facturarAhoraIntentado ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="font-semibold text-sm">
+                      Factura pendiente
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    La venta se registró pero la factura no pudo emitirse.
+                    Reintentá desde el módulo Facturas.
+                  </p>
+                </div>
+              ) : lastSale.paymentMethod?.requiresInvoice ? (
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 space-y-1">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <FileText className="w-4 h-4" />
+                    <span className="font-semibold text-sm">
+                      Pendiente de facturar
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-700">
+                    Este método de pago requiere factura. Emitila desde el
+                    módulo Facturas cuando quieras.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="space-y-1">
                 {lastSale.items.map((i: CartItem) => (

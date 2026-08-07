@@ -247,15 +247,20 @@ model SaleItem {
 
 // ===== MÉTODO DE PAGO =====
 model PaymentMethod {
-  id        String   @id @default(cuid())
-  storeId   String
-  name      String // Efectivo, Tarjeta Crédito, etc.
-  type      String // EFECTIVO, TARJETA_CREDITO, TARJETA_DEBITO, TRANSFERENCIA, CUENTA, OTRO
-  surcharge Float    @default(0) // porcentaje de recargo (ej: 10 = +10%)
-  active    Boolean  @default(true)
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  storeId         String
+  name            String // Efectivo, Tarjeta Crédito, etc.
+  type            String // EFECTIVO, TARJETA_CREDITO, TARJETA_DEBITO, TRANSFERENCIA, CUENTA, OTRO
+  surcharge       Float    @default(0) // porcentaje de recargo (ej: 10 = +10%)
+  active          Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  // Opción B: si true, al cobrar con este método el POS ofrecerá facturar la
+  // venta. La factura puede emitirse en el momento (botón "Facturar ahora" en
+  // el checkout) o después desde el módulo Facturas. El cobro nunca depende
+  // de AFIP en tiempo real — la venta se persiste primero, la factura después.
+  requiresInvoice Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
   sales Sale[]

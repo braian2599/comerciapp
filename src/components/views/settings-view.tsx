@@ -49,6 +49,7 @@ interface PaymentMethod {
   surcharge: number;
   active: boolean;
   isDefault: boolean;
+  requiresInvoice: boolean;
 }
 
 export function SettingsView() {
@@ -77,6 +78,7 @@ export function SettingsView() {
     surcharge: 0,
     active: true,
     isDefault: false,
+    requiresInvoice: false,
   });
   const [methodSaving, setMethodSaving] = useState(false);
 
@@ -277,6 +279,7 @@ export function SettingsView() {
       surcharge: 0,
       active: true,
       isDefault: methods.length === 0,
+      requiresInvoice: false,
     });
     setMethodDialogOpen(true);
   }
@@ -597,6 +600,7 @@ export function SettingsView() {
                     <TableHead>Nombre</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead className="text-right">Recargo</TableHead>
+                    <TableHead className="text-center">Factura</TableHead>
                     <TableHead className="text-center">Predeterminado</TableHead>
                     <TableHead className="text-center">Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -621,6 +625,15 @@ export function SettingsView() {
                           <span className="text-amber-700 font-medium">
                             +{m.surcharge}%
                           </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {m.requiresInvoice ? (
+                          <Badge className="bg-amber-100 text-amber-800">
+                            Requiere
+                          </Badge>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -762,6 +775,28 @@ export function SettingsView() {
                   }
                 />
                 <Label htmlFor="mDefault">Predeterminado</Label>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <Switch
+                id="mRequiresInvoice"
+                checked={methodForm.requiresInvoice}
+                onCheckedChange={(v) =>
+                  setMethodForm({ ...methodForm, requiresInvoice: v })
+                }
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="mRequiresInvoice" className="text-amber-900">
+                  Requiere factura
+                </Label>
+                <p className="text-xs text-amber-800">
+                  Si está activo, al cobrar con este método el POS ofrecerá
+                  facturar la venta (botón “Facturar ahora”). La factura puede
+                  emitirse en el momento o después desde el módulo Facturas.
+                  El cobro nunca depende de AFIP en tiempo real — la venta se
+                  registra primero, la factura después.
+                </p>
               </div>
             </div>
           </div>

@@ -67,4 +67,6 @@ export interface PaymentMethod {
   surcharge: number;
   active: boolean;
   isDefault: boolean;
+  // Opción B: si true, el POS ofrece facturar al cobrar con este método.
+  requiresInvoice: boolean;
 }

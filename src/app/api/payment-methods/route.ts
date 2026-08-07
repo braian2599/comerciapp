@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       surcharge: Number(body.surcharge) || 0,
       active: body.active ?? true,
       isDefault: body.isDefault ?? false,
+      requiresInvoice: Boolean(body.requiresInvoice),
       storeId,
     },
   });
@@ -76,6 +77,7 @@ export async function PUT(req: NextRequest) {
       surcharge: Number(body.surcharge) || 0,
       active: body.active ?? true,
       isDefault: body.isDefault ?? false,
+      requiresInvoice: Boolean(body.requiresInvoice),
     },
   });
   return NextResponse.json(updated);
