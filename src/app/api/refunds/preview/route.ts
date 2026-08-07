@@ -42,8 +42,19 @@ export async function POST(req: NextRequest) {
   }
 
   const { saleId, items } = body;
-  if (!saleId) {
-    return NextResponse.json({ error: "Falta saleId" }, { status: 400 });
+  if (typeof saleId !== "string" || saleId.length === 0) {
+    return NextResponse.json(
+      { error: "saleId inválido: se esperaba string no vacío" },
+      { status: 400 }
+    );
+  }
+  // items puede ser undefined/null (→ total) o array. Cualquier otra cosa
+  // es un error de cliente. La validación profunda la hace calculateRefundTotals.
+  if (items != null && !Array.isArray(items)) {
+    return NextResponse.json(
+      { error: `items inválido: se esperaba array, se recibió ${typeof items}` },
+      { status: 400 }
+    );
   }
 
   // Cargar venta con items
@@ -78,7 +89,7 @@ export async function POST(req: NextRequest) {
           subtotal: i.subtotal,
         })),
       },
-      items || []
+      items
     );
   } catch (e: any) {
     return NextResponse.json(

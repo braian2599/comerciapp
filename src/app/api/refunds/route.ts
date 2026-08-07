@@ -77,7 +77,39 @@ export async function POST(req: NextRequest) {
   const u = session.user as any;
   const storeId = u.storeId;
 
-  const body = await req.json();
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Body inválido: JSON malformado" },
+      { status: 400 }
+    );
+  }
+
+  // 0. Validar tipos básicos ANTES de tocar la DB.
+  //    Esto evita 500s por entradas malformadas y da mensajes claros.
+  if (typeof body.saleId !== "string" || body.saleId.length === 0) {
+    return NextResponse.json(
+      { error: "saleId inválido: se esperaba string no vacío" },
+      { status: 400 }
+    );
+  }
+  // items puede ser undefined/null (→ devolución total) o array.
+  // Cualquier otra cosa es error de cliente. La validación profunda
+  // (pertenencia, duplicados, rangos) la hace calculateRefundTotals.
+  if (body.items != null && !Array.isArray(body.items)) {
+    return NextResponse.json(
+      { error: `items inválido: se esperaba array, se recibió ${typeof body.items}` },
+      { status: 400 }
+    );
+  }
+  if (body.refundMethod != null && typeof body.refundMethod !== "string") {
+    return NextResponse.json(
+      { error: "refundMethod inválido: se esperaba string" },
+      { status: 400 }
+    );
+  }
 
   // 1. Validar venta
   const sale = await db.sale.findFirst({
@@ -120,9 +152,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2. Determinar items a devolver y montos (cálculo delegado a lib/refund-calc)
-  const requestedItems: Array<{ saleItemId: string; quantity: number }> = body.items || [];
-
+  // 2. Determinar items a devolver y montos (cálculo delegado a lib/refund-calc).
+  //    Pasamos body.items directamente (undefined/null → devolución total).
+  //    La lib valida Array.isArray, tipos, pertenencia, duplicados y rangos.
   let refundCalc;
   try {
     refundCalc = calculateRefundTotals(
@@ -142,7 +174,7 @@ export async function POST(req: NextRequest) {
           subtotal: i.subtotal,
         })),
       },
-      requestedItems
+      body.items
     );
   } catch (e: any) {
     return NextResponse.json(
