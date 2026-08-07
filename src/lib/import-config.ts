@@ -256,6 +256,14 @@ export const SUPPLIER_IMPORT_FIELDS: ImportField[] = [
     type: "text",
     aliases: ["notes", "notas", "observaciones", "obs"],
   },
+  {
+    key: "active",
+    label: "Activo",
+    type: "boolean",
+    aliases: ["active", "activo", "habilitado", "estado"],
+    defaultValue: true,
+    hint: "true/false, 1/0, si/no, activo/inactivo (default: true)",
+  },
 ];
 
 // ─── Helpers de auto-detección (compartidos cliente/servidor) ─────────────────

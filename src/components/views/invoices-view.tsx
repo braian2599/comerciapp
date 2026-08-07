@@ -63,6 +63,7 @@ export function InvoicesView() {
   const [loading, setLoading] = useState(true);
   const [filterTipo, setFilterTipo] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterSubtipo, setFilterSubtipo] = useState("all");
   const [search, setSearch] = useState("");
   const [taxConfig, setTaxConfig] = useState<any>(null);
 
@@ -120,12 +121,14 @@ export function InvoicesView() {
   const filtered = invoices.filter((inv) => {
     if (filterTipo !== "all" && inv.tipo !== filterTipo) return false;
     if (filterStatus !== "all" && inv.status !== filterStatus) return false;
+    if (filterSubtipo !== "all" && (inv.comprobanteSubtipo || "FACTURA") !== filterSubtipo) return false;
     if (search) {
       const s = search.toLowerCase();
       if (
         !inv.numeroCompleto?.toLowerCase().includes(s) &&
         !inv.customerName?.toLowerCase().includes(s) &&
-        !inv.cae?.toLowerCase().includes(s)
+        !inv.cae?.toLowerCase().includes(s) &&
+        !inv.customerCuit?.toLowerCase().includes(s)
       ) {
         return false;
       }
@@ -315,6 +318,20 @@ export function InvoicesView() {
             </div>
           </div>
           <div>
+            <Label className="text-xs">Comprobante</Label>
+            <Select value={filterSubtipo} onValueChange={setFilterSubtipo}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="FACTURA">Facturas</SelectItem>
+                <SelectItem value="NOTA_CREDITO">Notas de crédito</SelectItem>
+                <SelectItem value="NOTA_DEBITO">Notas de débito</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
             <Label className="text-xs">Tipo</Label>
             <Select value={filterTipo} onValueChange={setFilterTipo}>
               <SelectTrigger className="w-[120px]">
@@ -325,6 +342,8 @@ export function InvoicesView() {
                 <SelectItem value="A">A</SelectItem>
                 <SelectItem value="B">B</SelectItem>
                 <SelectItem value="C">C</SelectItem>
+                <SelectItem value="M">M</SelectItem>
+                <SelectItem value="E">E</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -363,6 +382,7 @@ export function InvoicesView() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Número</TableHead>
+                  <TableHead>Comprob.</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Fecha</TableHead>
                   <TableHead>Cliente</TableHead>
@@ -382,6 +402,17 @@ export function InvoicesView() {
                     onClick={() => openDetailModal(inv)}
                   >
                     <TableCell className="font-mono font-medium">{inv.numeroCompleto}</TableCell>
+                    <TableCell>
+                      {(inv.comprobanteSubtipo || "FACTURA") === "FACTURA" ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Factura</Badge>
+                      ) : (inv.comprobanteSubtipo || "FACTURA") === "NOTA_CREDITO" ? (
+                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">NC</Badge>
+                      ) : (inv.comprobanteSubtipo || "FACTURA") === "NOTA_DEBITO" ? (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">ND</Badge>
+                      ) : (
+                        <Badge variant="outline">{inv.comprobanteSubtipo || "FACTURA"}</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">{inv.tipo}</Badge>
                     </TableCell>

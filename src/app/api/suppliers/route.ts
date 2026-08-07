@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       address: body.address || null,
       contactName: body.contactName || null,
       notes: body.notes || null,
+      active: body.active !== false, // default true salvo que manden false explícito
       storeId: u.storeId,
     },
   });

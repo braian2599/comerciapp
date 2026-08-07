@@ -502,7 +502,7 @@ export function SettingsView() {
               <Input
                 id="taxRate"
                 type="number"
-                step="0.01"
+                step="any"
                 value={form.taxRate}
                 onChange={(e) =>
                   setForm({ ...form, taxRate: Number(e.target.value) })
@@ -739,7 +739,7 @@ export function SettingsView() {
               <Input
                 id="surcharge"
                 type="number"
-                step="0.01"
+                step="any"
                 min="0"
                 value={methodForm.surcharge}
                 onChange={(e) =>
@@ -1189,7 +1189,7 @@ export function SettingsView() {
                 <Label className="text-xs">Puntos por $1</Label>
                 <Input
                   type="number"
-                  step="0.1"
+                  step="any"
                   value={loyaltyForm.pointsPerWeight}
                   onChange={(e) => setLoyaltyForm({ ...loyaltyForm, pointsPerWeight: Number(e.target.value) })}
                 />
@@ -1233,7 +1233,7 @@ export function SettingsView() {
                 <Label className="text-xs">Valor de 1 punto ($)</Label>
                 <Input
                   type="number"
-                  step="0.001"
+                  step="any"
                   value={loyaltyForm.pointsToCurrency}
                   onChange={(e) => setLoyaltyForm({ ...loyaltyForm, pointsToCurrency: Number(e.target.value) })}
                 />
@@ -1301,7 +1301,7 @@ export function SettingsView() {
                     <Label className="text-xs">Bonus (multiplicador)</Label>
                     <Input
                       type="number"
-                      step="0.1"
+                      step="any"
                       value={loyaltyForm[`${t.tierKey}Bonus`]}
                       onChange={(e) =>
                         setLoyaltyForm({

@@ -389,7 +389,7 @@ export function InventoryView() {
                 <Label>Cantidad</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="any"
                   min="0"
                   value={adjustForm.quantity}
                   onChange={(e) =>

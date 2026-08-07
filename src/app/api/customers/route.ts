@@ -3,6 +3,50 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+// ===== Helpers de normalización (compartidos con /api/customers/import) =====
+
+const VALID_TAX_TYPES = [
+  "CONSUMIDOR_FINAL",
+  "MONOTRIBUTO",
+  "RESPONSABLE_INSCRIPTO",
+  "EXENTO",
+];
+
+const TAX_TYPE_ALIASES: Record<string, string> = {
+  consumidor_final: "CONSUMIDOR_FINAL",
+  "consumidor final": "CONSUMIDOR_FINAL",
+  cf: "CONSUMIDOR_FINAL",
+  monotributo: "MONOTRIBUTO",
+  mono: "MONOTRIBUTO",
+  mt: "MONOTRIBUTO",
+  responsable_inscripto: "RESPONSABLE_INSCRIPTO",
+  "responsable inscripto": "RESPONSABLE_INSCRIPTO",
+  ri: "RESPONSABLE_INSCRIPTO",
+  responsable: "RESPONSABLE_INSCRIPTO",
+  exento: "EXENTO",
+  exenta: "EXENTO",
+};
+
+function normalizeCuit(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  return s.replace(/[^0-9]/g, "");
+}
+
+function normalizeTaxType(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  if (VALID_TAX_TYPES.includes(s.toUpperCase())) return s.toUpperCase();
+  const lower = s.toLowerCase().trim();
+  if (TAX_TYPE_ALIASES[lower]) return TAX_TYPE_ALIASES[lower];
+  if (TAX_TYPE_ALIASES[lower.replace(/\s+/g, "_")]) {
+    return TAX_TYPE_ALIASES[lower.replace(/\s+/g, "_")];
+  }
+  return null;
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No auth" }, { status: 401 });
@@ -46,6 +90,8 @@ export async function POST(req: NextRequest) {
       address: body.address || null,
       city: body.city || null,
       notes: body.notes || null,
+      cuit: normalizeCuit(body.cuit),
+      taxType: normalizeTaxType(body.taxType) || "CONSUMIDOR_FINAL",
       creditLimit: Number(body.creditLimit) || 0,
       storeId: u.storeId,
     },
@@ -67,6 +113,8 @@ export async function PUT(req: NextRequest) {
       address: body.address || null,
       city: body.city || null,
       notes: body.notes || null,
+      cuit: normalizeCuit(body.cuit),
+      taxType: normalizeTaxType(body.taxType) || "CONSUMIDOR_FINAL",
       creditLimit: Number(body.creditLimit) || 0,
     },
   });

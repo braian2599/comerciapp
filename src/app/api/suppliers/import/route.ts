@@ -32,7 +32,17 @@ interface MappedSupplier {
   email: string | null;
   address: string | null;
   notes: string | null;
+  active: boolean;
   _rowIndex: number;
+}
+
+function toBool(v: unknown, fallback = true): boolean {
+  if (v === null || v === undefined || v === "") return fallback;
+  if (typeof v === "boolean") return v;
+  const s = String(v).toLowerCase().trim();
+  if (["true", "1", "si", "sí", "yes", "y", "activo", "activa", "verdadero"].includes(s)) return true;
+  if (["false", "0", "no", "n", "inactivo", "inactiva", "falso"].includes(s)) return false;
+  return fallback;
 }
 
 function mapRow(
@@ -52,6 +62,7 @@ function mapRow(
     email: toStr(get("email")),
     address: toStr(get("address")),
     notes: toStr(get("notes")),
+    active: toBool(get("active"), true),
     _rowIndex: rowIndex,
   };
 }
@@ -236,6 +247,7 @@ export async function POST(req: NextRequest) {
               email: data.email,
               address: data.address,
               notes: data.notes,
+              active: data.active,
               storeId: u.storeId,
             },
           });
@@ -273,6 +285,7 @@ export async function POST(req: NextRequest) {
               email: data.email,
               address: data.address,
               notes: data.notes,
+              active: data.active,
             },
           });
           updated++;

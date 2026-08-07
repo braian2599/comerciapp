@@ -684,7 +684,7 @@ export function RefundsView() {
                           type="number"
                           min={0}
                           max={it.quantity}
-                          step="0.01"
+                          step="any"
                           value={returnItems[it.id] || 0}
                           onChange={(e) =>
                             setReturnItems({

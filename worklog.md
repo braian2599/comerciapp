@@ -885,3 +885,82 @@ Stage Summary:
 - Datos preservados: en ningún caso se pierde info de error del server. safeFetchJSON/Blob leen body como texto SIEMPRE y parsean JSON solo si es válido.
 - Adapters ML/Shopify ahora validan credenciales de verdad — el usuario se entera de errores de config en el botón "Probar conexión", no recién al sincronizar.
 - Sin cambios en schema, sin migraciones, sin nuevas dependencias.
+
+---
+Task ID: audit-coherencia-campos-fixes
+Agent: main (Super Z)
+Task: Análisis profundo de coherencia entre formularios, filtros, tablas DB y pestañas de importación en todos los módulos. Resolver el bug de CUIT/DNI faltante en el formulario de nuevos clientes, el spinner de inputs numéricos (0.01→1), y otras inconsistencias detectadas.
+
+Work Log:
+- Audit completo de 10 entidades (Customer, Product, Supplier, Expense, PurchaseOrder, CashRegister, Promotion, Branch, CommissionRule, PaymentMethod, Invoice) contra 5 capas: DB schema, form (new/edit), filter, table columns, import tab.
+- Encontradas inconsistencias críticas:
+  1. Customer: CUIT + taxType existen en DB + import-config + import-API pero NO en form (new/edit), filtro, tabla, ni API POST/PUT. Reporte directo del usuario.
+  2. Supplier: campo `active` huérfano — schema lo tiene pero form, tabla, import-config, POST e import-API lo ignoran. Imposible desactivar un proveedor desde UI.
+  3. Invoice: `comprobanteSubtipo` (FACTURA/NOTA_CREDITO/NOTA_DEBITO) invisible en invoices-view — las NC aparecen como facturas comunes.
+  4. Spinner de inputs numéricos: 17 inputs con step="0.01"/"0.1"/"0.001" → spinner iba 0.01, 0.02, 0.03 en vez de 1, 2, 3.
+
+Fixes aplicados:
+
+FIX 1 — Cliente CUIT + condición fiscal ( FULL STACK ):
+- src/lib/types.ts: agregado `cuit`, `taxType`, `address`, `city`, `notes`, `creditLimit`, `totalSales` a interface Customer. Agregada constante CUSTOMER_TAX_TYPES con 4 valores AFIP.
+- src/components/views/customers-view.tsx:
+  - Interface local Customer: agregados cuit, taxType, city
+  - emptyForm: agregados cuit="", taxType="CONSUMIDOR_FINAL"
+  - Filtro: agregado cuit + city al searchable
+  - openEdit: asegurar cuit y taxType cargados
+  - Form (crear/editar): agregados inputs CUIT (con inputMode numeric) + Select condición fiscal con 4 opciones AFIP + placeholders y ayuda
+  - Tabla: agregada columna "CUIT / Fiscal" (visible en md+) que muestra CUIT en mono + badge de condición fiscal (Mono/RI/Exento)
+  - Placeholder de búsqueda: "Buscar por nombre, teléfono, email, CUIT o localidad..."
+- src/app/api/customers/route.ts:
+  - Agregados helpers normalizeCuit() y normalizeTaxType() con aliases (cf, mono, ri, exento, etc.) — compartidos con la lógica de importación
+  - POST y PUT ahora persisten cuit (sin guiones) y taxType (normalizado, default CONSUMIDOR_FINAL)
+
+FIX 2 — Spinner de inputs numéricos:
+- 17 inputs con step="0.01"/"0.1"/"0.001" cambiados a step="any" en:
+  - products-view.tsx (costPrice, salePrice, stock, minStock)
+  - promotions-view.tsx (value, minPurchase, maxDiscount)
+  - refunds-view.tsx (cantidad a devolver)
+  - settings-view.tsx (taxRate, surcharge, pointsPerWeight, pointsToCurrency, tierBonus)
+  - inventory-view.tsx (cantidad ajuste)
+  - commissions-view.tsx (rate)
+- step="any" hace que el spinner incremente de 1 en 1 y NO impide tipear decimales manualmente (sin validación HTML molesta).
+
+FIX 3 — Proveedor campo `active` ( FULL STACK ):
+- src/components/views/purchases-view.tsx:
+  - Filtro de búsqueda: agregado email al searchable
+  - Tabla: agregada columna "Estado" con badge Activo/Inactivo
+  - Form (crear/editar): agregado Switch "Activo" con explicación
+  - templateHeaders: agregado "Activo" entre Dirección y Notas
+- src/app/api/suppliers/route.ts: POST ahora persiste active (default true salvo que manden false explícito)
+- src/app/api/suppliers/import/route.ts:
+  - MappedSupplier: agregado active: boolean
+  - Agregado helper toBool() que acepta true/false, 1/0, si/no, activo/inactivo, sí/no, yes/no, y, verdadero/falso
+  - mapRow: agregado active: toBool(get("active"), true)
+  - create y update: persisten active
+- src/lib/import-config.ts: SUPPLIER_IMPORT_FIELDS agregado campo `active` (boolean, aliases: active/activo/habilitado/estado, default: true)
+
+FIX 4 — Facturas comprobanteSubtipo:
+- src/components/views/invoices-view.tsx:
+  - Estado: agregado filterSubtipo (FACTURA/NOTA_CREDITO/NOTA_DEBITO)
+  - Filtro: aplicado filterSubtipo con fallback a "FACTURA" si viene null
+  - Búsqueda: agregado customerCuit al searchable
+  - Filtro UI: agregado Select "Comprobante" con 4 opciones (Todos, Facturas, Notas de crédito, Notas de débito)
+  - Filtro "Tipo": ampliados opciones M y E (antes solo A/B/C)
+  - Tabla: agregada columna "Comprob." con badges diferenciados (Factura=azul, NC=naranja, ND=ámbar)
+
+Verificación:
+- TypeScript: src/ sin errores nuevos (9 errores preexistentes en import-dialog.tsx, pos-view.tsx:404, auth.ts:77 — no relacionados)
+- Next build: ✓ Compiled successfully in 18.5s, 61/61 páginas generadas
+
+Stage Summary:
+- Resuelto el bug reportado por el usuario: CUIT/DNI ahora se puede cargar al crear/editar clientes, igual que en la importación.
+- Resuelto el bug del spinner: ahora va de 1 en 1 en todos los campos numéricos, decimales se tipean manualmente.
+- Resuelta la inconsistencia supplier.active (mismo patrón que el bug de CUIT — campo en DB + import pero no en form/API POST).
+- Resuelta la invisibilidad de comprobanteSubtipo en invoices-view (regresión del trabajo de NC).
+- Quedan pendientes (no bloqueantes, documentados en el reporte de auditoría):
+  - CashRegister.branchId no se setea en UI (multi-sucursal incompleto)
+  - CashMovement.paymentMethod hardcoded a EFECTIVO
+  - Varias entidades sin filtros (Promotion, Branch, CommissionRule, CashRegister)
+  - Expense y PurchaseOrder sin flujo de edición (PUT)
+  - PurchaseOrder sin acción "Anular"
+  - Tablas de Product/Promotion/Invoice no muestran algunos campos secundarios (supplier, priority, caeVencimiento, etc.)

@@ -493,7 +493,7 @@ export function PromotionsView() {
                 <Label>Porcentaje de descuento (%)</Label>
                 <Input
                   type="number"
-                  step="0.1"
+                  step="any"
                   value={form.value}
                   onChange={(e) => setForm({ ...form, value: e.target.value })}
                   placeholder="10"
@@ -504,7 +504,7 @@ export function PromotionsView() {
                 <Label>Monto de descuento ({symbol})</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={form.value}
                   onChange={(e) => setForm({ ...form, value: e.target.value })}
                   placeholder="50"
@@ -584,7 +584,7 @@ export function PromotionsView() {
                 <Label>Compra mínima ({symbol})</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={form.minPurchase}
                   onChange={(e) =>
                     setForm({ ...form, minPurchase: e.target.value })
@@ -596,7 +596,7 @@ export function PromotionsView() {
                 <Label>Descuento máximo ({symbol})</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={form.maxDiscount}
                   onChange={(e) =>
                     setForm({ ...form, maxDiscount: e.target.value })

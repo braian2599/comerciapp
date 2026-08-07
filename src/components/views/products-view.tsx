@@ -830,7 +830,7 @@ export function ProductsView() {
               <Input
                 id="costPrice"
                 type="number"
-                step="0.01"
+                step="any"
                 value={form.costPrice}
                 onChange={(e) =>
                   setForm({ ...form, costPrice: Number(e.target.value) })
@@ -842,7 +842,7 @@ export function ProductsView() {
               <Input
                 id="salePrice"
                 type="number"
-                step="0.01"
+                step="any"
                 value={form.salePrice}
                 onChange={(e) =>
                   setForm({ ...form, salePrice: Number(e.target.value) })
@@ -866,7 +866,7 @@ export function ProductsView() {
               <Input
                 id="stock"
                 type="number"
-                step="0.01"
+                step="any"
                 value={form.stock}
                 onChange={(e) =>
                   setForm({ ...form, stock: Number(e.target.value) })
@@ -878,7 +878,7 @@ export function ProductsView() {
               <Input
                 id="minStock"
                 type="number"
-                step="0.01"
+                step="any"
                 value={form.minStock}
                 onChange={(e) =>
                   setForm({ ...form, minStock: Number(e.target.value) })

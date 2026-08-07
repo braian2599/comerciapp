@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -179,7 +180,7 @@ export function PurchasesView() {
     return suppliers.filter((s) => {
       if (!supSearch) return true;
       const q = supSearch.toLowerCase();
-      return s.name.toLowerCase().includes(q) || s.phone?.includes(q) || s.contactName?.toLowerCase().includes(q);
+      return s.name.toLowerCase().includes(q) || s.phone?.includes(q) || s.contactName?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q);
     });
   }, [suppliers, supSearch]);
 
@@ -485,6 +486,7 @@ export function PurchasesView() {
                         <TableHead className="hidden sm:table-cell">Contacto</TableHead>
                         <TableHead className="hidden lg:table-cell">Dirección</TableHead>
                         <TableHead className="text-center">Órdenes</TableHead>
+                        <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -509,6 +511,13 @@ export function PurchasesView() {
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline">{s._count?.purchaseOrders || 0}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {s.active ? (
+                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Activo</Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-muted text-muted-foreground">Inactivo</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -806,6 +815,18 @@ export function PurchasesView() {
               <Label>Notas</Label>
               <Textarea value={supForm.notes} onChange={(e) => setSupForm({ ...supForm, notes: e.target.value })} rows={2} />
             </div>
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label className="cursor-pointer">Activo</Label>
+                <p className="text-xs text-muted-foreground">
+                  Los proveedores inactivos no aparecen en el selector de órdenes de compra ni en el de productos.
+                </p>
+              </div>
+              <Switch
+                checked={supForm.active}
+                onCheckedChange={(v) => setSupForm({ ...supForm, active: v })}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSupFormOpen(false)}>Cancelar</Button>
@@ -823,7 +844,7 @@ export function PurchasesView() {
         onOpenChange={setSupImportOpen}
         endpoint="/api/suppliers/import"
         fields={SUPPLIER_IMPORT_FIELDS}
-        templateHeaders={["Nombre", "Contacto", "Teléfono", "Email", "Dirección", "Notas"]}
+        templateHeaders={["Nombre", "Contacto", "Teléfono", "Email", "Dirección", "Activo", "Notas"]}
         templateName="plantilla_proveedores.csv"
         entityLabel="proveedor"
         entityLabelPlural="proveedores"

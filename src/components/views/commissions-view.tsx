@@ -672,7 +672,7 @@ export function CommissionsView() {
                   </Label>
                   <Input
                     type="number"
-                    step="0.01"
+                    step="any"
                     value={editingRule.rate ?? 0}
                     onChange={(e) =>
                       setEditingRule({ ...editingRule, rate: Number(e.target.value) })
@@ -719,7 +719,7 @@ export function CommissionsView() {
                           <Label className="text-xs">Tasa (%)</Label>
                           <Input
                             type="number"
-                            step="0.01"
+                            step="any"
                             value={t.rate}
                             onChange={(e) => {
                               const tiers = [...(editingRule.tiersParsed || [])];

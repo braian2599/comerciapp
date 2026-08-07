@@ -65,6 +65,7 @@ import { useAppStore } from "@/store/app-store";
 import { formatCurrency, formatDateTime, PAYMENT_METHOD_TYPES } from "@/lib/constants";
 import { safeFetchJSON, safeFetchArray } from "@/lib/fetch";
 import { CUSTOMER_IMPORT_FIELDS } from "@/lib/import-config";
+import { CUSTOMER_TAX_TYPES } from "@/lib/types";
 
 interface Customer {
   id: string;
@@ -72,7 +73,11 @@ interface Customer {
   phone?: string;
   email?: string;
   address?: string;
+  city?: string;
   notes?: string;
+  // Datos fiscales (AFIP)
+  cuit?: string;
+  taxType?: string; // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
   creditLimit?: number;
   saldo?: number;
   _count?: { sales: number };
@@ -110,6 +115,8 @@ const emptyForm = {
   address: "",
   city: "",
   notes: "",
+  cuit: "",
+  taxType: "CONSUMIDOR_FINAL",
   creditLimit: 0,
 };
 
@@ -175,7 +182,9 @@ export function CustomersView() {
       return (
         c.name.toLowerCase().includes(s) ||
         c.phone?.toLowerCase().includes(s) ||
-        c.email?.toLowerCase().includes(s)
+        c.email?.toLowerCase().includes(s) ||
+        c.cuit?.toLowerCase().includes(s) ||
+        c.city?.toLowerCase().includes(s)
       );
     });
   }, [customers, search]);
@@ -188,7 +197,12 @@ export function CustomersView() {
   }
 
   function openEdit(c: Customer) {
-    setForm({ ...c, creditLimit: c.creditLimit || 0 });
+    setForm({
+      ...c,
+      creditLimit: c.creditLimit || 0,
+      cuit: c.cuit || "",
+      taxType: c.taxType || "CONSUMIDOR_FINAL",
+    });
     setFormOpen(true);
   }
 
@@ -384,7 +398,7 @@ export function CustomersView() {
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nombre, teléfono o email..."
+              placeholder="Buscar por nombre, teléfono, email, CUIT o localidad..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -415,6 +429,7 @@ export function CustomersView() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nombre</TableHead>
+                    <TableHead className="hidden md:table-cell">CUIT / Fiscal</TableHead>
                     <TableHead className="hidden sm:table-cell">Contacto</TableHead>
                     <TableHead className="text-center">Compras</TableHead>
                     {loyaltyEnabled && (
@@ -435,6 +450,20 @@ export function CustomersView() {
                             <p className="text-xs text-muted-foreground line-clamp-1">
                               {c.notes}
                             </p>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {c.cuit ? (
+                            <div className="text-sm space-y-0.5">
+                              <p className="font-mono">{c.cuit}</p>
+                              {c.taxType && c.taxType !== "CONSUMIDOR_FINAL" && (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                                  {c.taxType === "MONOTRIBUTO" ? "Mono" : c.taxType === "RESPONSABLE_INSCRIPTO" ? "RI" : c.taxType === "EXENTO" ? "Exento" : c.taxType}
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
                           )}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
@@ -779,6 +808,39 @@ export function CustomersView() {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="cliente@email.com"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cuit">CUIT / CUIL / DNI</Label>
+              <Input
+                value={form.cuit}
+                onChange={(e) => setForm({ ...form, cuit: e.target.value })}
+                placeholder="30-12345678-9 o 12345678"
+                inputMode="numeric"
+              />
+              <p className="text-xs text-muted-foreground">
+                Sin guiones o con guiones — se normaliza al guardar. Necesario para facturar AFIP.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="taxType">Condición fiscal</Label>
+              <Select
+                value={form.taxType}
+                onValueChange={(v) => setForm({ ...form, taxType: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CUSTOMER_TAX_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Por defecto: Consumidor Final. Cambiá a Monotributo / Responsable Inscripto para facturas A.
+              </p>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="address">Dirección</Label>

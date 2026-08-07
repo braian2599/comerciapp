@@ -39,10 +39,26 @@ export interface Customer {
   name: string;
   phone?: string;
   email?: string;
+  address?: string;
+  city?: string;
+  notes?: string;
+  // Datos fiscales (AFIP)
+  cuit?: string;
+  taxType?: string; // CONSUMIDOR_FINAL, MONOTRIBUTO, RESPONSABLE_INSCRIPTO, EXENTO
+  creditLimit?: number;
   loyaltyPoints?: number;
   loyaltyTier?: string;
   totalSpent?: number;
+  totalSales?: number;
 }
+
+// Constantes compartidas para condición fiscal (AFIP)
+export const CUSTOMER_TAX_TYPES = [
+  { value: "CONSUMIDOR_FINAL", label: "Consumidor Final" },
+  { value: "MONOTRIBUTO", label: "Monotributo" },
+  { value: "RESPONSABLE_INSCRIPTO", label: "Responsable Inscripto" },
+  { value: "EXENTO", label: "Exento" },
+] as const;
 
 export interface Branch {
   id: string;
